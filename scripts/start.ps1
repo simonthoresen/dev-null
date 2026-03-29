@@ -1,7 +1,36 @@
 param(
-    [string]$Game = $(if ($args.Count -ge 1) { $args[0] } else { "towerdefense" }),
-    [string]$Password = $(if ($args.Count -ge 2) { $args[1] } else { "changeme" })
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$CliArgs
 )
+
+$Game = "towerdefense"
+$Password = "changeme"
+$Force = $false
+
+$positionals = @()
+foreach ($arg in $CliArgs) {
+    switch -Regex ($arg) {
+        '^--force$' {
+            $Force = $true
+            continue
+        }
+        '^-force$' {
+            $Force = $true
+            continue
+        }
+        default {
+            $positionals += $arg
+        }
+    }
+}
+
+if ($positionals.Count -ge 1 -and $positionals[0]) {
+    $Game = $positionals[0]
+}
+
+if ($positionals.Count -ge 2 -and $positionals[1]) {
+    $Password = $positionals[1]
+}
 
 $root = Split-Path -Parent $PSScriptRoot
 $script:tunnelShell = $null
@@ -17,6 +46,42 @@ function Stop-Tunnel {
 
         Stop-Process -Id $script:tunnelShell.Id -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Stop-ProcessTree {
+    param([int]$RootPid)
+
+    $all = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
+    if (-not $all) {
+        Stop-Process -Id $RootPid -Force -ErrorAction SilentlyContinue
+        return
+    }
+
+    $childrenByParent = @{}
+    foreach ($proc in $all) {
+        if (-not $childrenByParent.ContainsKey($proc.ParentProcessId)) {
+            $childrenByParent[$proc.ParentProcessId] = @()
+        }
+        $childrenByParent[$proc.ParentProcessId] += $proc
+    }
+
+    $queue = [System.Collections.Generic.Queue[int]]::new()
+    $toStop = [System.Collections.Generic.List[int]]::new()
+    $queue.Enqueue($RootPid)
+
+    while ($queue.Count -gt 0) {
+        $parentPid = $queue.Dequeue()
+        foreach ($child in ($childrenByParent[$parentPid] | Select-Object -Unique)) {
+            $queue.Enqueue([int]$child.ProcessId)
+            $toStop.Add([int]$child.ProcessId) | Out-Null
+        }
+    }
+
+    for ($index = $toStop.Count - 1; $index -ge 0; $index--) {
+        Stop-Process -Id $toStop[$index] -Force -ErrorAction SilentlyContinue
+    }
+
+    Stop-Process -Id $RootPid -Force -ErrorAction SilentlyContinue
 }
 
 function Remove-TunnelState {
@@ -156,8 +221,17 @@ function Wait-ForTunnelReady {
 
 $existingListener = Get-NetTCPConnection -LocalPort 23234 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($existingListener) {
-    Write-Error "Port 23234 is already in use by PID $($existingListener.OwningProcess). Stop that process or use a different listen port before starting null-space."
-    exit 1
+    if ($Force) {
+        Write-Host "Port 23234 is in use by PID $($existingListener.OwningProcess). Stopping it because --force was specified..." -ForegroundColor Yellow
+        Stop-ProcessTree -RootPid $existingListener.OwningProcess
+        Start-Sleep -Milliseconds 500
+        $existingListener = Get-NetTCPConnection -LocalPort 23234 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+
+    if ($existingListener) {
+        Write-Error "Port 23234 is already in use by PID $($existingListener.OwningProcess). Stop that process or use a different listen port before starting null-space."
+        exit 1
+    }
 }
 
 $script:tunnelStatus = Join-Path ([System.IO.Path]::GetTempPath()) ("null-space-pinggy-{0}.status.log" -f ([guid]::NewGuid().ToString("N")))
