@@ -45,6 +45,7 @@ type App struct {
 	tunnelAddress   string
 	tunnelJoinCmd   string
 	shutdownFn      context.CancelFunc
+	upnp            *upnpMapping
 	consoleMu       sync.Mutex
 }
 
@@ -68,6 +69,7 @@ func New(address, gameName string, game common.Game, adminPassword string) (*App
 		localLogs:       make([]string, 0, 100),
 	}
 	app.publicIP = detectPublicIP()
+	app.upnp = tryUPnP(app.listenPort())
 	app.registerCommands(game.GetCommands())
 
 	server, err := wish.NewServer(
@@ -125,6 +127,7 @@ func (a *App) Start(ctx context.Context) error {
 func (a *App) Shutdown(ctx context.Context) error {
 	_ = ctx
 	slog.Info("server shutdown requested")
+	a.upnp.removeMapping()
 	if err := a.server.Close(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
 		slog.Error("server shutdown failed", "error", err)
 		return err
