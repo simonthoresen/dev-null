@@ -36,6 +36,7 @@ type App struct {
 	paletteIndex    int
 	consolePlayer   string
 	consoleIdentity *common.Player
+	playerActivity  map[string]time.Time
 	consoleWriter   io.Writer
 	consoleProgram  *tea.Program
 	localLogs       []string
@@ -45,7 +46,8 @@ type App struct {
 
 const (
 	gameTickInterval = 100 * time.Millisecond
-	uiTickInterval   = 1 * time.Second
+	uiTickInterval   = 125 * time.Millisecond
+	spinnerIdleAfter = 5 * time.Second
 )
 
 func New(address, gameName string, game common.Game, adminPassword string) (*App, error) {
@@ -58,6 +60,7 @@ func New(address, gameName string, game common.Game, adminPassword string) (*App
 		programInFlight: make(map[*tea.Program]chan struct{}),
 		sessions:        make(map[string]ssh.Session),
 		privateHistory:  make(map[string][]string),
+		playerActivity:  make(map[string]time.Time),
 		localLogs:       make([]string, 0, 100),
 	}
 	app.registerCommands(game.GetCommands())
@@ -168,6 +171,7 @@ func (a *App) registerSession(sess ssh.Session) *common.Player {
 	a.mu.Lock()
 	a.sessions[player.ID] = sess
 	a.privateHistory[player.ID] = nil
+	a.playerActivity[player.ID] = time.Now()
 	a.mu.Unlock()
 
 	a.state.AddPlayer(player)
@@ -197,6 +201,7 @@ func (a *App) unregisterSession(playerID string) {
 	delete(a.programs, playerID)
 	delete(a.sessions, playerID)
 	delete(a.privateHistory, playerID)
+	delete(a.playerActivity, playerID)
 	a.unregisterProgramLocked(program)
 	a.mu.Unlock()
 
@@ -216,8 +221,34 @@ func (a *App) runTicker(ctx context.Context) {
 		case tick := <-gameTicker.C:
 			a.handleGameMessage(common.TickMsg{Time: tick}, "")
 		case tick := <-uiTicker.C:
-			a.broadcast(common.TickMsg{Time: tick})
+			a.broadcastIdleTick(tick)
 		}
+	}
+}
+
+func (a *App) broadcastIdleTick(tick time.Time) {
+	a.mu.RLock()
+	programs := make(map[string]*tea.Program, len(a.programs))
+	for playerID, program := range a.programs {
+		programs[playerID] = program
+	}
+	activity := make(map[string]time.Time, len(a.playerActivity))
+	for playerID, at := range a.playerActivity {
+		activity[playerID] = at
+	}
+	consoleProgram := a.consoleProgram
+	a.mu.RUnlock()
+
+	for playerID, program := range programs {
+		lastActivity, ok := activity[playerID]
+		if !ok || tick.Sub(lastActivity) < spinnerIdleAfter {
+			continue
+		}
+		a.sendProgram(program, common.TickMsg{Time: tick})
+	}
+
+	if consoleProgram != nil {
+		a.sendProgram(consoleProgram, common.TickMsg{Time: tick})
 	}
 }
 
@@ -245,11 +276,17 @@ func (a *App) executeCmd(cmd tea.Cmd, playerID string) {
 func (a *App) broadcast(msg tea.Msg) {
 	a.mu.RLock()
 	programs := make([]*tea.Program, 0, len(a.programs))
+	playerIDs := make([]string, 0, len(a.programs))
 	for _, program := range a.programs {
 		programs = append(programs, program)
 	}
+	for playerID := range a.programs {
+		playerIDs = append(playerIDs, playerID)
+	}
 	consoleProgram := a.consoleProgram
 	a.mu.RUnlock()
+
+	a.notePlayersActivity(playerIDs...)
 
 	for _, program := range programs {
 		a.sendProgram(program, msg)
@@ -263,14 +300,18 @@ func (a *App) broadcast(msg tea.Msg) {
 func (a *App) broadcastExcept(excludedPlayerID string, msg tea.Msg) {
 	a.mu.RLock()
 	programs := make([]*tea.Program, 0, len(a.programs))
+	playerIDs := make([]string, 0, len(a.programs))
 	for playerID, program := range a.programs {
 		if playerID == excludedPlayerID {
 			continue
 		}
 		programs = append(programs, program)
+		playerIDs = append(playerIDs, playerID)
 	}
 	consoleProgram := a.consoleProgram
 	a.mu.RUnlock()
+
+	a.notePlayersActivity(playerIDs...)
 
 	for _, program := range programs {
 		a.sendProgram(program, msg)
@@ -415,12 +456,38 @@ func (a *App) renderGame(playerID string, width, height int) string {
 }
 
 func (a *App) sendToPlayer(playerID string, msg tea.Msg) {
+	a.notePlayerActivity(playerID)
 	a.mu.RLock()
 	program := a.programs[playerID]
 	a.mu.RUnlock()
 	if program != nil {
 		a.sendProgram(program, msg)
 	}
+}
+
+func (a *App) notePlayerActivity(playerID string) {
+	if playerID == "" {
+		return
+	}
+	a.mu.Lock()
+	if _, ok := a.playerActivity[playerID]; ok {
+		a.playerActivity[playerID] = time.Now()
+	}
+	a.mu.Unlock()
+}
+
+func (a *App) notePlayersActivity(playerIDs ...string) {
+	if len(playerIDs) == 0 {
+		return
+	}
+	now := time.Now()
+	a.mu.Lock()
+	for _, playerID := range playerIDs {
+		if _, ok := a.playerActivity[playerID]; ok {
+			a.playerActivity[playerID] = now
+		}
+	}
+	a.mu.Unlock()
 }
 
 func (a *App) sendProgram(program *tea.Program, msg tea.Msg) {
