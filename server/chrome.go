@@ -29,14 +29,8 @@ type chromeModel struct {
 	width    int
 	height   int
 	chatMode bool
-	heldMove string
-	canTrackHeldMove bool
 	chat     viewport.Model
 	input    textinput.Model
-}
-
-type repeatMoveMsg struct {
-	direction string
 }
 
 func newChromeModel(app *App, playerID string) chromeModel {
@@ -76,22 +70,8 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.SetWidth(maxInt(1, m.width-2))
 		m.syncChat()
 		return m, nil
-	case tea.KeyboardEnhancementsMsg:
-		m.canTrackHeldMove = msg.SupportsEventTypes()
-		return m, nil
 	case common.TickMsg, common.RefreshMsg:
 		m.syncChat()
-		return m, nil
-	case repeatMoveMsg:
-		if m.chatMode || !m.canTrackHeldMove || m.heldMove != msg.direction {
-			return m, nil
-		}
-		m.dispatchMovement(msg.direction)
-		return m, repeatMoveCmd(msg.direction)
-	case tea.KeyReleaseMsg:
-		if m.canTrackHeldMove && msg.String() == m.heldMove {
-			m.heldMove = ""
-		}
 		return m, nil
 	case tea.KeyPressMsg:
 		if !m.chatMode {
@@ -105,10 +85,6 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				slog.Debug("client input received", "player_id", m.playerID, "key", msg.String())
 				if direction := movementDirection(msg.String()); direction != "" {
 					m.dispatchMovement(direction)
-					if m.canTrackHeldMove && !msg.Key().IsRepeat {
-						m.heldMove = direction
-						return m, repeatMoveCmd(direction)
-					}
 					return m, nil
 				}
 				m.app.handleGameMessage(msg, m.playerID)
@@ -140,7 +116,6 @@ func (m chromeModel) View() tea.View {
 	if m.width == 0 || m.height == 0 {
 		view.SetContent("\x1b[HLoading null-space...")
 		view.AltScreen = true
-		view.KeyboardEnhancements.ReportEventTypes = true
 		return view
 	}
 
@@ -153,7 +128,6 @@ func (m chromeModel) View() tea.View {
 	content := lipgloss.JoinVertical(lipgloss.Left, header, game, status, chat)
 	view.SetContent("\x1b[H" + content)
 	view.AltScreen = true
-	view.KeyboardEnhancements.ReportEventTypes = true
 	return view
 }
 
@@ -298,12 +272,6 @@ func clientLayoutHeights(width, height int) (int, int) {
 
 	chatHeight = maxInt(minChatHeight, availableHeight-gameHeight)
 	return gameHeight, chatHeight
-}
-
-func repeatMoveCmd(direction string) tea.Cmd {
-	return tea.Tick(gameTickInterval, func(time.Time) tea.Msg {
-		return repeatMoveMsg{direction: direction}
-	})
 }
 
 func movementDirection(key string) string {
