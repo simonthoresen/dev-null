@@ -169,6 +169,7 @@ func (m localConsoleModel) View() tea.View {
 	header := localConsoleHeaderStyle.Width(m.width).Render(headerWithSpinner(
 		fmt.Sprintf("[null-space server] | Game: %s | Players: %d | Tunnel: %s", m.app.gameName, m.app.state.PlayerCount(), m.app.uptime()),
 		m.width,
+		currentSpinnerFrame(),
 	))
 
 	availableHeight := maxInt(6, m.height-4)

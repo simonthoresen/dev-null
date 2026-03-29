@@ -23,6 +23,11 @@ var (
 	spinnerFrames     = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 )
 
+const (
+	spinnerIdleThreshold = 5 * time.Second
+	spinnerFrameInterval = 125 * time.Millisecond
+)
+
 type chromeModel struct {
 	app      *App
 	playerID string
@@ -31,7 +36,10 @@ type chromeModel struct {
 	chatMode bool
 	chat     viewport.Model
 	input    textinput.Model
+	lastActivity time.Time
 }
+
+type spinnerTickMsg struct{}
 
 func newChromeModel(app *App, playerID string) chromeModel {
 	chat := viewport.New(viewport.WithWidth(80), viewport.WithHeight(5))
@@ -50,18 +58,20 @@ func newChromeModel(app *App, playerID string) chromeModel {
 		playerID: playerID,
 		chat:     chat,
 		input:    input,
+		lastActivity: time.Now(),
 	}
 	model.syncChat()
 	return model
 }
 
 func (m chromeModel) Init() tea.Cmd {
-	return nil
+	return spinnerWaitCmd(spinnerIdleThreshold)
 }
 
 func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.lastActivity = time.Now()
 		m.width = maxInt(1, msg.Width)
 		m.height = maxInt(8, msg.Height)
 		m.chat.SetWidth(m.width)
@@ -69,42 +79,49 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chat.SetHeight(chatHeight)
 		m.input.SetWidth(maxInt(1, m.width-2))
 		m.syncChat()
-		return m, nil
+		return m, spinnerWaitCmd(spinnerIdleThreshold)
 	case common.TickMsg, common.RefreshMsg:
 		m.syncChat()
 		return m, nil
+	case spinnerTickMsg:
+		idleFor := time.Since(m.lastActivity)
+		if idleFor < spinnerIdleThreshold {
+			return m, spinnerWaitCmd(spinnerIdleThreshold-idleFor)
+		}
+		return m, spinnerTickCmd()
 	case tea.KeyPressMsg:
+		m.lastActivity = time.Now()
 		if !m.chatMode {
 			switch msg.String() {
 			case "ctrl+c":
 				return m, tea.Quit
 			case "enter":
 				m.enterChatMode()
-				return m, nil
+				return m, spinnerWaitCmd(spinnerIdleThreshold)
 			default:
 				slog.Debug("client input received", "player_id", m.playerID, "key", msg.String())
 				if direction := movementDirection(msg.String()); direction != "" {
 					m.dispatchMovement(direction)
-					return m, nil
+					return m, spinnerWaitCmd(spinnerIdleThreshold)
 				}
 				m.app.handleGameMessage(msg, m.playerID)
 				m.app.sendToPlayer(m.playerID, common.RefreshMsg{})
 				m.app.broadcastExcept(m.playerID, common.RefreshMsg{})
-				return m, nil
+				return m, spinnerWaitCmd(spinnerIdleThreshold)
 			}
 		}
 
 		switch msg.String() {
 		case "esc":
 			m.exitChatMode()
-			return m, nil
+			return m, spinnerWaitCmd(spinnerIdleThreshold)
 		case "enter":
 			m.submitInput()
-			return m, nil
+			return m, spinnerWaitCmd(spinnerIdleThreshold)
 		default:
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
-			return m, cmd
+			return m, tea.Batch(cmd, spinnerWaitCmd(spinnerIdleThreshold))
 		}
 	}
 
@@ -173,7 +190,7 @@ func (m *chromeModel) submitInput() {
 
 func (m chromeModel) renderHeader() string {
 	label := fmt.Sprintf("[null-space] | Game: %s | Players: %d | Tunnel: %s", m.app.gameName, m.app.state.PlayerCount(), m.app.uptime())
-	return playerHeaderStyle.Width(m.width).Render(headerWithSpinner(label, m.width))
+	return playerHeaderStyle.Width(m.width).Render(headerWithSpinner(label, m.width, m.spinnerFrame()))
 }
 
 func (m chromeModel) renderGameStatusBar() string {
@@ -217,12 +234,11 @@ func truncateStyled(text string, width int) string {
 	return ansi.Truncate(text, width, "")
 }
 
-func headerWithSpinner(text string, width int) string {
+func headerWithSpinner(text string, width int, spinner string) string {
 	if width <= 0 {
 		return ""
 	}
 
-	spinner := currentSpinnerFrame()
 	spinnerWidth := ansi.StringWidth(spinner)
 	if width <= spinnerWidth {
 		return truncateStyled(spinner, width)
@@ -238,12 +254,34 @@ func headerWithSpinner(text string, width int) string {
 }
 
 func currentSpinnerFrame() string {
-	interval := uiTickInterval.Milliseconds()
+	interval := spinnerFrameInterval.Milliseconds()
 	if interval <= 0 {
 		interval = 100
 	}
 	frame := (time.Now().UnixMilli() / interval) % int64(len(spinnerFrames))
 	return spinnerFrames[frame]
+}
+
+func spinnerTickCmd() tea.Cmd {
+	return tea.Tick(spinnerFrameInterval, func(time.Time) tea.Msg {
+		return spinnerTickMsg{}
+	})
+}
+
+func spinnerWaitCmd(delay time.Duration) tea.Cmd {
+	if delay < 0 {
+		delay = 0
+	}
+	return tea.Tick(delay, func(time.Time) tea.Msg {
+		return spinnerTickMsg{}
+	})
+}
+
+func (m chromeModel) spinnerFrame() string {
+	if time.Since(m.lastActivity) < spinnerIdleThreshold {
+		return "•"
+	}
+	return currentSpinnerFrame()
 }
 
 func clientLayoutHeights(width, height int) (int, int) {

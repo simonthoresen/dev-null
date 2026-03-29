@@ -45,7 +45,7 @@ type App struct {
 
 const (
 	gameTickInterval = 100 * time.Millisecond
-	uiTickInterval   = 125 * time.Millisecond
+	uiTickInterval   = 1 * time.Second
 )
 
 func New(address, gameName string, game common.Game, adminPassword string) (*App, error) {
