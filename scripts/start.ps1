@@ -200,6 +200,8 @@ Write-Host "Press Ctrl+C to stop both the server and the tunnel." -ForegroundCol
 Write-Host ""
 
 $serverExitCode = 0
+$previousPinggyStatusFile = $env:NULL_SPACE_PINGGY_STATUS_FILE
+$env:NULL_SPACE_PINGGY_STATUS_FILE = $script:tunnelStatus
 
 Push-Location $root
 try {
@@ -210,6 +212,12 @@ try {
 }
 finally {
     Pop-Location
+    if ($null -eq $previousPinggyStatusFile) {
+        Remove-Item Env:NULL_SPACE_PINGGY_STATUS_FILE -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:NULL_SPACE_PINGGY_STATUS_FILE = $previousPinggyStatusFile
+    }
     Stop-TunnelWatcher
     Stop-Tunnel
     Remove-TunnelState

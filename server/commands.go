@@ -177,6 +177,10 @@ func formatSystemLine(body string) string {
 	return fmt.Sprintf("[%s] [system] %s", time.Now().Format("15:04:05"), body)
 }
 
+func formatPinggyLine(body string) string {
+	return fmt.Sprintf("[%s] [pinggy] %s", time.Now().Format("15:04:05"), body)
+}
+
 func formatPrivateLine(body string) string {
 	return fmt.Sprintf("[%s] [local] %s", time.Now().Format("15:04:05"), body)
 }

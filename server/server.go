@@ -34,6 +34,8 @@ type App struct {
 	paletteIndex   int
 	consolePlayer  string
 	consoleWriter  io.Writer
+	consoleProgram *tea.Program
+	localLogs      []string
 	consoleMu      sync.Mutex
 }
 
@@ -46,6 +48,7 @@ func New(address, gameName string, game common.Game, adminPassword string) (*App
 		programs:       make(map[string]*tea.Program),
 		sessions:       make(map[string]ssh.Session),
 		privateHistory: make(map[string][]string),
+		localLogs:      make([]string, 0, 100),
 	}
 	app.registerCommands(game.GetCommands())
 
@@ -218,6 +221,10 @@ func (a *App) addSystemMessage(text string) {
 	a.broadcast(common.RefreshMsg{})
 }
 
+func (a *App) addPinggyMessage(text string) {
+	a.writeConsoleLine(formatPinggyLine(text))
+}
+
 func (a *App) addPrivateMessage(playerID, text string) {
 	line := formatPrivateLine(text)
 	a.mu.Lock()
@@ -245,13 +252,23 @@ func (a *App) addChatMessage(playerID, text string) {
 
 func (a *App) appendChatLine(line string) {
 	a.state.AppendChat(line)
-	a.writeConsoleLine(line)
+	a.notifyLocalConsole()
 }
 
 func (a *App) writeConsoleLine(line string) {
-	a.mu.RLock()
+	a.mu.Lock()
+	a.localLogs = append(a.localLogs, line)
+	if len(a.localLogs) > 100 {
+		a.localLogs = append([]string(nil), a.localLogs[len(a.localLogs)-100:]...)
+	}
+	program := a.consoleProgram
 	writer := a.consoleWriter
-	a.mu.RUnlock()
+	a.mu.Unlock()
+
+	if program != nil {
+		program.Send(common.RefreshMsg{})
+		return
+	}
 	if writer == nil {
 		return
 	}
@@ -259,6 +276,33 @@ func (a *App) writeConsoleLine(line string) {
 	a.consoleMu.Lock()
 	defer a.consoleMu.Unlock()
 	_, _ = fmt.Fprintln(writer, line)
+}
+
+func (a *App) notifyLocalConsole() {
+	a.mu.RLock()
+	program := a.consoleProgram
+	a.mu.RUnlock()
+	if program != nil {
+		program.Send(common.RefreshMsg{})
+	}
+}
+
+func (a *App) renderGlobalChat() string {
+	lines := a.state.ChatLines()
+	if len(lines) == 0 {
+		return "[system] chat is quiet"
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (a *App) renderLocalLogs() string {
+	a.mu.RLock()
+	lines := append([]string(nil), a.localLogs...)
+	a.mu.RUnlock()
+	if len(lines) == 0 {
+		return formatPrivateLine("server console ready")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (a *App) renderChatForPlayer(playerID string) string {

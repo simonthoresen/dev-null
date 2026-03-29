@@ -117,7 +117,7 @@ func run(ctx context.Context, cfg config) error {
 	}
 
 	reporter.SetStatus("starting")
-	logPinggy("starting tunnel helper")
+	emitPinggyLog(reporter, "starting tunnel helper")
 
 	tail := &outputTail{max: 32768}
 	endpointCh := make(chan pinggyEndpoint, 1)
@@ -151,10 +151,10 @@ func run(ctx context.Context, cfg config) error {
 			reporter.SetField("JOIN", endpoint.joinCommand)
 			if endpoint.passwordSent {
 				reporter.SetStatus("password-submitted")
-				logPinggy("submitted blank password to Pinggy")
+				emitPinggyLog(reporter, "submitted blank password to Pinggy")
 			}
-			logPinggy(fmt.Sprintf("public tunnel ready: %s", endpoint.tcpAddress))
-			logPinggy(fmt.Sprintf("join with: %s", endpoint.joinCommand))
+			emitPinggyLog(reporter, fmt.Sprintf("public tunnel ready: %s", endpoint.tcpAddress))
+			emitPinggyLog(reporter, fmt.Sprintf("join with: %s", endpoint.joinCommand))
 			reporter.SetStatus("ready")
 			if !timeout.Stop() {
 				select {
@@ -179,7 +179,7 @@ func run(ctx context.Context, cfg config) error {
 					return fmt.Errorf("ssh tunnel exited: %w", err)
 				}
 				reporter.SetStatus("exited")
-				logPinggy("tunnel exited")
+				emitPinggyLog(reporter, "tunnel exited")
 				return nil
 			}
 
@@ -293,6 +293,10 @@ func (r *statusReporter) SetError(value string) {
 	r.writeLine("PINGGY_ERROR=" + value)
 }
 
+func (r *statusReporter) AppendLog(value string) {
+	r.writeLine("PINGGY_LOG=" + value)
+}
+
 func (r *statusReporter) writeLine(line string) {
 	if r.file == nil {
 		return
@@ -334,9 +338,8 @@ func (e *lineEmitter) flushLocked() {
 	}
 
 	e.lastLine = line
-	logPinggy(line)
-	if e.reporter != nil {
-		e.reporter.SetField("LOG", line)
+	if e.reporter == nil || e.reporter.file == nil {
+		logPinggy(line)
 	}
 }
 
@@ -345,6 +348,14 @@ func logPinggy(message string) {
 		return
 	}
 	fmt.Printf("[%s] [pinggy] %s\n", time.Now().Format("15:04:05"), message)
+}
+
+func emitPinggyLog(reporter *statusReporter, message string) {
+	if reporter != nil && reporter.file != nil {
+		reporter.AppendLog(message)
+		return
+	}
+	logPinggy(message)
 }
 
 func squashedOutput(text string) string {
