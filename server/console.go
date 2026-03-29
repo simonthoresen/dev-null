@@ -37,7 +37,7 @@ func (a *App) EnableLocalConsole(ctx context.Context, reader io.Reader, writer i
 		Color:    player.Color,
 	}, player.ID)
 	a.addSystemMessage("admin joined from the local console.")
-	a.writeConsoleLine("[local] local admin console ready. Type chat text or /commands. Press Ctrl+C to stop.")
+	a.writeConsoleLine(formatPrivateLine("local admin console ready. Type chat text or /commands. Press Ctrl+C to stop."))
 
 	go func() {
 		<-ctx.Done()
@@ -70,7 +70,7 @@ func (a *App) runLocalConsoleInput(ctx context.Context, reader io.Reader, player
 	}
 
 	if err := scanner.Err(); err != nil && ctx.Err() == nil {
-		a.writeConsoleLine(fmt.Sprintf("[local] console input error: %v", err))
+		a.writeConsoleLine(formatPrivateLine(fmt.Sprintf("console input error: %v", err)))
 	}
 
 	a.disableLocalConsole(playerID, true)

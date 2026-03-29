@@ -6,6 +6,7 @@ param(
 $root = Split-Path -Parent $PSScriptRoot
 $script:tunnelShell = $null
 $script:tunnelWatcher = $null
+$script:tunnelStatus = $null
 
 function Stop-Tunnel {
     if ($script:tunnelShell) {
@@ -16,6 +17,27 @@ function Stop-Tunnel {
 
         Stop-Process -Id $script:tunnelShell.Id -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Remove-TunnelState {
+    if ($script:tunnelStatus -and (Test-Path $script:tunnelStatus)) {
+        Remove-Item $script:tunnelStatus -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Read-TunnelState {
+    if (-not $script:tunnelStatus -or -not (Test-Path $script:tunnelStatus)) {
+        return @{}
+    }
+
+    $state = @{}
+    foreach ($line in (Get-Content $script:tunnelStatus -ErrorAction SilentlyContinue)) {
+        if ($line -match '^PINGGY_([^=]+)=(.*)$') {
+            $state[$Matches[1]] = $Matches[2]
+        }
+    }
+
+    return $state
 }
 
 function Stop-TunnelWatcher {
@@ -90,44 +112,90 @@ function Start-TunnelWatcher {
     } -ArgumentList $TunnelShellPid, $ConsoleShellPid
 }
 
+function Wait-ForTunnelReady {
+    param([int]$TimeoutSeconds = 45)
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+    while ((Get-Date) -lt $deadline) {
+        $state = Read-TunnelState
+        $tcpAddress = $state['TCP']
+        $joinCommand = $state['JOIN']
+
+        if ($joinCommand) {
+            return [pscustomobject]@{
+                TcpAddress  = $tcpAddress
+                JoinCommand = $joinCommand
+            }
+        }
+
+        if (-not (Get-Process -Id $script:tunnelShell.Id -ErrorAction SilentlyContinue)) {
+            break
+        }
+
+        Start-Sleep -Milliseconds 250
+    }
+
+    $state = Read-TunnelState
+    $details = @()
+    if ($state['ERROR']) {
+        $details += "Helper error: $($state['ERROR'])"
+    }
+
+    if ($state['LOG']) {
+        $details += "Last Pinggy line: $($state['LOG'])"
+    }
+
+    $message = "Pinggy helper did not produce a join command within $TimeoutSeconds seconds."
+    if ($details.Count -gt 0) {
+        $message += "`n`n" + ($details -join "`n`n")
+    }
+
+    throw $message
+}
+
 $existingListener = Get-NetTCPConnection -LocalPort 23234 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($existingListener) {
     Write-Error "Port 23234 is already in use by PID $($existingListener.OwningProcess). Stop that process or use a different listen port before starting null-space."
     exit 1
 }
 
-$tunnelCommand = @'
-$Host.UI.RawUI.WindowTitle = "null-space Pinggy Tunnel"
-Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host "            NULL-SPACE PINGGY TUNNEL         " -ForegroundColor Black -BackgroundColor Green
-Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host "Keep this window open while the server is running." -ForegroundColor Cyan
-Write-Host "Copy the tcp://... address shown below and give it to players." -ForegroundColor Cyan
-Write-Host "If prompted for a password, press Enter." -ForegroundColor Cyan
-Write-Host ""
-ssh -p 443 -o ServerAliveInterval=30 -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -R0:127.0.0.1:23234 tcp@a.pinggy.io
-'@
+$script:tunnelStatus = Join-Path ([System.IO.Path]::GetTempPath()) ("null-space-pinggy-{0}.status.log" -f ([guid]::NewGuid().ToString("N")))
 
-$encodedTunnelCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($tunnelCommand))
-
-Write-Host "Opening Pinggy tunnel window..." -ForegroundColor Cyan
-$script:tunnelShell = Start-Process -FilePath "pwsh" `
-    -ArgumentList @("-NoExit", "-EncodedCommand", $encodedTunnelCommand) `
+Write-Host "Starting Pinggy helper..." -ForegroundColor Cyan
+$script:tunnelShell = Start-Process -FilePath "go" `
+    -ArgumentList @("run", "./cmd/pinggy-helper", "--listen", "127.0.0.1:23234", "--status-file", $script:tunnelStatus) `
     -WorkingDirectory $root `
+    -NoNewWindow `
     -PassThru
 
 Start-TunnelWatcher -TunnelShellPid $script:tunnelShell.Id -ConsoleShellPid $PID
 
-Clear-Host
+Write-Host "Waiting for Pinggy to publish the tunnel address..." -ForegroundColor Cyan
+
+try {
+    $tunnelInfo = Wait-ForTunnelReady -TimeoutSeconds 45
+}
+catch {
+    Stop-TunnelWatcher
+    Stop-Tunnel
+    Remove-TunnelState
+    Write-Error $_
+    exit 1
+}
+
+Write-Host ""
 Write-Host "==============================================" -ForegroundColor Cyan
 Write-Host "                 LOBBY OPEN                  " -ForegroundColor Black -BackgroundColor Green
 Write-Host "==============================================" -ForegroundColor Cyan
 Write-Host "Game:      $Game"
-Write-Host "Tunnel:    a separate PowerShell window is showing the Pinggy tcp:// address"
+Write-Host "Tunnel:    $($tunnelInfo.TcpAddress)"
+Write-Host "Join:      $($tunnelInfo.JoinCommand)"
 Write-Host "Tunnel PID: $($script:tunnelShell.Id)"
 Write-Host ""
 Write-Host "Local admin console is live in this terminal." -ForegroundColor Cyan
 Write-Host "Type chat text to broadcast globally, or use /commands as admin." -ForegroundColor Cyan
+Write-Host "If the tunnel drops, the server will stop automatically." -ForegroundColor Cyan
 Write-Host "Press Ctrl+C to stop both the server and the tunnel." -ForegroundColor Cyan
 Write-Host ""
 
@@ -144,6 +212,7 @@ finally {
     Pop-Location
     Stop-TunnelWatcher
     Stop-Tunnel
+    Remove-TunnelState
 }
 
 if ($serverExitCode -ne 0) {
