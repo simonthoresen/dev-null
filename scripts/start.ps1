@@ -304,6 +304,32 @@ Write-Host "Game:      $Game"
 Write-Host "Tunnel:    $($tunnelInfo.TcpAddress)"
 Write-Host "Join:      $($tunnelInfo.JoinCommand)"
 Write-Host "Local:     ssh -t -p 23234 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null localhost"
+
+$publicIP = $null
+try {
+    $publicIP = (Invoke-RestMethod -Uri 'https://ifconfig.me/ip' -TimeoutSec 5).Trim()
+} catch {
+    try { $publicIP = (Invoke-RestMethod -Uri 'https://api.ipify.org' -TimeoutSec 5).Trim() } catch {}
+}
+
+if ($publicIP) {
+    $directCmd = "ssh -t -p 23234 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $publicIP"
+    $relayCmd = $tunnelInfo.JoinCommand
+    if ($relayCmd -and -not ($relayCmd -match '\s-t\s|-t$')) {
+        $relayCmd = $relayCmd -replace '^ssh ', 'ssh -t '
+    }
+    Write-Host "Direct:    $directCmd"
+    if ($relayCmd) {
+        $oneLiner = "$directCmd; if(`$LASTEXITCODE -ne 0){$relayCmd}"
+        Write-Host ""
+        Write-Host "One-liner (paste in Discord):" -ForegroundColor Yellow
+        Write-Host $oneLiner -ForegroundColor Green
+    }
+} else {
+    Write-Host "Direct:    (could not detect public IP)"
+}
+
+Write-Host ""
 Write-Host "Tunnel PID: $($script:tunnelShell.Id)"
 Write-Host ""
 Write-Host "Local admin console is live in this terminal." -ForegroundColor Cyan

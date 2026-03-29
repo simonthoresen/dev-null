@@ -41,6 +41,7 @@ type App struct {
 	consoleWriter   io.Writer
 	consoleProgram  *tea.Program
 	localLogs       []string
+	publicIP        string
 	tunnelAddress   string
 	tunnelJoinCmd   string
 	shutdownFn      context.CancelFunc
@@ -66,6 +67,7 @@ func New(address, gameName string, game common.Game, adminPassword string) (*App
 		playerActivity:  make(map[string]time.Time),
 		localLogs:       make([]string, 0, 100),
 	}
+	app.publicIP = detectPublicIP()
 	app.registerCommands(game.GetCommands())
 
 	server, err := wish.NewServer(
@@ -464,28 +466,63 @@ func (a *App) renderGame(playerID string, width, height int) string {
 	return a.state.ActiveGame.View(playerID, width, height)
 }
 
-func (a *App) localSSHCommand() string {
-	host, port := "localhost", "23234"
+func (a *App) listenPort() string {
 	if a.address != "" {
 		parts := strings.SplitN(a.address, ":", 2)
-		if len(parts) == 2 {
-			if parts[0] != "" {
-				host = parts[0]
-			}
-			if parts[1] != "" {
-				port = parts[1]
-			}
+		if len(parts) == 2 && parts[1] != "" {
+			return parts[1]
 		}
 	}
-	return fmt.Sprintf("ssh -t -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %s", port, host)
+	return "23234"
 }
 
-func (a *App) connectionInfo() (localCmd, tunnelAddr, tunnelJoin string) {
-	localCmd = a.localSSHCommand()
+const sshNoHostCheck = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+func (a *App) localSSHCommand() string {
+	host := "localhost"
+	if a.address != "" {
+		parts := strings.SplitN(a.address, ":", 2)
+		if len(parts) == 2 && parts[0] != "" {
+			host = parts[0]
+		}
+	}
+	return fmt.Sprintf("ssh -t -p %s %s %s", a.listenPort(), sshNoHostCheck, host)
+}
+
+func (a *App) directSSHCommand() string {
+	if a.publicIP == "" {
+		return ""
+	}
+	return fmt.Sprintf("ssh -t -p %s %s %s", a.listenPort(), sshNoHostCheck, a.publicIP)
+}
+
+func (a *App) smartConnectOneLiner() string {
+	direct := a.directSSHCommand()
 	a.mu.RLock()
-	tunnelAddr = a.tunnelAddress
+	relay := a.tunnelJoinCmd
+	a.mu.RUnlock()
+	if relay != "" {
+		relay = ensureSSHFlag(relay, "-t")
+	}
+	if direct != "" && relay != "" {
+		return fmt.Sprintf("%s; if($LASTEXITCODE -ne 0){%s}", direct, relay)
+	}
+	if direct != "" {
+		return direct
+	}
+	if relay != "" {
+		return relay
+	}
+	return a.localSSHCommand()
+}
+
+func (a *App) connectionInfo() (localCmd, directCmd, tunnelJoin, oneLiner string) {
+	localCmd = a.localSSHCommand()
+	directCmd = a.directSSHCommand()
+	a.mu.RLock()
 	tunnelJoin = a.tunnelJoinCmd
 	a.mu.RUnlock()
+	oneLiner = a.smartConnectOneLiner()
 	return
 }
 
