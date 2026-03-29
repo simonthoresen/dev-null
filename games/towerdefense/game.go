@@ -21,11 +21,13 @@ const (
 )
 
 var (
-	currentPlayerGlyph = lipgloss.NewStyle().Foreground(lipgloss.Color("#F59E0B")).Render("☺")
-	grassGlyph         = lipgloss.NewStyle().Foreground(lipgloss.Color("#7CB342")).Render("·")
-	forestGlyph        = lipgloss.NewStyle().Foreground(lipgloss.Color("#2E7D32")).Render("•")
-	trailGlyph         = lipgloss.NewStyle().Foreground(lipgloss.Color("#B08968")).Render("=")
-	treeGlyph          = lipgloss.NewStyle().Foreground(lipgloss.Color("#1B5E20")).Render("♣")
+	currentPlayerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF8E1")).Background(lipgloss.Color("#F59E0B"))
+	otherPlayerStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F8FAFC")).Background(lipgloss.Color("#0F172A"))
+	grassGlyph         = lipgloss.NewStyle().Foreground(lipgloss.Color("#D9F99D")).Background(lipgloss.Color("#5E8C31")).Render("·")
+	forestGlyph        = lipgloss.NewStyle().Foreground(lipgloss.Color("#BBF7D0")).Background(lipgloss.Color("#25603B")).Render("•")
+	trailGlyph         = lipgloss.NewStyle().Foreground(lipgloss.Color("#FEF3C7")).Background(lipgloss.Color("#9A6B3A")).Render("=")
+	treeGlyph          = lipgloss.NewStyle().Foreground(lipgloss.Color("#DCFCE7")).Background(lipgloss.Color("#0F3D24")).Render("♣")
+	voidGlyph          = lipgloss.NewStyle().Background(lipgloss.Color("#111827")).Render(" ")
 )
 
 type tileType uint8
@@ -85,40 +87,46 @@ func (g *Game) Update(msg tea.Msg, playerID string) []tea.Cmd {
 		}
 	case common.PlayerLeftMsg:
 		delete(g.players, msg.PlayerID)
+	case common.MoveMsg:
+		g.applyMovement(playerID, msg.Direction)
 	case tea.KeyPressMsg:
-		player := g.players[playerID]
-		if player == nil {
-			slog.Debug("movement ignored for unknown player", "player_id", playerID, "key", msg.String())
-			return nil
-		}
-
-		dx, dy := 0, 0
-		switch msg.String() {
-		case "up":
-			dy = -1
-		case "down":
-			dy = 1
-		case "left":
-			dx = -1
-		case "right":
-			dx = 1
-		default:
-			return nil
-		}
-		player.Inputs++
-
-		next := common.Point{X: player.Position.X + dx, Y: player.Position.Y + dy}
-		if !g.inBounds(next) || g.tileAt(next) == treeTile {
-			player.Blocked++
-			slog.Debug("movement blocked", "player_id", playerID, "from_x", player.Position.X, "from_y", player.Position.Y, "to_x", next.X, "to_y", next.Y, "key", msg.String())
-			return nil
-		}
-		player.Position = next
-		player.Applied++
-		slog.Debug("movement applied", "player_id", playerID, "x", player.Position.X, "y", player.Position.Y, "key", msg.String())
+		g.applyMovement(playerID, msg.String())
 	}
 
 	return nil
+}
+
+func (g *Game) applyMovement(playerID, direction string) {
+	player := g.players[playerID]
+	if player == nil {
+		slog.Debug("movement ignored for unknown player", "player_id", playerID, "key", direction)
+		return
+	}
+
+	dx, dy := 0, 0
+	switch direction {
+	case "up":
+		dy = -1
+	case "down":
+		dy = 1
+	case "left":
+		dx = -1
+	case "right":
+		dx = 1
+	default:
+		return
+	}
+	player.Inputs++
+
+	next := common.Point{X: player.Position.X + dx, Y: player.Position.Y + dy}
+	if !g.inBounds(next) || g.tileAt(next) == treeTile {
+		player.Blocked++
+		slog.Debug("movement blocked", "player_id", playerID, "from_x", player.Position.X, "from_y", player.Position.Y, "to_x", next.X, "to_y", next.Y, "key", direction)
+		return
+	}
+	player.Position = next
+	player.Applied++
+	slog.Debug("movement applied", "player_id", playerID, "x", player.Position.X, "y", player.Position.Y, "key", direction)
 }
 
 func (g *Game) View(playerID string, width, height int) string {
@@ -149,7 +157,7 @@ func (g *Game) View(playerID string, width, height int) string {
 	}
 
 	for len(rows) < height {
-		rows = append(rows, strings.Repeat(" ", width))
+		rows = append(rows, strings.Repeat(voidGlyph, width))
 	}
 
 	return strings.Join(rows, "\n")
@@ -305,9 +313,9 @@ func (g *Game) renderCell(point common.Point, currentPlayerID string) string {
 			continue
 		}
 		if player.ID == currentPlayerID {
-			return currentPlayerGlyph
+			return currentPlayerStyle.Render("☺")
 		}
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(player.Color)).Render("☻")
+		return otherPlayerStyle.Foreground(lipgloss.Color(player.Color)).Render("☻")
 	}
 
 	switch g.tileAt(point) {
@@ -320,7 +328,7 @@ func (g *Game) renderCell(point common.Point, currentPlayerID string) string {
 	case treeTile:
 		return treeGlyph
 	default:
-		return " "
+		return voidGlyph
 	}
 }
 

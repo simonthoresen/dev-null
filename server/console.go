@@ -41,18 +41,12 @@ func (a *App) EnableLocalConsole(ctx context.Context, cancel context.CancelFunc,
 
 	a.mu.Lock()
 	a.consolePlayer = player.ID
+	a.consoleIdentity = player
 	a.consoleWriter = writer
 	a.privateHistory[player.ID] = nil
 	a.mu.Unlock()
 
-	a.state.AddPlayer(player)
 	slog.Info("local console enabled", "player_id", player.ID, "name", player.Name)
-	a.handleGameMessage(common.PlayerJoinedMsg{
-		PlayerID: player.ID,
-		Name:     player.Name,
-		Position: player.Position,
-		Color:    player.Color,
-	}, player.ID)
 	a.addSystemMessage("admin joined from the local console.")
 	a.writeConsoleLine(formatPrivateLine("local admin console ready. Type chat text or /help for commands. Press Ctrl+C to stop."))
 
@@ -224,7 +218,7 @@ func (m *localConsoleModel) submitInput() {
 }
 
 func (a *App) disableLocalConsole(playerID string, announce bool) {
-	player := a.state.GetPlayer(playerID)
+	player := a.playerIdentity(playerID)
 	if player == nil {
 		return
 	}
@@ -234,13 +228,11 @@ func (a *App) disableLocalConsole(playerID string, announce bool) {
 		a.appendChatLine(formatSystemLine(fmt.Sprintf("%s left the local console.", player.Name)))
 	}
 
-	a.handleGameMessage(common.PlayerLeftMsg{PlayerID: playerID}, playerID)
-	a.state.RemovePlayer(playerID)
-
 	a.mu.Lock()
 	if a.consolePlayer == playerID {
 		a.unregisterProgramLocked(a.consoleProgram)
 		a.consolePlayer = ""
+		a.consoleIdentity = nil
 		a.consoleWriter = nil
 		a.consoleProgram = nil
 	}

@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	playerHeaderStyle = lipgloss.NewStyle().Width(0).Background(lipgloss.Color("#FFFFFF")).Foreground(lipgloss.Color("#111111"))
-	playerStatusStyle = lipgloss.NewStyle().Width(0).Background(lipgloss.Color("#FFFFFF")).Foreground(lipgloss.Color("#111111"))
-	chatStyle         = lipgloss.NewStyle().Background(lipgloss.Color("#E5E7EB")).Foreground(lipgloss.Color("#111111"))
+	playerHeaderStyle = lipgloss.NewStyle().Width(0).Background(lipgloss.Color("#D8C7A0")).Foreground(lipgloss.Color("#4A2D18")).Bold(true)
+	playerStatusStyle = lipgloss.NewStyle().Width(0).Background(lipgloss.Color("#D8C7A0")).Foreground(lipgloss.Color("#4A2D18"))
+	chatStyle         = lipgloss.NewStyle().Background(lipgloss.Color("#EADFC7")).Foreground(lipgloss.Color("#2C1810"))
+	chatChromeStyle   = lipgloss.NewStyle().Background(lipgloss.Color("#D8C7A0")).Foreground(lipgloss.Color("#4A2D18")).Bold(true)
 	spinnerFrames     = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 )
 
@@ -28,8 +29,14 @@ type chromeModel struct {
 	width    int
 	height   int
 	chatMode bool
+	heldMove string
+	canTrackHeldMove bool
 	chat     viewport.Model
 	input    textinput.Model
+}
+
+type repeatMoveMsg struct {
+	direction string
 }
 
 func newChromeModel(app *App, playerID string) chromeModel {
@@ -68,8 +75,22 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.SetWidth(maxInt(1, m.width-2))
 		m.syncChat()
 		return m, nil
+	case tea.KeyboardEnhancementsMsg:
+		m.canTrackHeldMove = msg.SupportsEventTypes()
+		return m, nil
 	case common.TickMsg, common.RefreshMsg:
 		m.syncChat()
+		return m, nil
+	case repeatMoveMsg:
+		if m.chatMode || !m.canTrackHeldMove || m.heldMove != msg.direction {
+			return m, nil
+		}
+		m.dispatchMovement(msg.direction)
+		return m, repeatMoveCmd(msg.direction)
+	case tea.KeyReleaseMsg:
+		if m.canTrackHeldMove && msg.String() == m.heldMove {
+			m.heldMove = ""
+		}
 		return m, nil
 	case tea.KeyPressMsg:
 		if !m.chatMode {
@@ -81,8 +102,17 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			default:
 				slog.Debug("client input received", "player_id", m.playerID, "key", msg.String())
+				if direction := movementDirection(msg.String()); direction != "" {
+					m.dispatchMovement(direction)
+					if m.canTrackHeldMove && !msg.Key().IsRepeat {
+						m.heldMove = direction
+						return m, repeatMoveCmd(direction)
+					}
+					return m, nil
+				}
 				m.app.handleGameMessage(msg, m.playerID)
-				m.app.broadcast(common.RefreshMsg{})
+				m.app.sendToPlayer(m.playerID, common.RefreshMsg{})
+				m.app.broadcastExcept(m.playerID, common.RefreshMsg{})
 				return m, nil
 			}
 		}
@@ -109,18 +139,20 @@ func (m chromeModel) View() tea.View {
 	if m.width == 0 || m.height == 0 {
 		view.SetContent("\x1b[HLoading null-space...")
 		view.AltScreen = true
+		view.KeyboardEnhancements.ReportEventTypes = true
 		return view
 	}
 
-	gameHeight := maxInt(1, m.height-7)
+	gameHeight := maxInt(1, m.height-6)
 	header := m.renderHeader()
 	game := fitBlock(m.app.renderGame(m.playerID, m.width, gameHeight), m.width, gameHeight)
 	status := fitStyledBlock(m.renderGameStatusBar(), m.width, 1, playerStatusStyle)
-	chat := fitStyledBlock(m.chat.View(), m.width, 5, chatStyle)
+	chat := fitStyledBlock(m.chat.View(), m.width, 4, chatStyle)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, header, game, status, chat)
 	view.SetContent("\x1b[H" + content)
 	view.AltScreen = true
+	view.KeyboardEnhancements.ReportEventTypes = true
 	return view
 }
 
@@ -231,6 +263,31 @@ func headerWithSpinner(text string, width int) string {
 }
 
 func currentSpinnerFrame() string {
-	frame := (time.Now().UnixMilli() / 100) % int64(len(spinnerFrames))
+	interval := uiTickInterval.Milliseconds()
+	if interval <= 0 {
+		interval = 100
+	}
+	frame := (time.Now().UnixMilli() / interval) % int64(len(spinnerFrames))
 	return spinnerFrames[frame]
+}
+
+func repeatMoveCmd(direction string) tea.Cmd {
+	return tea.Tick(gameTickInterval, func(time.Time) tea.Msg {
+		return repeatMoveMsg{direction: direction}
+	})
+}
+
+func movementDirection(key string) string {
+	switch key {
+	case "up", "down", "left", "right":
+		return key
+	default:
+		return ""
+	}
+}
+
+func (m *chromeModel) dispatchMovement(direction string) {
+	m.app.handleGameMessage(common.MoveMsg{Direction: direction}, m.playerID)
+	m.app.sendToPlayer(m.playerID, common.RefreshMsg{})
+	m.app.broadcastExcept(m.playerID, common.RefreshMsg{})
 }

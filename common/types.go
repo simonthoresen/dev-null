@@ -29,6 +29,10 @@ type TickMsg struct {
 
 type RefreshMsg struct{}
 
+type MoveMsg struct {
+	Direction string
+}
+
 type PlayerJoinedMsg struct {
 	PlayerID string
 	Name     string

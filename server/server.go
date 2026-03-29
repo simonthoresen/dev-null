@@ -14,6 +14,7 @@ import (
 	"charm.land/wish/v2"
 	"charm.land/wish/v2/activeterm"
 	wishbubbletea "charm.land/wish/v2/bubbletea"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/ssh"
 
 	"null-space/common"
@@ -34,6 +35,7 @@ type App struct {
 	registry        map[string]common.Command
 	paletteIndex    int
 	consolePlayer   string
+	consoleIdentity *common.Player
 	consoleWriter   io.Writer
 	consoleProgram  *tea.Program
 	localLogs       []string
@@ -43,7 +45,7 @@ type App struct {
 
 const (
 	gameTickInterval = 100 * time.Millisecond
-	uiTickInterval   = 500 * time.Millisecond
+	uiTickInterval   = 125 * time.Millisecond
 )
 
 func New(address, gameName string, game common.Game, adminPassword string) (*App, error) {
@@ -136,12 +138,23 @@ func (a *App) sessionMiddleware() wish.Middleware {
 
 func (a *App) programHandler(sess ssh.Session) *tea.Program {
 	playerID := sess.Context().SessionID()
-	program := tea.NewProgram(newChromeModel(a, playerID), wishbubbletea.MakeOptions(sess)...)
+	program := tea.NewProgram(newChromeModel(a, playerID), a.sessionProgramOptions(sess)...)
 	a.mu.Lock()
 	a.programs[playerID] = program
 	a.registerProgramLocked(program)
 	a.mu.Unlock()
 	return program
+}
+
+func (a *App) sessionProgramOptions(sess ssh.Session) []tea.ProgramOption {
+	envs := sess.Environ()
+	if pty, _, ok := sess.Pty(); ok && pty.Term != "" {
+		envs = append(envs, "TERM="+pty.Term)
+	}
+
+	// Wish does not currently force a color profile for Windows-hosted SSH
+	// sessions, so derive it from the remote environment here.
+	return append(wishbubbletea.MakeOptions(sess), tea.WithColorProfile(colorprofile.Env(envs)))
 }
 
 func (a *App) registerSession(sess ssh.Session) *common.Player {
@@ -248,6 +261,27 @@ func (a *App) broadcast(msg tea.Msg) {
 	}
 }
 
+func (a *App) broadcastExcept(excludedPlayerID string, msg tea.Msg) {
+	a.mu.RLock()
+	programs := make([]*tea.Program, 0, len(a.programs))
+	for playerID, program := range a.programs {
+		if playerID == excludedPlayerID {
+			continue
+		}
+		programs = append(programs, program)
+	}
+	consoleProgram := a.consoleProgram
+	a.mu.RUnlock()
+
+	for _, program := range programs {
+		a.sendProgram(program, msg)
+	}
+
+	if consoleProgram != nil {
+		a.sendProgram(consoleProgram, msg)
+	}
+}
+
 func (a *App) addSystemMessage(text string) {
 	a.appendChatLine(formatSystemLine(text))
 	a.broadcast(common.RefreshMsg{})
@@ -275,7 +309,7 @@ func (a *App) addPrivateMessage(playerID, text string) {
 }
 
 func (a *App) addChatMessage(playerID, text string) {
-	player := a.state.GetPlayer(playerID)
+	player := a.playerIdentity(playerID)
 	author := "unknown"
 	if player != nil {
 		author = player.Name
@@ -283,6 +317,20 @@ func (a *App) addChatMessage(playerID, text string) {
 	slog.Info("chat message", "player_id", playerID, "author", author, "text", text)
 	a.appendChatLine(formatChatLine(author, text))
 	a.broadcast(common.RefreshMsg{})
+}
+
+func (a *App) playerIdentity(playerID string) *common.Player {
+	if player := a.state.GetPlayer(playerID); player != nil {
+		return player
+	}
+
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.consoleIdentity != nil && a.consoleIdentity.ID == playerID {
+		clone := *a.consoleIdentity
+		return &clone
+	}
+	return nil
 }
 
 func (a *App) appendChatLine(line string) {

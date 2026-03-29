@@ -16,7 +16,7 @@ type commandContext struct {
 }
 
 func (c commandContext) CurrentPlayer() *common.Player {
-	return c.app.state.GetPlayer(c.playerID)
+	return c.app.playerIdentity(c.playerID)
 }
 
 func (c commandContext) Players() []*common.Player {
@@ -176,7 +176,7 @@ func (a *App) executeCommand(playerID, raw string) {
 		return
 	}
 
-	player := a.state.GetPlayer(playerID)
+	player := a.playerIdentity(playerID)
 	if command.AdminOnly && (player == nil || !player.IsAdmin) {
 		slog.Warn("admin command denied", "player_id", playerID, "command", command.Name)
 		a.addPrivateMessage(playerID, "Permission Denied")
