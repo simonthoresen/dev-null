@@ -73,7 +73,7 @@ func New(address, gameName string, game common.Game, adminPassword string) (*App
 	app.registerCommands(game.GetCommands())
 
 	server, err := wish.NewServer(
-		ssh.AllocatePty(),
+		ssh.EmulatePty(),
 		wish.WithAddress(address),
 		wish.WithHostKeyPath("null-space_ed25519"),
 		wish.WithMiddleware(
@@ -170,7 +170,18 @@ func (a *App) sessionProgramOptions(sess ssh.Session) []tea.ProgramOption {
 
 	// Wish does not currently force a color profile for Windows-hosted SSH
 	// sessions, so derive it from the remote environment here.
-	return append(wishbubbletea.MakeOptions(sess), tea.WithFPS(60), tea.WithColorProfile(colorprofile.Env(envs)))
+	//
+	// Wrap the session output with kittyStripWriter to prevent the Bubble Tea
+	// v2 renderer from enabling the Kitty keyboard protocol on the client
+	// terminal. Over SSH, Kitty mode causes the client to send multi-byte CSI
+	// u-encoded keystrokes that break the server-side input parser.
+	opts := wishbubbletea.MakeOptions(sess)
+	opts = append(opts,
+		tea.WithFPS(60),
+		tea.WithColorProfile(colorprofile.Env(envs)),
+		tea.WithOutput(newKittyStripWriter(sess)),
+	)
+	return opts
 }
 
 func (a *App) registerSession(sess ssh.Session) *common.Player {

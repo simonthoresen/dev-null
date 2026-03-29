@@ -59,14 +59,14 @@ func tryWANIPConnection2(ctx context.Context, port uint16) *upnpMapping {
 	for _, client := range clients {
 		err := client.AddPortMappingCtx(
 			ctx,
-			"",          // remote host (empty = any)
-			port,        // external port
-			"TCP",       // protocol
-			port,        // internal port
+			"",                          // remote host (empty = any)
+			port,                        // external port
+			"TCP",                       // protocol
+			port,                        // internal port
 			client.LocalAddr().String(), // internal client IP
-			true,        // enabled
-			"null-space", // description
-			0,           // lease duration (0 = permanent until removed)
+			true,                        // enabled
+			"null-space",                // description
+			0,                           // lease duration (0 = permanent until removed)
 		)
 		if err != nil {
 			slog.Debug("upnp: WANIPConnection2 AddPortMapping failed", "error", err)
