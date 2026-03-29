@@ -52,7 +52,7 @@ func (a *App) EnableLocalConsole(ctx context.Context, cancel context.CancelFunc,
 		Color:    player.Color,
 	}, player.ID)
 	a.addSystemMessage("admin joined from the local console.")
-	a.writeConsoleLine(formatPrivateLine("local admin console ready. Type chat text or /commands. Press Ctrl+C to stop."))
+	a.writeConsoleLine(formatPrivateLine("local admin console ready. Type chat text or /help for commands. Press Ctrl+C to stop."))
 
 	model := newLocalConsoleModel(a, player.ID, cancel)
 	program := tea.NewProgram(model, tea.WithInput(reader), tea.WithOutput(writer))
