@@ -24,6 +24,59 @@ $script:tunnelShell = $null
 $script:tunnelWatcher = $null
 $script:tunnelStatus = $null
 $script:runLog = $null
+$script:bootStepLabel = $null
+$script:bootStepWidth = 80
+
+# ── boot-step helpers ────────────────────────────────────────────────────────
+
+function Get-TermWidth {
+    try { return $Host.UI.RawUI.BufferSize.Width } catch { return 80 }
+}
+
+function Get-StatusToken {
+    param([string]$Status)
+    $inner = 7  # widest status (IGNORED/SKIPPED) = 7 chars; token is always 11 chars total
+    $pad   = $inner - $Status.Length
+    if ($pad -lt 0) { $pad = 0 }
+    $left  = [Math]::Floor($pad / 2)
+    $right = $pad - $left
+    return '[ ' + (' ' * $left) + $Status + (' ' * $right) + ' ]'
+}
+
+function Write-BootStepStart {
+    param([string]$Label)
+    $script:bootStepLabel = $Label
+    $script:bootStepWidth = Get-TermWidth
+    # layout: label + " " + dots + " " + token(11)
+    $dots = $script:bootStepWidth - $Label.Length - 2 - 11
+    if ($dots -lt 1) { $dots = 1 }
+    Write-Host -NoNewline ($Label + ' ' + ('.' * $dots))
+}
+
+function Write-BootStepEnd {
+    param([string]$Status)
+    $label = $script:bootStepLabel
+    $width = $script:bootStepWidth
+    $token = Get-StatusToken $Status
+    $dots  = $width - $label.Length - 2 - 11
+    if ($dots -lt 1) { $dots = 1 }
+    $color = switch ($Status) {
+        'DONE'    { 'Green'    }
+        'OK'      { 'Green'    }
+        'FAILED'  { 'Red'      }
+        'IGNORED' { 'Yellow'   }
+        'SKIPPED' { 'DarkGray' }
+        default   { 'White'    }
+    }
+    Write-Host -NoNewline ("`r" + $label + ' ' + ('.' * $dots) + ' ')
+    Write-Host $token -ForegroundColor $color
+}
+
+# ── logging ──────────────────────────────────────────────────────────────────
+
+New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
+$script:runLog = Join-Path $logsDir ((Get-Date -Format "yyyyMMdd-HHmmss") + ".log")
+New-Item -ItemType File -Path $script:runLog -Force | Out-Null
 
 function Write-RunLogLine {
     param([string]$Message)
@@ -32,16 +85,14 @@ function Write-RunLogLine {
     Add-Content -Path $script:runLog -Value ("{0} [script] {1}" -f $timestamp, $Message)
 }
 
-New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
-$script:runLog = Join-Path $logsDir ((Get-Date -Format "yyyyMMdd-HHmmss") + ".log")
-New-Item -ItemType File -Path $script:runLog -Force | Out-Null
-Write-Host "Log file: $script:runLog" -ForegroundColor DarkGray
 Write-RunLogLine "starting null-space start script"
 
 $previousLogFile  = $env:NULL_SPACE_LOG_FILE
 $previousLogLevel = $env:NULL_SPACE_LOG_LEVEL
 $env:NULL_SPACE_LOG_FILE = $script:runLog
 if (-not $env:NULL_SPACE_LOG_LEVEL) { $env:NULL_SPACE_LOG_LEVEL = "info" }
+
+# ── cleanup helpers ──────────────────────────────────────────────────────────
 
 function Stop-Tunnel {
     if ($script:tunnelShell) {
@@ -144,76 +195,56 @@ function Wait-ForTunnelReady {
     throw $message
 }
 
-# --- pre-flight ---
+# ── pre-flight ───────────────────────────────────────────────────────────────
 
 $existingListener = Get-NetTCPConnection -LocalPort 23234 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($existingListener) {
     if ($Force) {
-        Write-Host "Port 23234 is in use by PID $($existingListener.OwningProcess). Stopping it (--force)..." -ForegroundColor Yellow
+        Write-BootStepStart "Port 23234 (force-stopping PID $($existingListener.OwningProcess))"
         Stop-ProcessTree -RootPid $existingListener.OwningProcess
         Start-Sleep -Milliseconds 500
         $existingListener = Get-NetTCPConnection -LocalPort 23234 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-    }
-    if ($existingListener) {
-        Write-Error "Port 23234 is already in use by PID $($existingListener.OwningProcess)."
+        if ($existingListener) {
+            Write-BootStepEnd "FAILED"
+            Write-Error "Port 23234 is still in use after --force."
+            exit 1
+        }
+        Write-BootStepEnd "DONE"
+    } else {
+        Write-Error "Port 23234 is already in use by PID $($existingListener.OwningProcess). Use --force to stop it."
         exit 1
     }
 }
 
-# --- start tunnel ---
+# ── start tunnel ─────────────────────────────────────────────────────────────
 
 $script:tunnelStatus = Join-Path ([System.IO.Path]::GetTempPath()) ("null-space-pinggy-{0}.status.log" -f ([guid]::NewGuid().ToString("N")))
 
-Write-Host "Starting Pinggy helper..." -ForegroundColor Cyan
+Write-BootStepStart "Pinggy helper"
 Write-RunLogLine "starting pinggy helper"
 $script:tunnelShell = Start-Process `
     -FilePath (Join-Path $root "pinggy-helper.exe") `
     -ArgumentList @("--listen", "127.0.0.1:23234", "--status-file", $script:tunnelStatus) `
     -WorkingDirectory $root `
+    -RedirectStandardOutput (Join-Path $logsDir "pinggy-stdout.log") `
+    -RedirectStandardError  (Join-Path $logsDir "pinggy-stderr.log") `
     -NoNewWindow -PassThru
 
 Start-TunnelWatcher -TunnelShellPid $script:tunnelShell.Id -ConsoleShellPid $PID
 
-Write-Host "Waiting for Pinggy tunnel address..." -ForegroundColor Cyan
 try {
     $tunnelInfo = Wait-ForTunnelReady -TimeoutSeconds 45
     Write-RunLogLine "pinggy tunnel ready: $($tunnelInfo.TcpAddress)"
+    Write-BootStepEnd "DONE"
 } catch {
     Write-RunLogLine ("pinggy helper failed: {0}" -f $_)
+    Write-BootStepEnd "FAILED"
     Stop-TunnelWatcher; Stop-Tunnel; Remove-TunnelState
     Write-Error $_
     exit 1
 }
 
-Write-Host ""
-Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host "                 LOBBY OPEN                  " -ForegroundColor Black -BackgroundColor Green
-Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host "Tunnel:  $($tunnelInfo.TcpAddress)"
-Write-Host "Join:    $($tunnelInfo.JoinCommand)"
-Write-Host "Local:   ssh -t -p 23234 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null localhost"
-
-$publicIP = $null
-try { $publicIP = (Invoke-RestMethod -Uri 'https://ifconfig.me/ip' -TimeoutSec 5).Trim() } catch {
-    try { $publicIP = (Invoke-RestMethod -Uri 'https://api.ipify.org' -TimeoutSec 5).Trim() } catch {}
-}
-if ($publicIP) {
-    $directCmd = "ssh -t -p 23234 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $publicIP"
-    $relayCmd  = $tunnelInfo.JoinCommand
-    if ($relayCmd -and -not ($relayCmd -match '\s-t\s|-t$')) { $relayCmd = $relayCmd -replace '^ssh ', 'ssh -t ' }
-    Write-Host "Direct:  $directCmd"
-    if ($relayCmd) {
-        Write-Host ""
-        Write-Host "One-liner (paste in Discord):" -ForegroundColor Yellow
-        Write-Host "$directCmd; if(`$LASTEXITCODE -ne 0){$relayCmd}" -ForegroundColor Green
-    }
-}
-
-Write-Host ""
-Write-Host "Press Ctrl+C to stop the server and tunnel." -ForegroundColor Cyan
-Write-Host ""
-
-# --- start server ---
+# ── start server ─────────────────────────────────────────────────────────────
 
 $serverExitCode = 0
 $previousPinggyStatusFile       = $env:NULL_SPACE_PINGGY_STATUS_FILE
@@ -233,8 +264,13 @@ try {
     else { $env:NULL_SPACE_LOG_FILE = $previousLogFile }
     if ($null -eq $previousLogLevel) { Remove-Item Env:NULL_SPACE_LOG_LEVEL -ErrorAction SilentlyContinue }
     else { $env:NULL_SPACE_LOG_LEVEL = $previousLogLevel }
+
+    Write-BootStepStart "Stopping Pinggy helper"
     Stop-TunnelWatcher; Stop-Tunnel; Remove-TunnelState
+    Write-BootStepEnd "DONE"
+
     Write-RunLogLine "cleanup completed"
+    Write-Host ""
 }
 
 if ($serverExitCode -ne 0) { exit $serverExitCode }

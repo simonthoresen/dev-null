@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 
+	xterm "github.com/charmbracelet/x/term"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/ssh"
 
@@ -38,14 +40,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, "WARNING: no admin password set (use --password)")
 	}
 
-	app, err := server.New(address, password, dataDir)
-	if err != nil {
-		printBootStep("SSH server", "FAILED")
-		fmt.Fprintf(os.Stderr, "could not create server: %v\n", err)
-		os.Exit(1)
-	}
-	printBootStep("SSH server", "DONE")
-
 	// Determine port from address
 	port := "23234"
 	if idx := strings.LastIndex(address, ":"); idx >= 0 {
@@ -54,17 +48,27 @@ func main() {
 		}
 	}
 
-	// UPnP + public IP detection
-	upnpMapped, publicIP := app.SetupNetwork(port)
-	if upnpMapped {
-		printBootStep("UPnP port mapping", "DONE")
-	} else {
-		printBootStep("UPnP port mapping", "IGNORED")
+	startBootStep("SSH server")
+	app, err := server.New(address, password, dataDir)
+	if err != nil {
+		finishBootStep("FAILED")
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
-	if publicIP != "" {
-		printBootStep("Public IP detection", "DONE")
+	finishBootStep("DONE")
+
+	startBootStep("UPnP port mapping")
+	if app.SetupUPnP(port) {
+		finishBootStep("DONE")
 	} else {
-		printBootStep("Public IP detection", "IGNORED")
+		finishBootStep("IGNORED")
+	}
+
+	startBootStep("Public IP detection")
+	if app.SetupPublicIP() != "" {
+		finishBootStep("DONE")
+	} else {
+		finishBootStep("IGNORED")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
@@ -74,20 +78,20 @@ func main() {
 		stop()
 	})
 
-	// Pinggy
+	startBootStep("Pinggy tunnel")
 	pinggyStatusFile := os.Getenv("NULL_SPACE_PINGGY_STATUS_FILE")
 	if pinggyStatusFile != "" {
 		app.EnablePinggyLogBridge(ctx, pinggyStatusFile)
-		printBootStep("Pinggy tunnel", "DONE")
+		finishBootStep("DONE")
 	} else {
-		printBootStep("Pinggy tunnel", "IGNORED")
+		finishBootStep("IGNORED")
 	}
 
-	// Invite script
+	startBootStep("Generating invite script")
 	inviteScript := buildInviteScript(app.State(), port)
-	printBootStep("Invite script", "DONE")
+	finishBootStep("DONE")
+
 	fmt.Println()
-	fmt.Println("Connect with:")
 	fmt.Println("  " + inviteScript)
 	fmt.Println()
 
@@ -112,31 +116,86 @@ func main() {
 		fmt.Fprintf(os.Stderr, "console error: %v\n", err)
 	}
 
-	// Wait for server to stop
-	if err := <-serverErr; err != nil && !errors.Is(err, ssh.ErrServerClosed) {
+	// Shutdown sequence
+	fmt.Println()
+	startBootStep("Stopping SSH server")
+	if err := <-serverErr; err == nil || errors.Is(err, ssh.ErrServerClosed) {
+		finishBootStep("DONE")
+	} else {
+		finishBootStep("FAILED")
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Println()
 }
 
-func printBootStep(label string, status string) {
-	const dotWidth = 50
-	dots := dotWidth - len(label)
+var currentBootLabel string
+
+// statusTokenWidth is the fixed display width of every status token: "[ IGNORED ]" = 11.
+const statusTokenWidth = 11
+
+// statusToken returns a fixed-width 11-char token with the status text centered.
+func statusToken(status string) string {
+	const inner = 7 // widest status (IGNORED/SKIPPED) is 7 chars
+	pad := inner - len(status)
+	if pad < 0 {
+		pad = 0
+	}
+	left := pad / 2
+	right := pad - left
+	return "[ " + strings.Repeat(" ", left) + status + strings.Repeat(" ", right) + " ]"
+}
+
+// colorizedToken wraps the token in ANSI color codes.
+func colorizedToken(token, status string) string {
+	var code string
+	switch status {
+	case "DONE", "OK":
+		code = "\033[32m"
+	case "FAILED":
+		code = "\033[31m"
+	case "IGNORED":
+		code = "\033[33m"
+	case "SKIPPED":
+		code = "\033[90m"
+	default:
+		return token
+	}
+	return code + token + "\033[0m"
+}
+
+func bootTermWidth() int {
+	w, _, err := xterm.GetSize(os.Stdout.Fd())
+	if err != nil || w < 40 {
+		return 80
+	}
+	return w
+}
+
+// bootDots returns the number of dots to fill between label and status token.
+// layout: label + " " + dots + " " + token
+func bootDots(label string, w int) int {
+	dots := w - len(label) - 1 - 1 - statusTokenWidth
 	if dots < 1 {
 		dots = 1
 	}
-	statusColored := status
-	switch status {
-	case "DONE":
-		statusColored = "\033[32mDONE\033[0m"
-	case "FAILED":
-		statusColored = "\033[31mFAILED\033[0m"
-	case "IGNORED":
-		statusColored = "\033[33mIGNORED\033[0m"
-	case "SKIPPED":
-		statusColored = "\033[90mSKIPPED\033[0m"
-	}
-	fmt.Printf("  %s %s [ %s ]\n", label, strings.Repeat(".", dots), statusColored)
+	return dots
+}
+
+// startBootStep prints the step label with dots but no status.
+// finishBootStep must be called after the operation completes.
+func startBootStep(label string) {
+	currentBootLabel = label
+	w := bootTermWidth()
+	fmt.Printf("%s %s", label, strings.Repeat(".", bootDots(label, w)))
+}
+
+// finishBootStep overwrites the current boot step line with the final status.
+func finishBootStep(status string) {
+	w := bootTermWidth()
+	token := statusToken(status)
+	dots := bootDots(currentBootLabel, w)
+	fmt.Printf("\r%s %s %s\n", currentBootLabel, strings.Repeat(".", dots), colorizedToken(token, status))
 }
 
 // defaultDataDir returns the directory of the running executable.

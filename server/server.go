@@ -134,18 +134,23 @@ func (a *App) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// SetupNetwork runs UPnP and public IP detection, updating state.Net.
+// SetupUPnP attempts UPnP port mapping and returns true if successful.
 // Should be called after New() and before Start().
-func (a *App) SetupNetwork(port string) (upnpMapped bool, publicIP string) {
+func (a *App) SetupUPnP(port string) bool {
 	a.upnpMapping = tryUPnP(a.state, port)
-	upnpMapped = a.state.Net.UPnPMapped
-	publicIP = detectPublicIP()
+	return a.state.Net.UPnPMapped
+}
+
+// SetupPublicIP detects the public IP and stores it in state.
+// Returns the detected IP, or empty string if detection failed.
+func (a *App) SetupPublicIP() string {
+	publicIP := detectPublicIP()
 	if publicIP != "" {
 		a.state.mu.Lock()
 		a.state.Net.PublicIP = publicIP
 		a.state.mu.Unlock()
 	}
-	return upnpMapped, publicIP
+	return publicIP
 }
 
 func (a *App) sessionMiddleware() wish.Middleware {
