@@ -6,13 +6,17 @@ param(
 $Password = "changeme"
 $Force = $false
 $Local = $false
+$Port = "23234"
 
 $positionals = @()
-foreach ($arg in $CliArgs) {
+for ($i = 0; $i -lt $CliArgs.Count; $i++) {
+    $arg = $CliArgs[$i]
     switch -Regex ($arg) {
         '^--?force$'         { $Force = $true; continue }
         '^--?local$'         { $Local = $true; continue }
         '^--?(no-?network|offline|singleplayer|single-player)$' { $Local = $true; continue }
+        '^--?port$'          { $i++; if ($i -lt $CliArgs.Count) { $Port = $CliArgs[$i] }; continue }
+        '^--?port=(.+)$'     { $Port = $Matches[1]; continue }
         default              { $positionals += $arg }
     }
 }
@@ -223,21 +227,21 @@ if ($Local) {
 
 # ── pre-flight ───────────────────────────────────────────────────────────────
 
-$existingListener = Get-NetTCPConnection -LocalPort 23234 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+$existingListener = Get-NetTCPConnection -LocalPort ([int]$Port) -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($existingListener) {
     if ($Force) {
-        Write-BootStepStart "Port 23234 (force-stopping PID $($existingListener.OwningProcess))"
+        Write-BootStepStart "Port $Port (force-stopping PID $($existingListener.OwningProcess))"
         Stop-ProcessTree -RootPid $existingListener.OwningProcess
         Start-Sleep -Milliseconds 500
-        $existingListener = Get-NetTCPConnection -LocalPort 23234 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+        $existingListener = Get-NetTCPConnection -LocalPort ([int]$Port) -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($existingListener) {
             Write-BootStepEnd "FAILED"
-            Write-Error "Port 23234 is still in use after --force."
+            Write-Error "Port $Port is still in use after --force."
             exit 1
         }
         Write-BootStepEnd "DONE"
     } else {
-        Write-Error "Port 23234 is already in use by PID $($existingListener.OwningProcess). Use --force to stop it."
+        Write-Error "Port $Port is already in use by PID $($existingListener.OwningProcess). Use --force to stop it."
         exit 1
     }
 }
@@ -250,7 +254,7 @@ Write-BootStepStart "Pinggy helper"
 Write-RunLogLine "starting pinggy helper"
 $script:tunnelShell = Start-Process `
     -FilePath (Join-Path $root "pinggy-helper.exe") `
-    -ArgumentList @("--listen", "127.0.0.1:23234", "--status-file", $script:tunnelStatus) `
+    -ArgumentList @("--listen", "127.0.0.1:$Port", "--status-file", $script:tunnelStatus) `
     -WorkingDirectory $root `
     -RedirectStandardOutput (Join-Path $logsDir "pinggy-stdout.log") `
     -RedirectStandardError  (Join-Path $logsDir "pinggy-stderr.log") `
@@ -279,7 +283,7 @@ $env:NULL_SPACE_PINGGY_STATUS_FILE = $script:tunnelStatus
 Push-Location $root
 try {
     Write-RunLogLine "starting null-space server"
-    & (Join-Path $root "null-space.exe") --password $Password
+    & (Join-Path $root "null-space.exe") --password $Password --port $Port
     if ($LASTEXITCODE) { $serverExitCode = $LASTEXITCODE }
 } finally {
     Pop-Location

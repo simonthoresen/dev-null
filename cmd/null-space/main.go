@@ -30,6 +30,7 @@ func main() {
 
 	var password string
 	var address string
+	var portOverride string
 	var dataDir string
 	var localMode bool
 	var localGame string
@@ -37,12 +38,17 @@ func main() {
 	var localPlayer string
 	flag.StringVar(&password, "password", "", "admin password (required)")
 	flag.StringVar(&address, "address", ":23234", "listen address")
+	flag.StringVar(&portOverride, "port", "", "SSH listen port (overrides --address port, default 23234)")
 	flag.StringVar(&dataDir, "data-dir", defaultDataDir(), "directory containing games/, plugins/, logs/")
 	flag.BoolVar(&localMode, "local", false, "run locally without SSH (single-player / render test)")
 	flag.StringVar(&localGame, "game", "", "game to preload (local mode)")
 	flag.StringVar(&localPlugins, "plugins", "", "comma-separated plugins to preload (local mode)")
 	flag.StringVar(&localPlayer, "player", "player", "player name (local mode)")
 	flag.Parse()
+
+	if portOverride != "" {
+		address = ":" + portOverride
+	}
 
 	if localMode {
 		app := server.NewLocal(dataDir)
