@@ -276,7 +276,7 @@ func (m chromeModel) View() tea.View {
 		if chatH < 1 {
 			chatH = 1
 		}
-		chatView := fitStyledBlock(m.chat.View(), m.width, chatH, chatStyle)
+		chatView := renderChatLines(m.chatLines, m.width, chatH)
 
 		var cmdBar string
 		if m.mode == modeInput {
@@ -303,7 +303,7 @@ func (m chromeModel) View() tea.View {
 		}
 
 		gameView := fitBlock(game.View(m.playerID, m.width, gameH), m.width, gameH)
-		chatView := fitStyledBlock(m.chat.View(), m.width, chatH, chatStyle)
+		chatView := renderChatLines(m.chatLines, m.width, chatH)
 
 		var cmdBar string
 		if m.mode == modeInput {
@@ -451,6 +451,26 @@ func currentSpinnerFrame() string {
 	interval := int64(125) // ms
 	frame := (time.Now().UnixMilli() / interval) % int64(len(spinnerFramesChrome))
 	return spinnerFramesChrome[frame]
+}
+
+// renderChatLines renders the last `height` lines from lines directly with
+// chatStyle, without going through a viewport. This avoids ANSI artifacts
+// caused by the viewport's own internal sequences conflicting with re-styling.
+func renderChatLines(lines []string, width, height int) string {
+	start := 0
+	if len(lines) > height {
+		start = len(lines) - height
+	}
+	visible := lines[start:]
+	result := make([]string, height)
+	for i := 0; i < height; i++ {
+		var text string
+		if i < len(visible) {
+			text = truncateStyled(visible[i], width)
+		}
+		result[i] = chatStyle.Width(width).Render(text)
+	}
+	return strings.Join(result, "\n")
 }
 
 func fitBlock(content string, width, height int) string {
