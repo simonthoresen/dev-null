@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
+	"encoding/binary"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/wish/v2"
@@ -27,6 +30,7 @@ type App struct {
 	state    *CentralState
 	registry *commandRegistry
 	dataDir  string // root of apps/, plugins/, logs/
+	port     string // SSH listen port, e.g. "23234"
 
 	programs   map[string]*tea.Program // key = playerID
 	programsMu sync.Mutex
@@ -151,6 +155,58 @@ func (a *App) SetupPublicIP() string {
 		a.state.mu.Unlock()
 	}
 	return publicIP
+}
+
+// SetPort stores the SSH listen port so invite scripts can reference it.
+func (a *App) SetPort(port string) { a.port = port }
+
+// InviteScript returns a PowerShell one-liner that tries all known connection
+// endpoints in order (localhost → UPnP direct → Pinggy relay).
+func (a *App) InviteScript() string {
+	sshOpts := "-o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+	local := fmt.Sprintf("ssh -t -p %s %s localhost", a.port, sshOpts)
+	parts := []string{local}
+
+	a.state.mu.RLock()
+	n := a.state.Net
+	a.state.mu.RUnlock()
+
+	if n.PublicIP != "" && n.UPnPMapped {
+		parts = append(parts, fmt.Sprintf("ssh -t -p %s %s %s", a.port, sshOpts, n.PublicIP))
+	}
+	if n.PinggyURL != "" {
+		host := n.PinggyURL
+		pPort := "22"
+		if idx := strings.LastIndex(host, ":"); idx >= 0 {
+			pPort = host[idx+1:]
+			host = host[:idx]
+		}
+		parts = append(parts, fmt.Sprintf("ssh -t -p %s %s %s", pPort, sshOpts, host))
+	}
+
+	result := parts[0]
+	for _, p := range parts[1:] {
+		result = fmt.Sprintf("%s; if($LASTEXITCODE -ne 0){%s}", result, p)
+	}
+	return result
+}
+
+// InviteCommand returns a self-contained PowerShell command that can be
+// pasted anywhere. The inner script is UTF-16LE base64-encoded so it
+// requires no escaping and contains no line breaks.
+func (a *App) InviteCommand() string {
+	script := a.InviteScript()
+	u16 := utf16.Encode([]rune(script))
+	buf := make([]byte, len(u16)*2)
+	for i, c := range u16 {
+		binary.LittleEndian.PutUint16(buf[i*2:], c)
+	}
+	return "powershell -EncodedCommand " + base64.StdEncoding.EncodeToString(buf)
+}
+
+// LogInviteCommand writes the current invite command to the server log.
+func (a *App) LogInviteCommand() {
+	a.serverLog("Invite: " + a.InviteCommand())
 }
 
 func (a *App) sessionMiddleware() wish.Middleware {
@@ -455,6 +511,14 @@ func (a *App) SetConsoleProgram(p *tea.Program) {
 }
 
 func (a *App) registerBuiltins(address string) {
+	a.registry.Register(common.Command{
+		Name:        "invite",
+		Description: "Show the shareable join command for this server",
+		Handler: func(ctx common.CommandContext, args []string) {
+			ctx.Reply(a.InviteCommand())
+		},
+	})
+
 	a.registry.Register(common.Command{
 		Name:        "help",
 		Description: "List available commands",

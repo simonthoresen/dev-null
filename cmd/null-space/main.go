@@ -55,6 +55,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+	app.SetPort(port)
 	finishBootStep("DONE")
 
 	startBootStep("UPnP port mapping")
@@ -88,7 +89,6 @@ func main() {
 	}
 
 	startBootStep("Generating invite script")
-	buildInviteScript(app.State(), port)
 	finishBootStep("DONE")
 
 	startBootStep("Starting console")
@@ -109,6 +109,7 @@ func main() {
 	}()
 
 	finishBootStep("DONE")
+	go app.LogInviteCommand()
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "console error: %v\n", err)
 	}
@@ -220,40 +221,3 @@ func defaultDataDir() string {
 	return dir
 }
 
-func buildInviteScript(state *server.CentralState, port string) string {
-	local := fmt.Sprintf("ssh -t -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null localhost", port)
-
-	var parts []string
-	parts = append(parts, local)
-
-	state.RLock()
-	net := state.Net
-	state.RUnlock()
-
-	if net.PublicIP != "" && net.UPnPMapped {
-		direct := fmt.Sprintf("ssh -t -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %s", port, net.PublicIP)
-		parts = append(parts, direct)
-	}
-
-	if net.PinggyURL != "" {
-		host := net.PinggyURL
-		pinggyPort := "22"
-		if idx := strings.LastIndex(host, ":"); idx >= 0 {
-			pinggyPort = host[idx+1:]
-			host = host[:idx]
-		}
-		relay := fmt.Sprintf("ssh -t -p %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %s", pinggyPort, host)
-		parts = append(parts, relay)
-	}
-
-	if len(parts) == 1 {
-		return parts[0]
-	}
-
-	// PowerShell one-liner: try in order, fall back on non-zero exit
-	result := parts[0]
-	for _, p := range parts[1:] {
-		result = fmt.Sprintf("%s; if($LASTEXITCODE -ne 0){%s}", result, p)
-	}
-	return result
-}
