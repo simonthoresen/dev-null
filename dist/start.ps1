@@ -62,7 +62,6 @@ function Write-BootStepEnd {
     if ($dots -lt 1) { $dots = 1 }
     $color = switch ($Status) {
         'DONE'    { 'Green'    }
-        'OK'      { 'Green'    }
         'FAILED'  { 'Red'      }
         'IGNORED' { 'Yellow'   }
         'SKIPPED' { 'DarkGray' }

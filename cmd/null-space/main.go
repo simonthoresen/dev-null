@@ -114,7 +114,7 @@ func main() {
 	}
 
 	startBootStep("Initiating shutdown")
-	finishBootStep("OK")
+	finishBootStep("DONE")
 	startBootStep("Stopping SSH server")
 	if err := <-serverErr; err == nil || errors.Is(err, ssh.ErrServerClosed) {
 		finishBootStep("DONE")
@@ -146,12 +146,12 @@ func statusToken(status string) string {
 func colorizedToken(token, status string) string {
 	var code string
 	switch status {
-	case "DONE", "OK":
-		code = "\033[32m"
+	case "DONE":
+		code = "\033[92m"
 	case "FAILED":
-		code = "\033[31m"
+		code = "\033[91m"
 	case "IGNORED":
-		code = "\033[33m"
+		code = "\033[93m"
 	case "SKIPPED":
 		code = "\033[90m"
 	default:
