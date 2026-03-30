@@ -87,13 +87,32 @@ func (r *commandRegistry) TabComplete(input string, playerNames []string) (strin
 	}
 
 	cmdName := words[0]
-	cmd, ok := r.Get(cmdName)
-	if !ok {
-		return input, false
+
+	// Still typing the command name — complete against registered command names.
+	if len(words) == 1 && !trailingSpace {
+		partial := cmdName
+		var candidates []string
+		for _, c := range r.All() {
+			if strings.HasPrefix(strings.ToLower(c.Name), strings.ToLower(partial)) {
+				candidates = append(candidates, c.Name)
+			}
+		}
+		if len(candidates) == 0 {
+			return input, false
+		}
+		sort.Strings(candidates)
+		next := candidates[0]
+		for i, c := range candidates {
+			if strings.EqualFold(c, partial) {
+				next = candidates[(i+1)%len(candidates)]
+				break
+			}
+		}
+		return "/" + next, true
 	}
 
-	// Still typing the command name itself — nothing to complete.
-	if len(words) == 1 && !trailingSpace {
+	cmd, ok := r.Get(cmdName)
+	if !ok {
 		return input, false
 	}
 
