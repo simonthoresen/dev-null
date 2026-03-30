@@ -227,32 +227,33 @@ Each step is printed in two passes:
 1. **Before** the operation: `label ...................` (dots to fill line, no status, no newline)
 2. **After** the operation: `\r` overwrites the line with `label ........ [ STATUS ]` right-aligned
 
-Status tokens are always **11 chars wide** with the text centered:
+Status tokens are always **8 chars wide** with the text centered:
 ```
-[  DONE   ]   (DONE = 4 chars, pad 3: 1 left, 2 right)
-[ FAILED  ]   (FAILED = 6 chars, pad 1: 0 left, 1 right)
-[ IGNORED ]   (IGNORED = 7 chars, no padding)
-[ SKIPPED ]   (SKIPPED = 7 chars, no padding)
+[ DONE ]   (DONE = 4 chars, no padding)
+[ FAIL ]   (FAIL = 4 chars, no padding)
+[ SKIP ]   (SKIP = 4 chars, no padding)
 ```
 
 Implementation: `startBootStep(label)` / `finishBootStep(status)` in `cmd/null-space/main.go`. Terminal width via `github.com/charmbracelet/x/term`. The PS1 script has matching `Write-BootStepStart` / `Write-BootStepEnd` helpers.
 
 Startup sequence (PS1 steps first, then Go binary):
 ```
-Pinggy helper .............................................. [  DONE   ]  ← start.ps1
-SSH server ................................................. [  DONE   ]  ← Go
-UPnP port mapping .......................................... [ IGNORED ]
-Public IP detection ........................................ [ IGNORED ]
-Pinggy tunnel .............................................. [  DONE   ]
-Generating invite script ................................... [  DONE   ]
+Pinggy helper .............................................. [ DONE ]  ← start.ps1
+SSH server ................................................. [ DONE ]  ← Go
+UPnP port mapping .......................................... [ SKIP ]
+Public IP detection ........................................ [ SKIP ]
+Pinggy tunnel .............................................. [ DONE ]
+Generating invite command .................................. [ DONE ]
 
   <invite command>
 
   (console UI runs)
 
-Stopping SSH server ........................................ [  DONE   ]  ← Go shutdown
-Stopping Pinggy helper ..................................... [  DONE   ]  ← PS1 finally block
+Stopping SSH server ........................................ [ DONE ]  ← Go shutdown
+Stopping Pinggy helper ..................................... [ DONE ]  ← PS1 finally block
 ```
+
+In `--local` mode, network steps are listed as `[ SKIP ]` (yellow).
 
 ### Phase 2 — Console UI (2-panel)
 

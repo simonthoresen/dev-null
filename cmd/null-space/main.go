@@ -51,6 +51,17 @@ func main() {
 	}
 
 	if localMode {
+		startBootStep("SSH server")
+		finishBootStep("SKIP")
+		startBootStep("UPnP port mapping")
+		finishBootStep("SKIP")
+		startBootStep("Public IP detection")
+		finishBootStep("SKIP")
+		startBootStep("Pinggy tunnel")
+		finishBootStep("SKIP")
+		startBootStep("Generating invite command")
+		finishBootStep("SKIP")
+
 		app := server.NewLocal(dataDir)
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
@@ -80,7 +91,7 @@ func main() {
 	startBootStep("SSH server")
 	app, err := server.New(address, password, dataDir)
 	if err != nil {
-		finishBootStep("FAILED")
+		finishBootStep("FAIL")
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -91,14 +102,14 @@ func main() {
 	if app.SetupUPnP(port) {
 		finishBootStep("DONE")
 	} else {
-		finishBootStep("IGNORED")
+		finishBootStep("SKIP")
 	}
 
 	startBootStep("Public IP detection")
 	if app.SetupPublicIP() != "" {
 		finishBootStep("DONE")
 	} else {
-		finishBootStep("IGNORED")
+		finishBootStep("SKIP")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
@@ -114,10 +125,10 @@ func main() {
 		app.EnablePinggyLogBridge(ctx, pinggyStatusFile)
 		finishBootStep("DONE")
 	} else {
-		finishBootStep("IGNORED")
+		finishBootStep("SKIP")
 	}
 
-	startBootStep("Generating invite script")
+	startBootStep("Generating invite command")
 	finishBootStep("DONE")
 
 	startBootStep("Starting console")
@@ -159,7 +170,7 @@ func main() {
 	if err := <-serverErr; err == nil || errors.Is(err, ssh.ErrServerClosed) {
 		finishBootStep("DONE")
 	} else {
-		finishBootStep("FAILED")
+		finishBootStep("FAIL")
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
@@ -167,12 +178,12 @@ func main() {
 
 var currentBootLabel string
 
-// statusTokenWidth is the fixed display width of every status token: "[ IGNORED ]" = 11.
-const statusTokenWidth = 11
+// statusTokenWidth is the fixed display width of every status token: "[ DONE ]" = 8.
+const statusTokenWidth = 8
 
 // statusToken returns a fixed-width 11-char token with the status text centered.
 func statusToken(status string) string {
-	const inner = 7 // widest status (IGNORED/SKIPPED) is 7 chars
+	const inner = 4 // widest status (DONE/FAIL/SKIP) is 4 chars
 	pad := inner - len(status)
 	if pad < 0 {
 		pad = 0
@@ -188,17 +199,15 @@ func colorizedToken(token, status string) string {
 	switch status {
 	case "DONE":
 		code = "\033[92m"
-	case "FAILED":
+	case "FAIL":
 		code = "\033[91m"
-	case "IGNORED":
+	case "SKIP":
 		code = "\033[93m"
-	case "SKIPPED":
-		code = "\033[90m"
 	default:
 		return token
 	}
 	// token is "[ <padded> ]" — color only the inner text, not the brackets
-	const inner = 7
+	const inner = 4
 	pad := inner - len(status)
 	if pad < 0 {
 		pad = 0

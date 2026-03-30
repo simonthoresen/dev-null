@@ -50,7 +50,7 @@ function Get-TermWidth {
 
 function Get-StatusToken {
     param([string]$Status)
-    $inner = 7  # widest status (IGNORED/SKIPPED) = 7 chars; token is always 11 chars total
+    $inner = 4  # widest status (DONE/FAIL/SKIP) = 4 chars; token is always 8 chars total
     $pad   = $inner - $Status.Length
     if ($pad -lt 0) { $pad = 0 }
     $left  = [Math]::Floor($pad / 2)
@@ -62,8 +62,8 @@ function Write-BootStepStart {
     param([string]$Label)
     $script:bootStepLabel = $Label
     $script:bootStepWidth = Get-TermWidth
-    # layout: label + " " + dots + " " + token(11)
-    $dots = $script:bootStepWidth - $Label.Length - 2 - 11
+    # layout: label + " " + dots + " " + token(8)
+    $dots = $script:bootStepWidth - $Label.Length - 2 - 8
     if ($dots -lt 1) { $dots = 1 }
     Write-Host -NoNewline ($Label + ' ' + ('.' * $dots))
 }
@@ -73,17 +73,16 @@ function Write-BootStepEnd {
     $label = $script:bootStepLabel
     $width = $script:bootStepWidth
     $token = Get-StatusToken $Status
-    $dots  = $width - $label.Length - 2 - 11
+    $dots  = $width - $label.Length - 2 - 8
     if ($dots -lt 1) { $dots = 1 }
     $color = switch ($Status) {
-        'DONE'    { 'Green'    }
-        'FAILED'  { 'Red'      }
-        'IGNORED' { 'Yellow'   }
-        'SKIPPED' { 'DarkGray' }
-        default   { 'White'    }
+        'DONE' { 'Green'  }
+        'FAIL' { 'Red'    }
+        'SKIP' { 'Yellow' }
+        default { 'White' }
     }
-    $paddedStatus = Get-StatusToken $Status  # reuse for inner text only
-    $inner = $paddedStatus.Substring(2, $paddedStatus.Length - 4)  # strip leading "[ " and trailing " ]"
+    $paddedStatus = Get-StatusToken $Status
+    $inner = $paddedStatus.Substring(2, $paddedStatus.Length - 4)
     Write-Host -NoNewline ("`r" + $label + ' ' + ('.' * $dots) + ' [ ')
     Write-Host -NoNewline $inner -ForegroundColor $color
     Write-Host ' ]'
@@ -217,6 +216,9 @@ function Wait-ForTunnelReady {
 # Extra args (--game, --plugins, --player) are passed straight through.
 
 if ($Local) {
+    Write-BootStepStart "Pinggy helper"
+    Write-BootStepEnd "SKIP"
+
     Push-Location $root
     try {
         Write-RunLogLine "starting in local single-player mode"
@@ -243,7 +245,7 @@ if ($existingListener) {
         Start-Sleep -Milliseconds 500
         $existingListener = Get-NetTCPConnection -LocalPort ([int]$Port) -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($existingListener) {
-            Write-BootStepEnd "FAILED"
+            Write-BootStepEnd "FAIL"
             Write-Error "Port $Port is still in use after --force."
             exit 1
         }
@@ -276,7 +278,7 @@ try {
     Write-BootStepEnd "DONE"
 } catch {
     Write-RunLogLine ("pinggy helper failed: {0}" -f $_)
-    Write-BootStepEnd "FAILED"
+    Write-BootStepEnd "FAIL"
     Stop-TunnelWatcher; Stop-Tunnel; Remove-TunnelState
     Write-Error $_
     exit 1
