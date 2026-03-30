@@ -211,9 +211,9 @@ func (m *consoleModel) submitInput() {
 		PlayerID: "", // console = admin
 		IsAdmin:  true,
 		Reply: func(s string) {
-			m.logLines = append(m.logLines, s)
-			m.logs.SetContent(strings.Join(m.logLines, "\n"))
-			m.logs.GotoBottom()
+			m.chatLines = append(m.chatLines, s)
+			m.chat.SetContent(strings.Join(m.chatLines, "\n"))
+			m.chat.GotoBottom()
 		},
 		Broadcast: func(s string) {
 			m.app.broadcastChat(common.Message{Text: s})

@@ -368,9 +368,11 @@ func (a *App) loadApp(path string) error {
 		return err
 	}
 
+	name := strings.TrimSuffix(filepath.Base(path), ".js")
+
 	a.state.mu.Lock()
 	a.state.ActiveApp = rt
-	a.state.AppName = path
+	a.state.AppName = name
 	a.state.mu.Unlock()
 
 	// register app commands
@@ -384,9 +386,9 @@ func (a *App) loadApp(path string) error {
 		rt.OnPlayerJoin(p.ID, p.Name)
 	}
 
-	a.broadcastMsg(common.GameLoadedMsg{Name: path})
-	a.broadcastChat(common.Message{Text: fmt.Sprintf("App loaded: %s", path)})
-	a.serverLog(fmt.Sprintf("app loaded: %s", path))
+	a.broadcastMsg(common.GameLoadedMsg{Name: name})
+	a.broadcastChat(common.Message{Text: fmt.Sprintf("App loaded: %s", name)})
+	a.serverLog(fmt.Sprintf("app loaded: %s", name))
 	return nil
 }
 
@@ -625,7 +627,6 @@ func (a *App) registerBuiltins(address string) {
 					ctx.Reply(fmt.Sprintf("Failed to load app: %v", err))
 					return
 				}
-				ctx.Reply(fmt.Sprintf("App loaded: %s", args[1]))
 			case "unload":
 				if !ctx.IsAdmin {
 					ctx.Reply("Permission denied (admin only)")
