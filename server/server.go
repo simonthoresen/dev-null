@@ -597,6 +597,22 @@ func (a *Server) StartGame() {
 }
 
 func (a *Server) unloadGame() {
+	// Cancel any pending splash or game-over timers.
+	if a.splashDone != nil {
+		select {
+		case <-a.splashDone:
+		default:
+			close(a.splashDone)
+		}
+	}
+	if a.gameOverTimer != nil {
+		select {
+		case <-a.gameOverTimer:
+		default:
+			close(a.gameOverTimer)
+		}
+	}
+
 	a.state.mu.Lock()
 	game := a.state.ActiveGame
 	gameName := a.state.GameName

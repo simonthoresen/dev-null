@@ -123,6 +123,10 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chat.GotoBottom()
 		return m, listenForLogs(m.app.LogCh(), m.app.ChatCh())
 
+	case common.GamePhaseMsg, common.GameLoadedMsg, common.GameUnloadedMsg, common.TeamUpdatedMsg, common.PlayerJoinedMsg, common.PlayerLeftMsg:
+		// These trigger re-render (status bar updates with phase/player count).
+		return m, nil
+
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -175,14 +179,24 @@ func (m *consoleModel) View() tea.View {
 
 	m.app.state.mu.RLock()
 	gameName := m.app.state.GameName
+	phase := m.app.state.GamePhase
 	spinChar := string(m.app.state.SpinnerChar())
 	m.app.state.mu.RUnlock()
 
-	if gameName == "" {
-		gameName = "(none)"
+	gameLabel := "(none)"
+	if gameName != "" {
+		gameLabel = gameName
+		switch phase {
+		case common.PhaseSplash:
+			gameLabel += " [splash]"
+		case common.PhasePlaying:
+			gameLabel += " [playing]"
+		case common.PhaseGameOver:
+			gameLabel += " [game over]"
+		}
 	}
 
-	headerText := fmt.Sprintf("null-space | game: %s | uptime %s", gameName, m.app.uptime())
+	headerText := fmt.Sprintf("null-space | game: %s | teams: %d | uptime %s", gameLabel, m.app.state.TeamCount(), m.app.uptime())
 	header := consoleHeaderStyle.Width(m.width).Render(headerWithSpinner(headerText, m.width, spinChar))
 
 	availH := maxInt(6, m.height-4) // header + 2 section labels + input
