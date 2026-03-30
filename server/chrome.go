@@ -22,8 +22,7 @@ var (
 
 	statusBarStyle = lipgloss.NewStyle().Background(titleBg).Foreground(titleFg).Bold(true)
 	chatStyle      = lipgloss.NewStyle().Background(lipgloss.Color("#EADFC7")).Foreground(lipgloss.Color("#2C1810"))
-	cmdIdleStyle   = lipgloss.NewStyle().Background(cmdBg).Foreground(titleFg)
-	cmdActiveStyle = lipgloss.NewStyle().Background(titleBg).Foreground(titleFg)
+	cmdIdleStyle = lipgloss.NewStyle().Background(cmdBg).Foreground(titleFg)
 )
 
 // setInputStyle applies matching background/foreground to all textinput sub-styles
@@ -277,15 +276,12 @@ func (m chromeModel) View() tea.View {
 		}
 		chatView := fitStyledBlock(m.chat.View(), m.width, chatH, chatStyle)
 
-		cmdBarText := "[Enter] to chat  /help for commands"
+		var cmdBar string
 		if m.mode == modeInput {
-			cmdBarText = m.input.View()
+			cmdBar = truncateStyled(m.input.View(), m.width)
+		} else {
+			cmdBar = cmdIdleStyle.Width(m.width).Render("[Enter] to chat  /help for commands")
 		}
-		cmdBarStyle := cmdIdleStyle
-		if m.mode == modeInput {
-			cmdBarStyle = cmdActiveStyle
-		}
-		cmdBar := cmdBarStyle.Width(m.width).Render(truncateStyled(cmdBarText, m.width))
 
 		content = lipgloss.JoinVertical(lipgloss.Left, statusBar, chatView, cmdBar)
 	} else {
@@ -307,18 +303,16 @@ func (m chromeModel) View() tea.View {
 		gameView := fitBlock(game.View(m.playerID, m.width, gameH), m.width, gameH)
 		chatView := fitStyledBlock(m.chat.View(), m.width, chatH, chatStyle)
 
-		cmdBarText := game.CommandBar(m.playerID)
-		if cmdBarText == "" {
-			cmdBarText = fmt.Sprintf("[Enter] to chat  | game: %s", gameName)
-		}
+		var cmdBar string
 		if m.mode == modeInput {
-			cmdBarText = m.input.View()
+			cmdBar = truncateStyled(m.input.View(), m.width)
+		} else {
+			idleText := game.CommandBar(m.playerID)
+			if idleText == "" {
+				idleText = fmt.Sprintf("[Enter] to chat  | game: %s", gameName)
+			}
+			cmdBar = cmdIdleStyle.Width(m.width).Render(idleText)
 		}
-		cmdBarStyle := cmdIdleStyle
-		if m.mode == modeInput {
-			cmdBarStyle = cmdActiveStyle
-		}
-		cmdBar := cmdBarStyle.Width(m.width).Render(truncateStyled(cmdBarText, m.width))
 
 		content = lipgloss.JoinVertical(lipgloss.Left, statusBar, gameView, chatView, cmdBar)
 	}
