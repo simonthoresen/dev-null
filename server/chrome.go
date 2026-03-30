@@ -54,7 +54,6 @@ func newChromeModel(app *App, playerID string) chromeModel {
 	input.Placeholder = "Type a message or /command"
 	input.CharLimit = 256
 	input.SetWidth(78)
-	input.Blur()
 
 	m := chromeModel{
 		app:      app,
@@ -63,6 +62,16 @@ func newChromeModel(app *App, playerID string) chromeModel {
 		input:    input,
 	}
 	m.syncChat()
+	// Start in input mode when in the lobby; idle mode when a game is active.
+	app.state.mu.RLock()
+	inGame := app.state.ActiveApp != nil
+	app.state.mu.RUnlock()
+	if inGame {
+		m.input.Blur()
+	} else {
+		m.mode = modeInput
+		m.input.Focus()
+	}
 	return m
 }
 
@@ -80,7 +89,6 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case common.TickMsg:
-		m.syncChat()
 		return m, nil
 
 	case common.ChatMsg:
@@ -117,7 +125,21 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chat.GotoBottom()
 		return m, nil
 
-	case common.PlayerJoinedMsg, common.PlayerLeftMsg, common.GameLoadedMsg, common.GameUnloadedMsg:
+	case common.PlayerJoinedMsg, common.PlayerLeftMsg:
+		m.syncChat()
+		return m, nil
+
+	case common.GameLoadedMsg:
+		// App started — switch to game mode (idle so keys route to the game).
+		m.mode = modeIdle
+		m.input.Blur()
+		m.syncChat()
+		return m, nil
+
+	case common.GameUnloadedMsg:
+		// Back to lobby — stay in typing mode.
+		m.mode = modeInput
+		m.input.Focus()
 		m.syncChat()
 		return m, nil
 
@@ -146,9 +168,16 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc":
 			m.tabCandidates = nil
-			m.mode = modeIdle
-			m.input.Blur()
 			m.input.SetValue("")
+			// In-game: return to idle so keys route to the game.
+			// Lobby: stay in input mode.
+			m.app.state.mu.RLock()
+			inGame := m.app.state.ActiveApp != nil
+			m.app.state.mu.RUnlock()
+			if inGame {
+				m.mode = modeIdle
+				m.input.Blur()
+			}
 			return m, nil
 		case "enter":
 			m.tabCandidates = nil
@@ -313,8 +342,15 @@ func (m *chromeModel) resizeViewports() {
 func (m *chromeModel) submitInput() {
 	text := strings.TrimSpace(m.input.Value())
 	m.input.SetValue("")
-	m.mode = modeIdle
-	m.input.Blur()
+	// In-game: return to idle after submit so keys route to the game.
+	// Lobby: stay in input mode.
+	m.app.state.mu.RLock()
+	inGame := m.app.state.ActiveApp != nil
+	m.app.state.mu.RUnlock()
+	if inGame {
+		m.mode = modeIdle
+		m.input.Blur()
+	}
 	if text == "" {
 		return
 	}
@@ -325,7 +361,7 @@ func (m *chromeModel) submitInput() {
 			PlayerID: m.playerID,
 			IsAdmin:  isAdmin,
 			Reply: func(s string) {
-				msg := common.Message{IsPrivate: true, ToID: m.playerID, Text: s}
+				msg := common.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: s}
 				m.app.sendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
 			},
 			Broadcast: func(s string) {
