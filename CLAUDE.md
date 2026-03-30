@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **For Claude:** This file is the portable memory for this project. Whenever you make a change, discover a gotcha, or establish a pattern or decision, **update this file before committing**. It is the single source of truth that survives new clones, new machines, and new sessions. Keep it accurate and concise — do not let it drift from the actual code.
+
 ## Project Goal
 
 A framework for hosting terminal-based multiplayer **apps** (games, canvases, polls, anything terminal-interactive) over SSH. **Only the server operator needs to install anything.** Players connect with a plain `ssh` command — no client install required.
