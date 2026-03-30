@@ -19,8 +19,17 @@ mem.prof
 
 # Build directories
 bin/
-dist/
 build/
+
+# dist: ignore binaries and runtime-generated files, but track apps/ plugins/ logs/
+dist/*.exe
+dist/*.exe~
+dist/null-space_ed25519
+dist/null-space_ed25519.pub
+dist/logs/*
+!dist/logs/.gitkeep
+
+# Legacy root-level logs (pre-dist layout)
 logs/*
 !logs/.gitkeep
 

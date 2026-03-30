@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -27,15 +28,17 @@ func main() {
 
 	var password string
 	var address string
+	var dataDir string
 	flag.StringVar(&password, "password", "", "admin password (required)")
 	flag.StringVar(&address, "address", ":23234", "listen address")
+	flag.StringVar(&dataDir, "data-dir", defaultDataDir(), "directory containing apps/, plugins/, logs/")
 	flag.Parse()
 
 	if password == "" {
 		fmt.Fprintln(os.Stderr, "WARNING: no admin password set (use --password)")
 	}
 
-	app, err := server.New(address, password)
+	app, err := server.New(address, password, dataDir)
 	if err != nil {
 		printBootStep("SSH server", "FAILED")
 		fmt.Fprintf(os.Stderr, "could not create server: %v\n", err)
@@ -134,6 +137,24 @@ func printBootStep(label string, status string) {
 		statusColored = "\033[90mSKIPPED\033[0m"
 	}
 	fmt.Printf("  %s %s [ %s ]\n", label, strings.Repeat(".", dots), statusColored)
+}
+
+// defaultDataDir returns the directory of the running executable.
+// When running via "go run" the exe lives in a temp dir, so we fall back to ".".
+func defaultDataDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "."
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	dir := filepath.Dir(exe)
+	tmp := os.TempDir()
+	if strings.HasPrefix(dir, tmp) {
+		return "."
+	}
+	return dir
 }
 
 func buildInviteScript(state *server.CentralState, port string) string {

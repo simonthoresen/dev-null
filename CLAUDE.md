@@ -11,18 +11,14 @@ Games are written in a scripting language and loaded at runtime from the `games/
 ## Commands
 
 ```bash
-# Run the server
-go run ./cmd/null-space --password changeme --address :23234
+make build          # compile to dist/null-space.exe + dist/pinggy-helper.exe
+make run            # go run with --data-dir dist (dev shortcut)
+make clean          # remove compiled binaries from dist/
 
-# Build binaries
-go build ./cmd/null-space
-go build ./cmd/pinggy-helper
-
-# Run tests (none exist yet)
+go run ./cmd/null-space --data-dir dist   # equivalent to make run, add --password etc.
 go test ./...
 
-# Connect as a client (host also plays this way — not from the server terminal)
-ssh -p 23234 localhost
+ssh -p 23234 localhost   # connect as a client (host plays this way too)
 ```
 
 **Environment variables:**

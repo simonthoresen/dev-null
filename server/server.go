@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ import (
 type App struct {
 	state    *CentralState
 	registry *commandRegistry
+	dataDir  string // root of apps/, plugins/, logs/
 
 	programs   map[string]*tea.Program // key = playerID
 	programsMu sync.Mutex
@@ -44,10 +46,11 @@ type App struct {
 	upnpMapping *upnpMapping
 }
 
-func New(address, password string) (*App, error) {
+func New(address, password, dataDir string) (*App, error) {
 	app := &App{
 		state:    newState(password),
 		registry: newCommandRegistry(),
+		dataDir:  dataDir,
 		programs: make(map[string]*tea.Program),
 		sessions: make(map[string]ssh.Session),
 		logCh:    make(chan string, 256),
@@ -549,7 +552,7 @@ func (a *App) registerBuiltins(address string) {
 				ctx.Reply("Usage: /load <app>")
 				return
 			}
-			path := "apps/" + args[0] + ".js"
+			path := filepath.Join(a.dataDir, "apps", args[0]+".js")
 			if err := a.loadApp(path); err != nil {
 				ctx.Reply(fmt.Sprintf("Failed to load app: %v", err))
 				return
@@ -594,7 +597,7 @@ func (a *App) registerBuiltins(address string) {
 					return
 				}
 				name := args[1]
-				path := "plugins/" + name + ".js"
+				path := filepath.Join(a.dataDir, "plugins", name+".js")
 				if err := a.loadPlugin(name, path); err != nil {
 					ctx.Reply(fmt.Sprintf("Failed to load plugin: %v", err))
 					return
