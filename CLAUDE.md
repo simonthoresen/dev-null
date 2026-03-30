@@ -135,7 +135,9 @@ type Command struct {
 }
 ```
 
-`ctx.Reply(text)` sends a private response to the caller only. For SSH players it sends a `ChatMsg` with `IsPrivate: true`. For the console (playerID `""`) it sends directly to the console program's chat window — **not** to the server log. Tab completion cycles through candidates alphabetically; repeated Tab advances through the list.
+`ctx.Reply(text)` sends a private response to the caller only. For SSH players it sends a `ChatMsg` with `IsPrivate: true`. For the console (playerID `""`) it appends directly to the console's chat panel — **not** to the server log. Tab completion cycles through candidates alphabetically; repeated Tab advances through the list.
+
+`AppName` in `CentralState` stores the bare name (e.g. `example`), not the full file path. `loadApp` strips the directory and `.js` extension. Commands that broadcast app load/unload events should use the bare name too — `loadApp` already broadcasts `"App loaded: <name>"` to chat, so command handlers must not send a redundant reply.
 
 ### `Message` Type (`common/types.go`)
 ```go
