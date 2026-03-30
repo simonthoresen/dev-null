@@ -97,3 +97,20 @@ The script must handle background process orchestration:
 - **Bandwidth:** Do not send the full map. Only the visible camera window.
 - **Viewport Math:** Explicitly subtract 7 rows from terminal height to ensure the game board never overlaps the UI elements.
 - **Session Lifecycle:** On SSH `EOF` or disconnect, delete the player from `CentralState` and broadcast the departure to the chat.
+
+## 9. Client startup, no install, sharable ssh script with punch
+1. **The Logic String:**
+   ```powershell
+   $script = {
+       $url = "[PINGGY_URL]"; $p = [PORT];
+       $d = ssh -p $p $url 'get-punch-info' | ConvertFrom-StringData;
+       if ($d.SERVER_IP) {
+           Write-Host "Attempting Direct Punch..." -Fore Yellow;
+           ssh -o ConnectTimeout=5 -p $d.SERVER_PORT $d.SERVER_IP;
+           if ($LASTEXITCODE -ne 0) { ssh -p $p $url }
+       } else { ssh -p $p $url }
+   }.ToString()
+   ```
+2. **The Encoding:** The script must convert this to a UTF-16LE Base64 string.
+3. **The Output:** Display a block: 
+   `INVITE LINK: powershell -ExecutionPolicy Bypass -EncodedCommand [BASE64]`

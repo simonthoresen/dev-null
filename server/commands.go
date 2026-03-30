@@ -2,220 +2,105 @@ package server
 
 import (
 	"fmt"
-	"log/slog"
-	"sort"
-	"strings"
-	"time"
-
 	"null-space/common"
+	"strings"
+	"sync"
 )
 
-type commandContext struct {
-	app      *App
-	playerID string
+type commandRegistry struct {
+	mu       sync.RWMutex
+	commands map[string]common.Command
 }
 
-func (c commandContext) CurrentPlayer() *common.Player {
-	return c.app.playerIdentity(c.playerID)
+func newCommandRegistry() *commandRegistry {
+	return &commandRegistry{commands: make(map[string]common.Command)}
 }
 
-func (c commandContext) Players() []*common.Player {
-	return c.app.state.ListPlayers()
+func (r *commandRegistry) Register(cmd common.Command) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.commands[strings.ToLower(cmd.Name)] = cmd
 }
 
-func (c commandContext) PlayerByName(name string) *common.Player {
-	return c.app.state.PlayerByName(name)
+func (r *commandRegistry) Unregister(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.commands, strings.ToLower(name))
 }
 
-func (c commandContext) AddSystemMessage(text string) {
-	c.app.addSystemMessage(text)
+func (r *commandRegistry) Get(name string) (common.Command, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cmd, ok := r.commands[strings.ToLower(name)]
+	return cmd, ok
 }
 
-func (c commandContext) AddPrivateMessage(text string) {
-	c.app.addPrivateMessage(c.playerID, text)
-}
-
-func (c commandContext) PasswordMatches(candidate string) bool {
-	return candidate == c.app.adminPassword
-}
-
-func (c commandContext) KickPlayer(playerID string) error {
-	return c.app.kickPlayer(playerID)
-}
-
-func (c commandContext) RequestRefresh() {
-	c.app.broadcast(common.RefreshMsg{})
-}
-
-func (a *App) registerCommands(extra []common.Command) {
-	a.registry = make(map[string]common.Command)
-	for _, command := range append(a.coreCommands(), extra...) {
-		a.registry[strings.ToLower(command.Name)] = command
+func (r *commandRegistry) All() []common.Command {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]common.Command, 0, len(r.commands))
+	for _, cmd := range r.commands {
+		out = append(out, cmd)
 	}
+	return out
 }
 
-func (a *App) coreCommands() []common.Command {
-	return []common.Command{
-		{
-			Name:        "admin",
-			Usage:       "/admin <password>",
-			Description: "Elevate the current session to admin.",
-			Handler: func(ctx common.CommandContext, args []string) error {
-				if len(args) != 1 {
-					ctx.AddPrivateMessage("Usage: /admin <password>")
-					return nil
-				}
-				if !ctx.PasswordMatches(args[0]) {
-					ctx.AddPrivateMessage("Invalid admin password.")
-					return nil
-				}
-				player := ctx.CurrentPlayer()
-				if player == nil {
-					return nil
-				}
-				a.state.SetPlayerAdmin(player.ID, true)
-				ctx.AddPrivateMessage("Admin privileges granted.")
-				ctx.RequestRefresh()
-				return nil
-			},
-		},
-		{
-			Name:        "who",
-			Usage:       "/who",
-			Description: "List active players.",
-			Handler: func(ctx common.CommandContext, args []string) error {
-				players := ctx.Players()
-				names := make([]string, 0, len(players))
-				for _, player := range players {
-					label := player.Name
-					if player.IsAdmin {
-						label += " (admin)"
-					}
-					names = append(names, label)
-				}
-				sort.Strings(names)
-				ctx.AddPrivateMessage(fmt.Sprintf("Players online (%d): %s", len(names), strings.Join(names, ", ")))
-				return nil
-			},
-		},
-		{
-			Name:        "help",
-			Usage:       "/help",
-			Description: "List available commands.",
-			Handler: func(ctx common.CommandContext, args []string) error {
-				player := ctx.CurrentPlayer()
-				isAdmin := player != nil && player.IsAdmin
-				commands := make([]common.Command, 0, len(a.registry))
-				for _, command := range a.registry {
-					if command.AdminOnly && !isAdmin {
-						continue
-					}
-					commands = append(commands, command)
-				}
-				sort.Slice(commands, func(i, j int) bool {
-					return commands[i].Name < commands[j].Name
-				})
-				for _, command := range commands {
-					ctx.AddPrivateMessage(fmt.Sprintf("%s - %s", command.Usage, command.Description))
-				}
-				return nil
-			},
-		},
-		{
-			Name:        "kick",
-			Usage:       "/kick <player>",
-			Description: "Disconnect a player by name.",
-			AdminOnly:   true,
-			Handler: func(ctx common.CommandContext, args []string) error {
-				if len(args) != 1 {
-					ctx.AddPrivateMessage("Usage: /kick <player>")
-					return nil
-				}
-				target := ctx.PlayerByName(args[0])
-				if target == nil {
-					ctx.AddPrivateMessage("Player not found.")
-					return nil
-				}
-				if err := ctx.KickPlayer(target.ID); err != nil {
-					return err
-				}
-				ctx.AddSystemMessage(fmt.Sprintf("%s was kicked from the tunnel.", target.Name))
-				return nil
-			},
-		},
-		{
-			Name:        "quit",
-			Usage:       "/quit",
-			Description: "Stop the server and disconnect everyone.",
-			AdminOnly:   true,
-			Handler: func(ctx common.CommandContext, args []string) error {
-				if len(args) != 0 {
-					ctx.AddPrivateMessage("Usage: /quit")
-					return nil
-				}
-				ctx.AddSystemMessage("Server shutdown requested. Disconnecting all players...")
-				if !a.requestShutdown() {
-					ctx.AddPrivateMessage("Shutdown handler is not available.")
-				}
-				return nil
-			},
-		},
-		{
-			Name:        "info",
-			Usage:       "/info",
-			Description: "Show connection strings for this server.",
-			Handler: func(ctx common.CommandContext, args []string) error {
-				localCmd, directCmd, tunnelJoin, oneLiner := a.connectionInfo()
-				ctx.AddPrivateMessage(fmt.Sprintf("Local:   %s", localCmd))
-				if directCmd != "" {
-					ctx.AddPrivateMessage(fmt.Sprintf("Direct:  %s", directCmd))
-				}
-				if tunnelJoin != "" {
-					ctx.AddPrivateMessage(fmt.Sprintf("Relay:   %s", ensureSSHFlag(tunnelJoin, "-t")))
-				} else {
-					ctx.AddPrivateMessage("Relay:   not available")
-				}
-				ctx.AddPrivateMessage(fmt.Sprintf("Connect: %s", oneLiner))
-				return nil
-			},
-		},
-	}
-}
-
-func (a *App) executeCommand(playerID, raw string) {
-	parts := strings.Fields(strings.TrimPrefix(raw, "/"))
+// Dispatch parses and runs a slash command. input must start with '/'.
+func (r *commandRegistry) Dispatch(input string, ctx common.CommandContext) {
+	input = strings.TrimPrefix(input, "/")
+	parts := strings.Fields(input)
 	if len(parts) == 0 {
 		return
 	}
+	name := parts[0]
+	args := parts[1:]
 
-	command, ok := a.registry[strings.ToLower(parts[0])]
+	cmd, ok := r.Get(name)
 	if !ok {
-		slog.Warn("unknown command", "player_id", playerID, "raw", raw)
-		a.addPrivateMessage(playerID, "Unknown command. Try /help.")
+		ctx.Reply(fmt.Sprintf("Unknown command: /%s — type /help for a list", name))
 		return
 	}
-
-	player := a.playerIdentity(playerID)
-	if command.AdminOnly && (player == nil || !player.IsAdmin) {
-		slog.Warn("admin command denied", "player_id", playerID, "command", command.Name)
-		a.addPrivateMessage(playerID, "Permission Denied")
+	if cmd.AdminOnly && !ctx.IsAdmin {
+		ctx.Reply("Permission denied (admin only)")
 		return
 	}
+	cmd.Handler(ctx, args)
+}
 
-	slog.Info("executing command", "player_id", playerID, "command", command.Name, "args", parts[1:])
-	ctx := commandContext{app: a, playerID: playerID}
-	if err := command.Handler(ctx, parts[1:]); err != nil {
-		slog.Error("command failed", "player_id", playerID, "command", command.Name, "error", err)
-		a.addPrivateMessage(playerID, fmt.Sprintf("Command failed: %v", err))
+// TabComplete returns player name completions for commands with FirstArgIsPlayer.
+// input is the current text in the input field (including leading '/').
+// Returns (completed string, changed bool).
+func (r *commandRegistry) TabComplete(input string, playerNames []string) (string, bool) {
+	if !strings.HasPrefix(input, "/") {
+		return input, false
 	}
-}
+	parts := strings.SplitN(input[1:], " ", 3)
+	if len(parts) < 2 {
+		return input, false
+	}
+	cmdName := parts[0]
+	partial := parts[1]
 
-func formatChatLine(author, body string) string {
-	return fmt.Sprintf("[%s] <%s> %s", time.Now().Format("15:04:05"), author, body)
-}
+	cmd, ok := r.Get(cmdName)
+	if !ok || !cmd.FirstArgIsPlayer {
+		return input, false
+	}
 
-func formatSystemLine(body string) string {
-	return fmt.Sprintf("[%s] [system] %s", time.Now().Format("15:04:05"), body)
+	var matches []string
+	for _, name := range playerNames {
+		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(partial)) {
+			matches = append(matches, name)
+		}
+	}
+	if len(matches) == 0 {
+		return input, false
+	}
+	// cycle: if partial already matches first exactly, go to next
+	completed := "/" + cmdName + " " + matches[0]
+	if len(parts) == 3 {
+		completed += " " + parts[2]
+	}
+	return completed, true
 }
 
 func ensureSSHFlag(cmd, flag string) string {
@@ -226,12 +111,4 @@ func ensureSSHFlag(cmd, flag string) string {
 		return "ssh " + flag + " " + cmd[4:]
 	}
 	return cmd
-}
-
-func formatPinggyLine(body string) string {
-	return fmt.Sprintf("[%s] [pinggy] %s", time.Now().Format("15:04:05"), body)
-}
-
-func formatPrivateLine(body string) string {
-	return fmt.Sprintf("[%s] [local] %s", time.Now().Format("15:04:05"), body)
 }

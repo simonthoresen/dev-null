@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+// EnablePinggyLogBridge starts polling the Pinggy status file and updates
+// state.Net.PinggyURL when the TCP address is found.
 func (a *App) EnablePinggyLogBridge(ctx context.Context, statusFile string) {
 	slog.Info("pinggy log bridge enabled", "status_file", statusFile)
 	go a.runPinggyLogBridge(ctx, statusFile)
@@ -33,11 +35,10 @@ func (a *App) runPinggyLogBridge(ctx context.Context, statusFile string) {
 				continue
 			}
 
-			if status.TcpAddress != "" || status.JoinCommand != "" {
-				a.mu.Lock()
-				a.tunnelAddress = status.TcpAddress
-				a.tunnelJoinCmd = status.JoinCommand
-				a.mu.Unlock()
+			if status.TcpAddress != "" {
+				a.state.mu.Lock()
+				a.state.Net.PinggyURL = status.TcpAddress
+				a.state.mu.Unlock()
 			}
 
 			if seenCount > len(status.LogLines) {
@@ -50,7 +51,7 @@ func (a *App) runPinggyLogBridge(ctx context.Context, statusFile string) {
 					continue
 				}
 				seenMessages[line] = struct{}{}
-				a.addPinggyMessage(line)
+				a.serverLog("[pinggy] " + line)
 			}
 			seenCount = len(status.LogLines)
 		}

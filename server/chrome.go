@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -16,25 +15,29 @@ import (
 )
 
 var (
-	playerHeaderStyle = lipgloss.NewStyle().Width(0).Background(lipgloss.Color("#D8C7A0")).Foreground(lipgloss.Color("#4A2D18")).Bold(true)
-	playerStatusStyle = lipgloss.NewStyle().Width(0).Background(lipgloss.Color("#D8C7A0")).Foreground(lipgloss.Color("#4A2D18"))
-	chatStyle         = lipgloss.NewStyle().Background(lipgloss.Color("#EADFC7")).Foreground(lipgloss.Color("#2C1810"))
-	chatChromeStyle   = lipgloss.NewStyle().Background(lipgloss.Color("#D8C7A0")).Foreground(lipgloss.Color("#4A2D18")).Bold(true)
-	spinnerFrames     = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	statusBarStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#D8C7A0")).Foreground(lipgloss.Color("#4A2D18")).Bold(true)
+	chatStyle       = lipgloss.NewStyle().Background(lipgloss.Color("#EADFC7")).Foreground(lipgloss.Color("#2C1810"))
+	commandBarStyle = lipgloss.NewStyle().Background(lipgloss.Color("#D8C7A0")).Foreground(lipgloss.Color("#4A2D18"))
 )
 
 const (
-	spinnerFrameInterval = 125 * time.Millisecond
+	modeIdle  = 0
+	modeInput = 1
 )
+
+var spinnerFramesChrome = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 type chromeModel struct {
 	app      *App
 	playerID string
 	width    int
 	height   int
-	chatMode bool
-	chat     viewport.Model
-	input    textinput.Model
+	mode     int
+
+	chat  viewport.Model
+	input textinput.Model
+
+	chatLines []string // buffered chat lines visible to this player
 }
 
 func newChromeModel(app *App, playerID string) chromeModel {
@@ -44,19 +47,19 @@ func newChromeModel(app *App, playerID string) chromeModel {
 
 	input := textinput.New()
 	input.Prompt = "> "
-	input.Placeholder = "Press Enter to chat"
+	input.Placeholder = "Type a message or /command"
 	input.CharLimit = 256
 	input.SetWidth(78)
 	input.Blur()
 
-	model := chromeModel{
+	m := chromeModel{
 		app:      app,
 		playerID: playerID,
 		chat:     chat,
 		input:    input,
 	}
-	model.syncChat()
-	return model
+	m.syncChat()
+	return m
 }
 
 func (m chromeModel) Init() tea.Cmd {
@@ -66,46 +69,90 @@ func (m chromeModel) Init() tea.Cmd {
 func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.app.notePlayerActivity(m.playerID)
 		m.width = maxInt(1, msg.Width)
 		m.height = maxInt(8, msg.Height)
-		m.chat.SetWidth(m.width)
-		_, chatHeight := clientLayoutHeights(m.width, m.height)
-		m.chat.SetHeight(chatHeight)
-		m.input.SetWidth(maxInt(1, m.width-2))
+		m.resizeViewports()
 		m.syncChat()
 		return m, nil
-	case common.TickMsg, common.RefreshMsg:
+
+	case common.TickMsg:
 		m.syncChat()
 		return m, nil
+
+	case common.ChatMsg:
+		chatMsg := msg.Msg
+		// filter private messages
+		if chatMsg.IsPrivate {
+			if chatMsg.ToID != m.playerID && chatMsg.FromID != m.playerID {
+				return m, nil
+			}
+		}
+		var line string
+		if chatMsg.IsPrivate {
+			from := chatMsg.FromID
+			if p := m.app.state.GetPlayer(from); p != nil {
+				from = p.Name
+			}
+			if from == "" {
+				from = "admin"
+			}
+			line = fmt.Sprintf("[PM from %s] %s", from, chatMsg.Text)
+		} else if chatMsg.Author == "" {
+			line = fmt.Sprintf("[system] %s", chatMsg.Text)
+		} else {
+			line = fmt.Sprintf("<%s> %s", chatMsg.Author, chatMsg.Text)
+		}
+		m.chatLines = append(m.chatLines, line)
+		if len(m.chatLines) > 200 {
+			m.chatLines = m.chatLines[len(m.chatLines)-200:]
+		}
+		m.chat.SetContent(strings.Join(m.chatLines, "\n"))
+		m.chat.GotoBottom()
+		return m, nil
+
+	case common.PlayerJoinedMsg, common.PlayerLeftMsg, common.GameLoadedMsg, common.GameUnloadedMsg:
+		m.syncChat()
+		return m, nil
+
 	case tea.KeyPressMsg:
-		m.app.notePlayerActivity(m.playerID)
-		if !m.chatMode {
+		if m.mode == modeIdle {
 			switch msg.String() {
 			case "ctrl+c":
 				return m, tea.Quit
 			case "enter":
-				m.enterChatMode()
+				m.mode = modeInput
+				m.input.Focus()
 				return m, nil
 			default:
-				slog.Debug("client input received", "player_id", m.playerID, "key", msg.String())
-				if direction := movementDirection(msg.String()); direction != "" {
-					m.dispatchMovement(direction)
-					return m, nil
+				// route to game
+				m.app.state.mu.RLock()
+				game := m.app.state.ActiveApp
+				m.app.state.mu.RUnlock()
+				if game != nil {
+					game.OnInput(m.playerID, msg.String())
 				}
-				m.app.handleGameMessage(msg, m.playerID)
-				m.app.sendToPlayer(m.playerID, common.RefreshMsg{})
-				m.app.broadcastExcept(m.playerID, common.RefreshMsg{})
 				return m, nil
 			}
 		}
 
+		// modeInput
 		switch msg.String() {
 		case "esc":
-			m.exitChatMode()
+			m.mode = modeIdle
+			m.input.Blur()
+			m.input.SetValue("")
 			return m, nil
 		case "enter":
 			m.submitInput()
+			return m, nil
+		case "tab":
+			if strings.HasPrefix(m.input.Value(), "/") {
+				completed, changed := m.app.registry.TabComplete(m.input.Value(), m.app.state.PlayerNames())
+				if changed {
+					m.input.SetValue(completed)
+					m.input.CursorEnd()
+				}
+			}
 			return m, nil
 		default:
 			var cmd tea.Cmd
@@ -114,9 +161,8 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Forward all other messages to the textinput when in chat mode so that
-	// cursor blink and other internal messages are not silently swallowed.
-	if m.chatMode {
+	// Forward other messages to textinput in input mode (cursor blink etc.)
+	if m.mode == modeInput {
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		return m, cmd
@@ -133,71 +179,179 @@ func (m chromeModel) View() tea.View {
 		return view
 	}
 
-	gameHeight, chatHeight := clientLayoutHeights(m.width, m.height)
-	header := m.renderHeader()
-	game := fitBlock(m.app.renderGame(m.playerID, m.width, gameHeight), m.width, gameHeight)
-	status := fitStyledBlock(m.renderGameStatusBar(), m.width, 1, playerStatusStyle)
-	chat := fitStyledBlock(m.chat.View(), m.width, chatHeight, chatStyle)
+	m.app.state.mu.RLock()
+	game := m.app.state.ActiveApp
+	gameName := m.app.state.AppName
+	spinChar := string(m.app.state.SpinnerChar())
+	m.app.state.mu.RUnlock()
 
-	content := lipgloss.JoinVertical(lipgloss.Left, header, game, status, chat)
+	var content string
+	if game == nil {
+		// Lobby layout
+		statusText := fmt.Sprintf("null-space | %d players | uptime %s", m.app.state.PlayerCount(), m.app.uptime())
+		statusBar := statusBarStyle.Width(m.width).Render(headerWithSpinner(statusText, m.width, spinChar))
+
+		chatH := m.height - 2
+		if chatH < 1 {
+			chatH = 1
+		}
+		chatView := fitStyledBlock(m.chat.View(), m.width, chatH, chatStyle)
+
+		cmdBarText := "[Enter] to chat  /help for commands"
+		if m.mode == modeInput {
+			cmdBarText = m.input.View()
+		}
+		cmdBar := commandBarStyle.Width(m.width).Render(truncateStyled(cmdBarText, m.width))
+
+		content = lipgloss.JoinVertical(lipgloss.Left, statusBar, chatView, cmdBar)
+	} else {
+		// In-game layout
+		statusText := game.StatusBar(m.playerID)
+		statusBar := statusBarStyle.Width(m.width).Render(headerWithSpinner(statusText, m.width, spinChar))
+
+		gameH := m.width * 9 / 16
+		chatH := m.height - 1 - gameH - 1
+		if chatH < 5 {
+			// reduce gameH to make room for chat
+			chatH = 5
+			gameH = m.height - 1 - chatH - 1
+			if gameH < 0 {
+				gameH = 0
+			}
+		}
+
+		gameView := fitBlock(game.View(m.playerID, m.width, gameH), m.width, gameH)
+		chatView := fitStyledBlock(m.chat.View(), m.width, chatH, chatStyle)
+
+		cmdBarText := game.CommandBar(m.playerID)
+		if cmdBarText == "" {
+			cmdBarText = fmt.Sprintf("[Enter] to chat  | game: %s", gameName)
+		}
+		if m.mode == modeInput {
+			cmdBarText = m.input.View()
+		}
+		cmdBar := commandBarStyle.Width(m.width).Render(truncateStyled(cmdBarText, m.width))
+
+		content = lipgloss.JoinVertical(lipgloss.Left, statusBar, gameView, chatView, cmdBar)
+	}
+
 	view.SetContent(content)
 	view.AltScreen = true
 	return view
 }
 
 func (m *chromeModel) syncChat() {
-	content := m.app.renderChatForPlayer(m.playerID)
-	m.chat.SetContent(content)
-	m.chat.GotoBottom()
-	if m.chatMode {
-		m.input.Placeholder = "Type a message or /command"
-	} else {
-		m.input.Placeholder = "Press Enter to chat"
+	// Rebuild chat from state
+	history := m.app.state.GetChatHistory()
+	lines := make([]string, 0, len(history))
+	for _, msg := range history {
+		if msg.IsPrivate {
+			if msg.ToID != m.playerID && msg.FromID != m.playerID {
+				continue
+			}
+			from := msg.FromID
+			if p := m.app.state.GetPlayer(from); p != nil {
+				from = p.Name
+			}
+			if from == "" {
+				from = "admin"
+			}
+			lines = append(lines, fmt.Sprintf("[PM from %s] %s", from, msg.Text))
+		} else if msg.Author == "" {
+			lines = append(lines, fmt.Sprintf("[system] %s", msg.Text))
+		} else {
+			lines = append(lines, fmt.Sprintf("<%s> %s", msg.Author, msg.Text))
+		}
 	}
+	m.chatLines = lines
+	m.chat.SetContent(strings.Join(lines, "\n"))
+	m.chat.GotoBottom()
 }
 
-func (m *chromeModel) enterChatMode() {
-	m.chatMode = true
-	m.input.SetValue("")
-	m.input.Focus()
-	m.syncChat()
-}
+func (m *chromeModel) resizeViewports() {
+	m.app.state.mu.RLock()
+	game := m.app.state.ActiveApp
+	m.app.state.mu.RUnlock()
 
-func (m *chromeModel) exitChatMode() {
-	m.chatMode = false
-	m.input.Blur()
-	m.syncChat()
+	if game == nil {
+		chatH := m.height - 2
+		if chatH < 1 {
+			chatH = 1
+		}
+		m.chat.SetWidth(m.width)
+		m.chat.SetHeight(chatH)
+	} else {
+		gameH := m.width * 9 / 16
+		chatH := m.height - 1 - gameH - 1
+		if chatH < 5 {
+			chatH = 5
+			gameH = m.height - 1 - chatH - 1
+			if gameH < 0 {
+				gameH = 0
+			}
+		}
+		m.chat.SetWidth(m.width)
+		m.chat.SetHeight(chatH)
+	}
+	m.input.SetWidth(maxInt(1, m.width-2))
 }
 
 func (m *chromeModel) submitInput() {
 	text := strings.TrimSpace(m.input.Value())
 	m.input.SetValue("")
-	m.exitChatMode()
+	m.mode = modeIdle
+	m.input.Blur()
 	if text == "" {
 		return
 	}
 	if strings.HasPrefix(text, "/") {
-		m.app.executeCommand(m.playerID, text)
-		m.syncChat()
+		player := m.app.state.GetPlayer(m.playerID)
+		isAdmin := player != nil && player.IsAdmin
+		ctx := common.CommandContext{
+			PlayerID: m.playerID,
+			IsAdmin:  isAdmin,
+			Reply: func(s string) {
+				msg := common.Message{IsPrivate: true, ToID: m.playerID, Text: s}
+				m.app.sendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
+			},
+			Broadcast: func(s string) {
+				m.app.broadcastChat(common.Message{Text: s})
+			},
+			ServerLog: func(s string) {
+				m.app.serverLog(s)
+			},
+		}
+		m.app.registry.Dispatch(text, ctx)
 		return
 	}
-	m.app.addChatMessage(m.playerID, text)
-	m.syncChat()
+	// Regular chat
+	playerName := "unknown"
+	if p := m.app.state.GetPlayer(m.playerID); p != nil {
+		playerName = p.Name
+	}
+	m.app.broadcastChat(common.Message{Author: playerName, Text: text})
 }
 
-func (m chromeModel) renderHeader() string {
-	label := fmt.Sprintf("[null-space] | Game: %s | Players: %d | Tunnel: %s", m.app.gameName, m.app.state.PlayerCount(), m.app.uptime())
-	return playerHeaderStyle.Width(m.width).Render(headerWithSpinner(label, m.width, currentSpinnerFrame()))
+func headerWithSpinner(text string, width int, spinner string) string {
+	if width <= 0 {
+		return ""
+	}
+	spinnerWidth := ansi.StringWidth(spinner)
+	if width <= spinnerWidth {
+		return truncateStyled(spinner, width)
+	}
+	left := truncateStyled(text, width-spinnerWidth-1)
+	spaces := width - ansi.StringWidth(left) - spinnerWidth
+	if spaces < 1 {
+		spaces = 1
+	}
+	return left + strings.Repeat(" ", spaces) + spinner
 }
 
-func (m chromeModel) renderGameStatusBar() string {
-	if m.chatMode {
-		return m.input.View()
-	}
-	if statusProvider, ok := m.app.state.ActiveGame.(common.PlayerStatusProvider); ok {
-		return statusProvider.PlayerStatus(m.playerID, m.width)
-	}
-	return "Enter to chat | /help for commands"
+func currentSpinnerFrame() string {
+	interval := int64(125) // ms
+	frame := (time.Now().UnixMilli() / interval) % int64(len(spinnerFramesChrome))
+	return spinnerFramesChrome[frame]
 }
 
 func fitBlock(content string, width, height int) string {
@@ -229,75 +383,4 @@ func truncateStyled(text string, width int) string {
 		return text
 	}
 	return ansi.Truncate(text, width, "")
-}
-
-func headerWithSpinner(text string, width int, spinner string) string {
-	if width <= 0 {
-		return ""
-	}
-
-	spinnerWidth := ansi.StringWidth(spinner)
-	if width <= spinnerWidth {
-		return truncateStyled(spinner, width)
-	}
-
-	left := truncateStyled(text, width-spinnerWidth-1)
-	spaces := width - ansi.StringWidth(left) - spinnerWidth
-	if spaces < 1 {
-		spaces = 1
-	}
-
-	return left + strings.Repeat(" ", spaces) + spinner
-}
-
-func currentSpinnerFrame() string {
-	interval := spinnerFrameInterval.Milliseconds()
-	if interval <= 0 {
-		interval = 100
-	}
-	frame := (time.Now().UnixMilli() / interval) % int64(len(spinnerFrames))
-	return spinnerFrames[frame]
-}
-
-func clientLayoutHeights(width, height int) (int, int) {
-	const fixedRows = 2
-	const minChatHeight = 5
-	const wideAspectWidth = 16
-	const wideAspectHeight = 9
-	const terminalCellWidthUnits = 2
-
-	availableHeight := maxInt(0, height-fixedRows)
-	chatHeight := minChatHeight
-	if availableHeight <= minChatHeight {
-		return 0, minChatHeight
-	}
-
-	gameHeight := availableHeight - minChatHeight
-	// Terminal cells are taller than they are wide, so use a wider grid ratio
-	// than the visual target to keep the map from growing vertically too fast.
-	targetGameHeight := maxInt(1, width*wideAspectHeight/(wideAspectWidth*terminalCellWidthUnits))
-	if gameHeight > targetGameHeight {
-		gameHeight = targetGameHeight
-	}
-	if gameHeight < 1 {
-		gameHeight = 1
-	}
-
-	chatHeight = maxInt(minChatHeight, availableHeight-gameHeight)
-	return gameHeight, chatHeight
-}
-
-func movementDirection(key string) string {
-	switch key {
-	case "up", "down", "left", "right":
-		return key
-	default:
-		return ""
-	}
-}
-
-func (m *chromeModel) dispatchMovement(direction string) {
-	m.app.handleGameMessage(common.MoveMsg{Direction: direction}, m.playerID)
-	m.app.sendToPlayer(m.playerID, common.RefreshMsg{})
-	m.app.broadcastExcept(m.playerID, common.RefreshMsg{})
 }

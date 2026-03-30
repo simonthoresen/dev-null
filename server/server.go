@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,55 +22,39 @@ import (
 )
 
 type App struct {
-	address       string
-	gameName      string
-	adminPassword string
-	state         *CentralState
-	server        *ssh.Server
+	state    *CentralState
+	registry *commandRegistry
 
-	mu              sync.RWMutex
-	programs        map[string]*tea.Program
-	programInFlight map[*tea.Program]chan struct{}
-	sessions        map[string]ssh.Session
-	privateHistory  map[string][]string
-	registry        map[string]common.Command
-	paletteIndex    int
-	consolePlayer   string
-	consoleIdentity *common.Player
-	playerActivity  map[string]time.Time
-	consoleWriter   io.Writer
-	consoleProgram  *tea.Program
-	localLogs       []string
-	publicIP        string
-	tunnelAddress   string
-	tunnelJoinCmd   string
-	shutdownFn      context.CancelFunc
-	upnp            *upnpMapping
-	consoleMu       sync.Mutex
+	programs   map[string]*tea.Program // key = playerID
+	programsMu sync.Mutex
+
+	sessions   map[string]ssh.Session
+	sessionsMu sync.RWMutex
+
+	// channels for communicating events to the console
+	logCh  chan string         // server log lines
+	chatCh chan common.Message // new chat messages
+
+	shutdownFn func()
+	sshServer  *ssh.Server
+
+	consoleProgramMu sync.Mutex
+	consoleProgram   *tea.Program
+
+	upnpMapping *upnpMapping
 }
 
-const (
-	gameTickInterval = 100 * time.Millisecond
-	uiTickInterval   = 125 * time.Millisecond
-	spinnerIdleAfter = 5 * time.Second
-)
-
-func New(address, gameName string, game common.Game, adminPassword string) (*App, error) {
+func New(address, password string) (*App, error) {
 	app := &App{
-		address:         address,
-		gameName:        gameName,
-		adminPassword:   adminPassword,
-		state:           newCentralState(game),
-		programs:        make(map[string]*tea.Program),
-		programInFlight: make(map[*tea.Program]chan struct{}),
-		sessions:        make(map[string]ssh.Session),
-		privateHistory:  make(map[string][]string),
-		playerActivity:  make(map[string]time.Time),
-		localLogs:       make([]string, 0, 100),
+		state:    newState(password),
+		registry: newCommandRegistry(),
+		programs: make(map[string]*tea.Program),
+		sessions: make(map[string]ssh.Session),
+		logCh:    make(chan string, 256),
+		chatCh:   make(chan common.Message, 256),
 	}
-	app.publicIP = detectPublicIP()
-	app.upnp = tryUPnP(app.listenPort())
-	app.registerCommands(game.GetCommands())
+
+	app.registerBuiltins(address)
 
 	server, err := wish.NewServer(
 		ssh.EmulatePty(),
@@ -85,29 +69,39 @@ func New(address, gameName string, game common.Game, adminPassword string) (*App
 	if err != nil {
 		return nil, err
 	}
-	app.server = server
-	slog.Info("server app created", "address", address, "game", gameName)
-
-	for _, cmd := range game.Init() {
-		app.executeCmd(cmd, "")
-	}
-
+	app.sshServer = server
+	slog.Info("server created", "address", address)
 	return app, nil
 }
 
-func (a *App) Start(ctx context.Context) error {
-	errCh := make(chan error, 1)
+func (a *App) SetShutdownFunc(fn func()) {
+	a.shutdownFn = fn
+}
 
+func (a *App) State() *CentralState {
+	return a.state
+}
+
+func (a *App) LogCh() <-chan string {
+	return a.logCh
+}
+
+func (a *App) ChatCh() <-chan common.Message {
+	return a.chatCh
+}
+
+func (a *App) Start(ctx context.Context) error {
 	go a.runTicker(ctx)
-	slog.Info("server listen loop starting", "address", a.address)
+
+	errCh := make(chan error, 1)
 	go func() {
-		ln, err := newNoDelayListener(a.address)
+		ln, err := newNoDelayListener(a.sshServer.Addr)
 		if err != nil {
 			errCh <- err
 			return
 		}
-		slog.Info("TCP_NODELAY listener ready", "address", a.address)
-		err = a.server.Serve(ln)
+		slog.Info("TCP_NODELAY listener ready", "address", a.sshServer.Addr)
+		err = a.sshServer.Serve(ln)
 		if err != nil && !errors.Is(err, ssh.ErrServerClosed) {
 			errCh <- err
 			return
@@ -127,8 +121,8 @@ func (a *App) Start(ctx context.Context) error {
 func (a *App) Shutdown(ctx context.Context) error {
 	_ = ctx
 	slog.Info("server shutdown requested")
-	a.upnp.removeMapping()
-	if err := a.server.Close(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
+	a.upnpMapping.removeMapping()
+	if err := a.sshServer.Close(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
 		slog.Error("server shutdown failed", "error", err)
 		return err
 	}
@@ -136,10 +130,18 @@ func (a *App) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) SetShutdownFunc(shutdownFn context.CancelFunc) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.shutdownFn = shutdownFn
+// SetupNetwork runs UPnP and public IP detection, updating state.Net.
+// Should be called after New() and before Start().
+func (a *App) SetupNetwork(port string) (upnpMapped bool, publicIP string) {
+	a.upnpMapping = tryUPnP(a.state, port)
+	upnpMapped = a.state.Net.UPnPMapped
+	publicIP = detectPublicIP()
+	if publicIP != "" {
+		a.state.mu.Lock()
+		a.state.Net.PublicIP = publicIP
+		a.state.mu.Unlock()
+	}
+	return upnpMapped, publicIP
 }
 
 func (a *App) sessionMiddleware() wish.Middleware {
@@ -155,10 +157,9 @@ func (a *App) sessionMiddleware() wish.Middleware {
 func (a *App) programHandler(sess ssh.Session) *tea.Program {
 	playerID := sess.Context().SessionID()
 	program := tea.NewProgram(newChromeModel(a, playerID), a.sessionProgramOptions(sess)...)
-	a.mu.Lock()
+	a.programsMu.Lock()
 	a.programs[playerID] = program
-	a.registerProgramLocked(program)
-	a.mu.Unlock()
+	a.programsMu.Unlock()
 	return program
 }
 
@@ -167,14 +168,6 @@ func (a *App) sessionProgramOptions(sess ssh.Session) []tea.ProgramOption {
 	if pty, _, ok := sess.Pty(); ok && pty.Term != "" {
 		envs = append(envs, "TERM="+pty.Term)
 	}
-
-	// Wish does not currently force a color profile for Windows-hosted SSH
-	// sessions, so derive it from the remote environment here.
-	//
-	// Wrap the session output with kittyStripWriter to prevent the Bubble Tea
-	// v2 renderer from enabling the Kitty keyboard protocol on the client
-	// terminal. Over SSH, Kitty mode causes the client to send multi-byte CSI
-	// u-encoded keystrokes that break the server-side input parser.
 	opts := wishbubbletea.MakeOptions(sess)
 	opts = append(opts,
 		tea.WithFPS(60),
@@ -186,29 +179,32 @@ func (a *App) sessionProgramOptions(sess ssh.Session) []tea.ProgramOption {
 
 func (a *App) registerSession(sess ssh.Session) *common.Player {
 	player := &common.Player{
-		ID:          sess.Context().SessionID(),
-		Name:        a.uniqueName(sess.User()),
-		Position:    common.Point{X: 100, Y: 100},
-		Color:       a.nextColor(),
-		ConnectedAt: time.Now(),
+		ID:   sess.Context().SessionID(),
+		Name: a.uniqueName(sess.User()),
 	}
 
-	a.mu.Lock()
+	a.sessionsMu.Lock()
 	a.sessions[player.ID] = sess
-	a.privateHistory[player.ID] = nil
-	a.playerActivity[player.ID] = time.Now()
-	a.mu.Unlock()
+	a.sessionsMu.Unlock()
 
 	a.state.AddPlayer(player)
 	slog.Info("player joined", "player_id", player.ID, "name", player.Name)
-	a.appendChatLine(formatSystemLine(fmt.Sprintf("%s joined the tunnel.", player.Name)))
-	a.handleGameMessage(common.PlayerJoinedMsg{
-		PlayerID: player.ID,
-		Name:     player.Name,
-		Position: player.Position,
-		Color:    player.Color,
-	}, player.ID)
-	a.broadcast(common.RefreshMsg{})
+
+	joinMsg := common.Message{
+		Author: "",
+		Text:   fmt.Sprintf("%s joined.", player.Name),
+	}
+	a.broadcastChat(joinMsg)
+	a.broadcastMsg(common.PlayerJoinedMsg{Player: player})
+
+	// notify active app and all plugins
+	if a.state.ActiveApp != nil {
+		a.state.ActiveApp.OnPlayerJoin(player.ID, player.Name)
+	}
+	plugins, _ := a.state.GetPlugins()
+	for _, p := range plugins {
+		p.OnPlayerJoin(player.ID, player.Name)
+	}
 	return player
 }
 
@@ -216,436 +212,118 @@ func (a *App) unregisterSession(playerID string) {
 	player := a.state.GetPlayer(playerID)
 	if player != nil {
 		slog.Info("player left", "player_id", playerID, "name", player.Name)
-		a.appendChatLine(formatSystemLine(fmt.Sprintf("%s left the tunnel.", player.Name)))
+		leaveMsg := common.Message{
+			Author: "",
+			Text:   fmt.Sprintf("%s left.", player.Name),
+		}
+		a.broadcastChat(leaveMsg)
 	}
-	a.handleGameMessage(common.PlayerLeftMsg{PlayerID: playerID}, playerID)
+
+	// notify active app and all plugins
+	if a.state.ActiveApp != nil {
+		a.state.ActiveApp.OnPlayerLeave(playerID)
+	}
+	plugins, _ := a.state.GetPlugins()
+	for _, p := range plugins {
+		p.OnPlayerLeave(playerID)
+	}
 	a.state.RemovePlayer(playerID)
 
-	a.mu.Lock()
-	program := a.programs[playerID]
+	a.programsMu.Lock()
 	delete(a.programs, playerID)
-	delete(a.sessions, playerID)
-	delete(a.privateHistory, playerID)
-	delete(a.playerActivity, playerID)
-	a.unregisterProgramLocked(program)
-	a.mu.Unlock()
+	a.programsMu.Unlock()
 
-	a.broadcast(common.RefreshMsg{})
+	a.sessionsMu.Lock()
+	delete(a.sessions, playerID)
+	a.sessionsMu.Unlock()
+
+	a.broadcastMsg(common.PlayerLeftMsg{PlayerID: playerID})
 }
 
 func (a *App) runTicker(ctx context.Context) {
-	gameTicker := time.NewTicker(gameTickInterval)
-	uiTicker := time.NewTicker(uiTickInterval)
-	defer gameTicker.Stop()
-	defer uiTicker.Stop()
-
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case tick := <-gameTicker.C:
-			a.handleGameMessage(common.TickMsg{Time: tick}, "")
-		case tick := <-uiTicker.C:
-			a.broadcastIdleTick(tick)
+		case <-ticker.C:
+			a.state.mu.Lock()
+			a.state.TickN++
+			n := a.state.TickN
+			a.state.mu.Unlock()
+			a.broadcastMsg(common.TickMsg{N: n})
 		}
 	}
 }
 
-func (a *App) broadcastIdleTick(tick time.Time) {
-	a.mu.RLock()
-	programs := make(map[string]*tea.Program, len(a.programs))
-	for playerID, program := range a.programs {
-		programs[playerID] = program
+func (a *App) broadcastMsg(msg tea.Msg) {
+	a.programsMu.Lock()
+	progs := make([]*tea.Program, 0, len(a.programs))
+	for _, p := range a.programs {
+		progs = append(progs, p)
 	}
-	activity := make(map[string]time.Time, len(a.playerActivity))
-	for playerID, at := range a.playerActivity {
-		activity[playerID] = at
-	}
-	consoleProgram := a.consoleProgram
-	a.mu.RUnlock()
+	a.programsMu.Unlock()
 
-	for playerID, program := range programs {
-		lastActivity, ok := activity[playerID]
-		if !ok || tick.Sub(lastActivity) < spinnerIdleAfter {
-			continue
-		}
-		a.sendProgram(program, common.TickMsg{Time: tick})
+	for _, p := range progs {
+		go p.Send(msg)
 	}
 
-	if consoleProgram != nil {
-		a.sendProgram(consoleProgram, common.TickMsg{Time: tick})
+	a.consoleProgramMu.Lock()
+	cp := a.consoleProgram
+	a.consoleProgramMu.Unlock()
+	if cp != nil {
+		go cp.Send(msg)
 	}
 }
 
-func (a *App) handleGameMessage(msg tea.Msg, playerID string) {
-	cmds := a.state.ActiveGame.Update(msg, playerID)
-	for _, cmd := range cmds {
-		a.executeCmd(cmd, playerID)
-	}
-}
-
-func (a *App) executeCmd(cmd tea.Cmd, playerID string) {
-	if cmd == nil {
-		return
-	}
-	go func() {
-		msg := cmd()
-		if msg == nil {
-			return
-		}
-		a.handleGameMessage(msg, playerID)
-		a.broadcast(common.RefreshMsg{})
-	}()
-}
-
-func (a *App) broadcast(msg tea.Msg) {
-	a.mu.RLock()
-	programs := make([]*tea.Program, 0, len(a.programs))
-	playerIDs := make([]string, 0, len(a.programs))
-	for _, program := range a.programs {
-		programs = append(programs, program)
-	}
-	for playerID := range a.programs {
-		playerIDs = append(playerIDs, playerID)
-	}
-	consoleProgram := a.consoleProgram
-	a.mu.RUnlock()
-
-	a.notePlayersActivity(playerIDs...)
-
-	for _, program := range programs {
-		a.sendProgram(program, msg)
-	}
-
-	if consoleProgram != nil {
-		a.sendProgram(consoleProgram, msg)
-	}
-}
-
-func (a *App) broadcastExcept(excludedPlayerID string, msg tea.Msg) {
-	a.mu.RLock()
-	programs := make([]*tea.Program, 0, len(a.programs))
-	playerIDs := make([]string, 0, len(a.programs))
-	for playerID, program := range a.programs {
-		if playerID == excludedPlayerID {
-			continue
-		}
-		programs = append(programs, program)
-		playerIDs = append(playerIDs, playerID)
-	}
-	consoleProgram := a.consoleProgram
-	a.mu.RUnlock()
-
-	a.notePlayersActivity(playerIDs...)
-
-	for _, program := range programs {
-		a.sendProgram(program, msg)
-	}
-
-	if consoleProgram != nil {
-		a.sendProgram(consoleProgram, msg)
-	}
-}
-
-func (a *App) addSystemMessage(text string) {
-	a.appendChatLine(formatSystemLine(text))
-	a.broadcast(common.RefreshMsg{})
-}
-
-func (a *App) addPinggyMessage(text string) {
-	slog.Info("pinggy message", "text", text)
-	a.writeConsoleLine(formatPinggyLine(text))
-}
-
-func (a *App) addPrivateMessage(playerID, text string) {
-	slog.Debug("private message", "player_id", playerID, "text", text)
-	line := formatPrivateLine(text)
-	a.mu.Lock()
-	a.privateHistory[playerID] = append(a.privateHistory[playerID], line)
-	if len(a.privateHistory[playerID]) > 20 {
-		a.privateHistory[playerID] = append([]string(nil), a.privateHistory[playerID][len(a.privateHistory[playerID])-20:]...)
-	}
-	consolePlayer := a.consolePlayer
-	a.mu.Unlock()
-	if playerID == consolePlayer {
-		a.writeConsoleLine(line)
-	}
-	a.sendToPlayer(playerID, common.RefreshMsg{})
-}
-
-func (a *App) addChatMessage(playerID, text string) {
-	player := a.playerIdentity(playerID)
-	author := "unknown"
-	if player != nil {
-		author = player.Name
-	}
-	slog.Info("chat message", "player_id", playerID, "author", author, "text", text)
-	a.appendChatLine(formatChatLine(author, text))
-	a.broadcast(common.RefreshMsg{})
-}
-
-func (a *App) playerIdentity(playerID string) *common.Player {
-	if player := a.state.GetPlayer(playerID); player != nil {
-		return player
-	}
-
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.consoleIdentity != nil && a.consoleIdentity.ID == playerID {
-		clone := *a.consoleIdentity
-		return &clone
-	}
-	return nil
-}
-
-func (a *App) appendChatLine(line string) {
-	a.state.AppendChat(line)
-	a.notifyLocalConsole()
-}
-
-func (a *App) writeConsoleLine(line string) {
-	a.mu.Lock()
-	a.localLogs = append(a.localLogs, line)
-	if len(a.localLogs) > 100 {
-		a.localLogs = append([]string(nil), a.localLogs[len(a.localLogs)-100:]...)
-	}
-	program := a.consoleProgram
-	writer := a.consoleWriter
-	a.mu.Unlock()
-
-	if program != nil {
-		a.sendProgram(program, common.RefreshMsg{})
-		return
-	}
-	if writer == nil {
-		return
-	}
-
-	a.consoleMu.Lock()
-	defer a.consoleMu.Unlock()
-	_, _ = fmt.Fprintln(writer, line)
-}
-
-func (a *App) notifyLocalConsole() {
-	a.mu.RLock()
-	program := a.consoleProgram
-	a.mu.RUnlock()
-	if program != nil {
-		a.sendProgram(program, common.RefreshMsg{})
-	}
-}
-
-func (a *App) requestShutdown() bool {
-	a.mu.RLock()
-	shutdownFn := a.shutdownFn
-	a.mu.RUnlock()
-	if shutdownFn == nil {
-		return false
-	}
-	shutdownFn()
-	return true
-}
-
-func (a *App) renderGlobalChat() string {
-	lines := a.state.ChatLines()
-	if len(lines) == 0 {
-		return "[system] chat is quiet"
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (a *App) renderLocalLogs() string {
-	a.mu.RLock()
-	lines := append([]string(nil), a.localLogs...)
-	a.mu.RUnlock()
-	if len(lines) == 0 {
-		return formatPrivateLine("server console ready")
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (a *App) renderChatForPlayer(playerID string) string {
-	globalLines := a.state.ChatLines()
-	a.mu.RLock()
-	privateLines := append([]string(nil), a.privateHistory[playerID]...)
-	a.mu.RUnlock()
-	lines := append(globalLines, privateLines...)
-	if len(lines) == 0 {
-		return "[system] chat is quiet"
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (a *App) renderGame(playerID string, width, height int) string {
-	return a.state.ActiveGame.View(playerID, width, height)
-}
-
-func (a *App) listenPort() string {
-	if a.address != "" {
-		parts := strings.SplitN(a.address, ":", 2)
-		if len(parts) == 2 && parts[1] != "" {
-			return parts[1]
+func (a *App) broadcastChat(msg common.Message) {
+	// run through plugin pipeline before committing
+	current := &msg
+	plugins, _ := a.state.GetPlugins()
+	for _, p := range plugins {
+		current = p.OnChatMessage(current)
+		if current == nil {
+			return // message dropped by a plugin
 		}
 	}
-	return "23234"
-}
+	msg = *current
 
-const sshNoHostCheck = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+	a.state.AddChat(msg)
 
-func (a *App) localSSHCommand() string {
-	host := "localhost"
-	if a.address != "" {
-		parts := strings.SplitN(a.address, ":", 2)
-		if len(parts) == 2 && parts[0] != "" {
-			host = parts[0]
-		}
+	select {
+	case a.chatCh <- msg:
+	default:
 	}
-	return fmt.Sprintf("ssh -t -p %s %s %s", a.listenPort(), sshNoHostCheck, host)
-}
 
-func (a *App) directSSHCommand() string {
-	if a.publicIP == "" {
-		return ""
-	}
-	return fmt.Sprintf("ssh -t -p %s %s %s", a.listenPort(), sshNoHostCheck, a.publicIP)
-}
-
-func (a *App) smartConnectOneLiner() string {
-	direct := a.directSSHCommand()
-	a.mu.RLock()
-	relay := a.tunnelJoinCmd
-	a.mu.RUnlock()
-	if relay != "" {
-		relay = ensureSSHFlag(relay, "-t")
-	}
-	if direct != "" && relay != "" {
-		return fmt.Sprintf("%s; if($LASTEXITCODE -ne 0){%s}", direct, relay)
-	}
-	if direct != "" {
-		return direct
-	}
-	if relay != "" {
-		return relay
-	}
-	return a.localSSHCommand()
-}
-
-func (a *App) connectionInfo() (localCmd, directCmd, tunnelJoin, oneLiner string) {
-	localCmd = a.localSSHCommand()
-	directCmd = a.directSSHCommand()
-	a.mu.RLock()
-	tunnelJoin = a.tunnelJoinCmd
-	a.mu.RUnlock()
-	oneLiner = a.smartConnectOneLiner()
-	return
+	a.broadcastMsg(common.ChatMsg{Msg: msg})
 }
 
 func (a *App) sendToPlayer(playerID string, msg tea.Msg) {
-	a.notePlayerActivity(playerID)
-	a.mu.RLock()
-	program := a.programs[playerID]
-	a.mu.RUnlock()
-	if program != nil {
-		a.sendProgram(program, msg)
-	}
-}
-
-func (a *App) notePlayerActivity(playerID string) {
-	if playerID == "" {
-		return
-	}
-	a.mu.Lock()
-	if _, ok := a.playerActivity[playerID]; ok {
-		a.playerActivity[playerID] = time.Now()
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) notePlayersActivity(playerIDs ...string) {
-	if len(playerIDs) == 0 {
-		return
-	}
-	now := time.Now()
-	a.mu.Lock()
-	for _, playerID := range playerIDs {
-		if _, ok := a.playerActivity[playerID]; ok {
-			a.playerActivity[playerID] = now
-		}
-	}
-	a.mu.Unlock()
-}
-
-func (a *App) sendProgram(program *tea.Program, msg tea.Msg) {
-	if program == nil {
-		return
-	}
-
-	if _, ok := msg.(tea.QuitMsg); ok {
-		go program.Send(msg)
-		return
-	}
-
-	a.mu.RLock()
-	inFlight := a.programInFlight[program]
-	a.mu.RUnlock()
-	if inFlight == nil {
-		go program.Send(msg)
-		return
-	}
-
-	if !isCoalescableUpdate(msg) {
-		go program.Send(msg)
-		return
-	}
-
-	select {
-	case inFlight <- struct{}{}:
-		go func() {
-			defer func() { <-inFlight }()
-			program.Send(msg)
-		}()
-	default:
-		return
-	}
-}
-
-func (a *App) registerProgramLocked(program *tea.Program) {
-	if program == nil {
-		return
-	}
-	if _, exists := a.programInFlight[program]; exists {
-		return
-	}
-	a.programInFlight[program] = make(chan struct{}, 1)
-}
-
-func (a *App) unregisterProgramLocked(program *tea.Program) {
-	if program == nil {
-		return
-	}
-	if _, exists := a.programInFlight[program]; !exists {
-		return
-	}
-	delete(a.programInFlight, program)
-}
-
-func isCoalescableUpdate(msg tea.Msg) bool {
-	switch msg.(type) {
-	case common.TickMsg:
-		return true
-	default:
-		return false
+	a.programsMu.Lock()
+	p := a.programs[playerID]
+	a.programsMu.Unlock()
+	if p != nil {
+		go p.Send(msg)
 	}
 }
 
 func (a *App) kickPlayer(playerID string) error {
-	a.mu.RLock()
+	a.sessionsMu.RLock()
 	sess := a.sessions[playerID]
-	a.mu.RUnlock()
+	a.sessionsMu.RUnlock()
 	if sess == nil {
 		return fmt.Errorf("session not found")
 	}
 	return sess.Close()
+}
+
+func (a *App) serverLog(line string) {
+	slog.Info(line)
+	select {
+	case a.logCh <- line:
+	default:
+	}
 }
 
 func (a *App) uptime() string {
@@ -669,20 +347,368 @@ func (a *App) uniqueName(raw string) string {
 	return name
 }
 
-func (a *App) nextColor() string {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	palette := []string{"#FF6B6B", "#4ECDC4", "#FFD166", "#7B9ACC", "#95D67B", "#F4A261"}
-	color := palette[a.paletteIndex%len(palette)]
-	a.paletteIndex++
-	return color
+func (a *App) loadApp(path string) error {
+	if a.state.ActiveApp != nil {
+		a.unloadApp()
+	}
+
+	rt, err := LoadApp(path, a.state, a.serverLog, func(msg common.Message) {
+		a.broadcastChat(msg)
+	})
+	if err != nil {
+		return err
+	}
+
+	a.state.mu.Lock()
+	a.state.ActiveApp = rt
+	a.state.AppName = path
+	a.state.mu.Unlock()
+
+	// register app commands
+	for _, cmd := range rt.Commands() {
+		a.registry.Register(cmd)
+	}
+
+	// notify existing players
+	players := a.state.ListPlayers()
+	for _, p := range players {
+		rt.OnPlayerJoin(p.ID, p.Name)
+	}
+
+	a.broadcastMsg(common.GameLoadedMsg{Name: path})
+	a.broadcastChat(common.Message{Text: fmt.Sprintf("App loaded: %s", path)})
+	a.serverLog(fmt.Sprintf("app loaded: %s", path))
+	return nil
 }
 
-func maxInt(aValue, bValue int) int {
-	if aValue > bValue {
-		return aValue
+func (a *App) unloadApp() {
+	a.state.mu.Lock()
+	app := a.state.ActiveApp
+	a.state.ActiveApp = nil
+	a.state.AppName = ""
+	a.state.mu.Unlock()
+
+	if app != nil {
+		for _, cmd := range app.Commands() {
+			a.registry.Unregister(cmd.Name)
+		}
+		app.Unload()
 	}
-	return bValue
+
+	a.broadcastMsg(common.GameUnloadedMsg{})
+	a.broadcastChat(common.Message{Text: "App unloaded."})
+	a.serverLog("app unloaded")
+}
+
+func (a *App) loadPlugin(name, path string) error {
+	// don't load the same plugin twice
+	_, names := a.state.GetPlugins()
+	for _, n := range names {
+		if n == name {
+			return fmt.Errorf("plugin '%s' is already loaded", name)
+		}
+	}
+
+	p, err := LoadPlugin(path, a.state, a.serverLog, func(msg common.Message) {
+		a.broadcastChat(msg)
+	})
+	if err != nil {
+		return err
+	}
+
+	a.state.AddPlugin(name, p)
+	for _, cmd := range p.Commands() {
+		a.registry.Register(cmd)
+	}
+	a.serverLog(fmt.Sprintf("plugin loaded: %s", name))
+	return nil
+}
+
+func (a *App) unloadPlugin(name string) error {
+	p := a.state.RemovePlugin(name)
+	if p == nil {
+		return fmt.Errorf("plugin '%s' is not loaded", name)
+	}
+	for _, cmd := range p.Commands() {
+		a.registry.Unregister(cmd.Name)
+	}
+	p.Unload()
+	a.serverLog(fmt.Sprintf("plugin unloaded: %s", name))
+	return nil
+}
+
+func (a *App) SetConsoleProgram(p *tea.Program) {
+	a.consoleProgramMu.Lock()
+	a.consoleProgram = p
+	a.consoleProgramMu.Unlock()
+}
+
+func (a *App) registerBuiltins(address string) {
+	a.registry.Register(common.Command{
+		Name:        "help",
+		Description: "List available commands",
+		Handler: func(ctx common.CommandContext, args []string) {
+			cmds := a.registry.All()
+			sort.Slice(cmds, func(i, j int) bool { return cmds[i].Name < cmds[j].Name })
+			var lines []string
+			for _, cmd := range cmds {
+				if cmd.AdminOnly && !ctx.IsAdmin {
+					continue
+				}
+				lines = append(lines, fmt.Sprintf("/%s — %s", cmd.Name, cmd.Description))
+			}
+			ctx.Reply(strings.Join(lines, "\n"))
+		},
+	})
+
+	a.registry.Register(common.Command{
+		Name:        "who",
+		Description: "List online players",
+		Handler: func(ctx common.CommandContext, args []string) {
+			players := a.state.ListPlayers()
+			names := make([]string, 0, len(players))
+			for _, p := range players {
+				label := p.Name
+				if p.IsAdmin {
+					label += " (admin)"
+				}
+				names = append(names, label)
+			}
+			sort.Strings(names)
+			ctx.Reply(fmt.Sprintf("Players online (%d): %s", len(names), strings.Join(names, ", ")))
+		},
+	})
+
+	a.registry.Register(common.Command{
+		Name:        "admin",
+		Description: "Elevate to admin (/admin <password>)",
+		Handler: func(ctx common.CommandContext, args []string) {
+			if len(args) != 1 {
+				ctx.Reply("Usage: /admin <password>")
+				return
+			}
+			a.state.mu.RLock()
+			pw := a.state.AdminPassword
+			a.state.mu.RUnlock()
+			if args[0] != pw {
+				ctx.Reply("Invalid password.")
+				return
+			}
+			if ctx.PlayerID != "" {
+				a.state.SetPlayerAdmin(ctx.PlayerID, true)
+			}
+			ctx.Reply("Admin privileges granted.")
+		},
+	})
+
+	a.registry.Register(common.Command{
+		Name:        "password",
+		Description: "Change admin password (admin only)",
+		AdminOnly:   true,
+		Handler: func(ctx common.CommandContext, args []string) {
+			if len(args) != 1 {
+				ctx.Reply("Usage: /password <new>")
+				return
+			}
+			a.state.mu.Lock()
+			a.state.AdminPassword = args[0]
+			a.state.mu.Unlock()
+			ctx.Reply("Admin password changed.")
+		},
+	})
+
+	a.registry.Register(common.Command{
+		Name:             "kick",
+		Description:      "Kick a player (admin only)",
+		AdminOnly:        true,
+		FirstArgIsPlayer: true,
+		Handler: func(ctx common.CommandContext, args []string) {
+			if len(args) < 1 {
+				ctx.Reply("Usage: /kick <player>")
+				return
+			}
+			target := a.state.PlayerByName(args[0])
+			if target == nil {
+				ctx.Reply("Player not found.")
+				return
+			}
+			if err := a.kickPlayer(target.ID); err != nil {
+				ctx.Reply(fmt.Sprintf("Kick failed: %v", err))
+				return
+			}
+			ctx.Broadcast(fmt.Sprintf("%s was kicked.", target.Name))
+		},
+	})
+
+	a.registry.Register(common.Command{
+		Name:        "load",
+		Description: "Load an app from apps/ folder (admin only)",
+		AdminOnly:   true,
+		Handler: func(ctx common.CommandContext, args []string) {
+			if len(args) < 1 {
+				ctx.Reply("Usage: /load <app>")
+				return
+			}
+			path := "apps/" + args[0] + ".js"
+			if err := a.loadApp(path); err != nil {
+				ctx.Reply(fmt.Sprintf("Failed to load app: %v", err))
+				return
+			}
+			ctx.Reply(fmt.Sprintf("App loaded: %s", args[0]))
+		},
+	})
+
+	a.registry.Register(common.Command{
+		Name:        "unload",
+		Description: "Unload the current app (admin only)",
+		AdminOnly:   true,
+		Handler: func(ctx common.CommandContext, args []string) {
+			a.state.mu.RLock()
+			hasApp := a.state.ActiveApp != nil
+			a.state.mu.RUnlock()
+			if !hasApp {
+				ctx.Reply("No app is currently loaded.")
+				return
+			}
+			a.unloadApp()
+			ctx.Reply("App unloaded.")
+		},
+	})
+
+	a.registry.Register(common.Command{
+		Name:        "plugin",
+		Description: "Plugin management: /plugin load <name> | /plugin unload <name> | /plugin list",
+		Handler: func(ctx common.CommandContext, args []string) {
+			if len(args) == 0 {
+				ctx.Reply("Usage: /plugin load <name> | /plugin unload <name> | /plugin list")
+				return
+			}
+			switch args[0] {
+			case "load":
+				if !ctx.IsAdmin {
+					ctx.Reply("Permission denied (admin only)")
+					return
+				}
+				if len(args) < 2 {
+					ctx.Reply("Usage: /plugin load <name>")
+					return
+				}
+				name := args[1]
+				path := "plugins/" + name + ".js"
+				if err := a.loadPlugin(name, path); err != nil {
+					ctx.Reply(fmt.Sprintf("Failed to load plugin: %v", err))
+					return
+				}
+				ctx.Reply(fmt.Sprintf("Plugin loaded: %s", name))
+			case "unload":
+				if !ctx.IsAdmin {
+					ctx.Reply("Permission denied (admin only)")
+					return
+				}
+				if len(args) < 2 {
+					ctx.Reply("Usage: /plugin unload <name>")
+					return
+				}
+				if err := a.unloadPlugin(args[1]); err != nil {
+					ctx.Reply(fmt.Sprintf("Failed to unload plugin: %v", err))
+					return
+				}
+				ctx.Reply(fmt.Sprintf("Plugin unloaded: %s", args[1]))
+			case "list":
+				_, names := a.state.GetPlugins()
+				if len(names) == 0 {
+					ctx.Reply("No plugins loaded.")
+					return
+				}
+				ctx.Reply(fmt.Sprintf("Loaded plugins (%d): %s", len(names), strings.Join(names, ", ")))
+			default:
+				ctx.Reply(fmt.Sprintf("Unknown subcommand: %s", args[0]))
+			}
+		},
+	})
+
+	a.registry.Register(common.Command{
+		Name:             "msg",
+		Description:      "Send a private message to a player",
+		FirstArgIsPlayer: true,
+		Handler: func(ctx common.CommandContext, args []string) {
+			if len(args) < 2 {
+				ctx.Reply("Usage: /msg <player> <text>")
+				return
+			}
+			target := a.state.PlayerByName(args[0])
+			if target == nil {
+				ctx.Reply("Player not found.")
+				return
+			}
+			text := strings.Join(args[1:], " ")
+			fromName := "admin"
+			if ctx.PlayerID != "" {
+				if p := a.state.GetPlayer(ctx.PlayerID); p != nil {
+					fromName = p.Name
+				}
+			}
+			pm := common.Message{
+				Author:    fromName,
+				Text:      text,
+				IsPrivate: true,
+				ToID:      target.ID,
+				FromID:    ctx.PlayerID,
+			}
+			// Send to recipient
+			a.sendToPlayer(target.ID, common.ChatMsg{Msg: pm})
+			// Confirm to sender
+			ctx.Reply(fmt.Sprintf("[PM to %s] %s", target.Name, text))
+			// Log to console
+			ctx.ServerLog(fmt.Sprintf("[PM %s -> %s] %s", fromName, target.Name, text))
+
+			select {
+			case a.chatCh <- pm:
+			default:
+			}
+		},
+	})
+
+	_ = address // used for future connection info commands
+}
+
+func (a *App) MakeCommandContext(playerID string) common.CommandContext {
+	isAdmin := false
+	if playerID == "" {
+		isAdmin = true
+	} else if p := a.state.GetPlayer(playerID); p != nil {
+		isAdmin = p.IsAdmin
+	}
+	return common.CommandContext{
+		PlayerID: playerID,
+		IsAdmin:  isAdmin,
+		Reply: func(text string) {
+			if playerID == "" {
+				a.serverLog(text)
+			} else {
+				msg := common.Message{
+					Author:    "",
+					Text:      text,
+					IsPrivate: true,
+					ToID:      playerID,
+				}
+				a.sendToPlayer(playerID, common.ChatMsg{Msg: msg})
+			}
+		},
+		Broadcast: func(text string) {
+			a.broadcastChat(common.Message{Text: text})
+		},
+		ServerLog: func(text string) {
+			a.serverLog(text)
+		},
+	}
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // noDelayListener wraps a net.Listener and ensures TCP_NODELAY is set on

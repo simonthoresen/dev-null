@@ -7,16 +7,18 @@ require (
 	charm.land/bubbletea/v2 v2.0.2
 	charm.land/lipgloss/v2 v2.0.2
 	charm.land/wish/v2 v2.0.0
+	github.com/charmbracelet/colorprofile v0.4.2
 	github.com/charmbracelet/ssh v0.0.0-20250826160808-ebfa259c7309
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/charmbracelet/x/xpty v0.1.0
+	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
+	github.com/huin/goupnp v1.3.0
 )
 
 require (
 	charm.land/log/v2 v2.0.0 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
-	github.com/charmbracelet/colorprofile v0.4.2 // indirect
 	github.com/charmbracelet/keygen v0.5.4 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8 // indirect
 	github.com/charmbracelet/x/conpty v0.1.1 // indirect
@@ -27,8 +29,10 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/creack/pty v1.1.24 // indirect
+	github.com/dlclark/regexp2 v1.11.4 // indirect
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
-	github.com/huin/goupnp v1.3.0 // indirect
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
+	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-runewidth v0.0.21 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
@@ -38,4 +42,5 @@ require (
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 )

@@ -39,3 +39,6 @@ go.work.sum
 *.swo
 .DS_Store
 Thumbs.db
+
+# Claude Code local data
+.claude/

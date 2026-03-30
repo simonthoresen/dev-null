@@ -17,9 +17,8 @@ type upnpMapping struct {
 }
 
 // tryUPnP attempts to create a port mapping on the local router via UPnP IGD.
-// It tries WANIPConnection2 first, then WANIPConnection1, then WANPPPConnection1.
-// Returns a non-nil *upnpMapping on success so the caller can remove it later.
-func tryUPnP(port string) *upnpMapping {
+// It stores results into *CentralState.Net.
+func tryUPnP(state *CentralState, port string) *upnpMapping {
 	p, err := strconv.ParseUint(port, 10, 16)
 	if err != nil {
 		slog.Warn("upnp: invalid port", "port", port, "error", err)
@@ -32,18 +31,27 @@ func tryUPnP(port string) *upnpMapping {
 
 	// Try IGD v2 WANIPConnection2 first (most modern routers).
 	if mapping := tryWANIPConnection2(ctx, externalPort); mapping != nil {
+		state.mu.Lock()
+		state.Net.UPnPMapped = true
+		state.mu.Unlock()
 		return mapping
 	}
 
 	// Fall back to IGD v1 WANIPConnection1.
 	if tryWANIPConnection1(ctx, externalPort) {
 		slog.Info("upnp: mapped via WANIPConnection1 (no cleanup handle)")
+		state.mu.Lock()
+		state.Net.UPnPMapped = true
+		state.mu.Unlock()
 		return nil // v1 clients have a different type; best-effort
 	}
 
 	// Fall back to WANPPPConnection1 (DSL modems).
 	if tryWANPPPConnection1(ctx, externalPort) {
 		slog.Info("upnp: mapped via WANPPPConnection1 (no cleanup handle)")
+		state.mu.Lock()
+		state.Net.UPnPMapped = true
+		state.mu.Unlock()
 		return nil
 	}
 
