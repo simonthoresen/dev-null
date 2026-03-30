@@ -21,15 +21,17 @@ var CWHT  = "\x1b[37m";
 var MAP_W = 60;
 var MAP_H = 35;
 
-// Player ship emojis and colors (one per slot)
+// Player ship: same emoji for all, differentiated by background color
 var SHIP_COLORS = [CGRN, CCYN, CMAG, CYEL, CWHT, CRED];
-var E_SHIP_EMOJI = [
-    "\uD83D\uDE80",  // 🚀
-    "\uD83D\uDEF8",  // 🛸
-    "\uD83D\uDE80",  // 🚀
-    "\uD83D\uDEF8",  // 🛸
-    "\uD83D\uDE80",  // 🚀
-    "\uD83D\uDEF8"   // 🛸
+var E_SHIP = "\uD83D\uDEE6";  // 🛦
+// ANSI background colors per player slot (dark shades so the emoji stays readable)
+var SHIP_BG = [
+    "\x1b[48;5;22m",   // dark green
+    "\x1b[48;5;24m",   // dark cyan
+    "\x1b[48;5;53m",   // dark magenta
+    "\x1b[48;5;58m",   // dark yellow/olive
+    "\x1b[48;5;236m",  // dark gray
+    "\x1b[48;5;52m"    // dark red
 ];
 
 // Enemy emojis by tier (top rows = more points)
@@ -204,7 +206,7 @@ function newPlayer(id, name) {
         cooldown: 0,
         rapidFire: 0,
         shield: 0,
-        ci: plOrder.length % E_SHIP_EMOJI.length
+        ci: plOrder.length % SHIP_BG.length
     };
 }
 
@@ -641,9 +643,9 @@ function render(pid, width, height) {
             if (frame < p.invuln && frame % 4 < 2) {
                 ents[k] = emptyCell;
             } else if (p.shield > 0) {
-                ents[k] = E_SHIELD;
+                ents[k] = SHIP_BG[p.ci] + E_SHIELD + RST;
             } else {
-                ents[k] = E_SHIP_EMOJI[p.ci];
+                ents[k] = SHIP_BG[p.ci] + E_SHIP + RST;
             }
         } else {
             var col = SHIP_COLORS[p.ci];
