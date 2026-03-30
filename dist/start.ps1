@@ -218,7 +218,7 @@ function Wait-ForTunnelReady {
 # Extra args (--game, --plugins, --player) are passed straight through.
 
 if ($Local) {
-    Write-BootStepStart "Pinggy helper"
+    Write-BootStepStart "Setting up network"
     Write-BootStepEnd "SKIP"
 
     Push-Location $root
@@ -261,6 +261,9 @@ if ($existingListener) {
 }
 
 # ── start tunnel ─────────────────────────────────────────────────────────────
+
+Write-BootStepStart "Setting up network"
+Write-BootStepEnd "DONE"
 
 $script:tunnelStatus = Join-Path ([System.IO.Path]::GetTempPath()) ("null-space-pinggy-{0}.status.log" -f ([guid]::NewGuid().ToString("N")))
 
@@ -311,6 +314,8 @@ try {
     if ($null -eq $previousTermWidth) { Remove-Item Env:NULL_SPACE_TERM_WIDTH -ErrorAction SilentlyContinue }
     else { $env:NULL_SPACE_TERM_WIDTH = $previousTermWidth }
 
+    Write-BootStepStart "Shutting down network"
+    Write-BootStepEnd "DONE"
     Write-BootStepStart "Stopping Pinggy helper"
     Stop-TunnelWatcher; Stop-Tunnel; Remove-TunnelState
     Write-BootStepEnd "DONE"

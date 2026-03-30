@@ -238,7 +238,8 @@ Implementation: `startBootStep(label)` / `finishBootStep(status)` in `cmd/null-s
 
 Startup sequence (PS1 steps first, then Go binary):
 ```
-Pinggy helper .............................................. [ DONE ]  ← start.ps1
+Setting up network ......................................... [ DONE ]  ← PS1 header
+Pinggy helper .............................................. [ DONE ]  ← PS1
 SSH server ................................................. [ DONE ]  ← Go
 UPnP port mapping .......................................... [ SKIP ]
 Public IP detection ........................................ [ SKIP ]
@@ -249,11 +250,20 @@ Generating invite command .................................. [ DONE ]
 
   (console UI runs)
 
-Stopping SSH server ........................................ [ DONE ]  ← Go shutdown
-Stopping Pinggy helper ..................................... [ DONE ]  ← PS1 finally block
+Initiating shutdown ........................................ [ DONE ]  ← Go
+Shutting down network ...................................... [ DONE ]  ← Go header
+Stopping SSH server ........................................ [ DONE ]  ← Go
+Stopping Pinggy helper ..................................... [ DONE ]  ← PS1
 ```
 
-In `--local` mode, network steps are listed as `[ SKIP ]` (yellow).
+In `--local` mode, group headers show `[ SKIP ]` (yellow) and substeps are omitted:
+```
+Setting up network ......................................... [ SKIP ]  ← PS1
+Generating invite command .................................. [ SKIP ]  ← Go
+  (local TUI runs)
+Initiating shutdown ........................................ [ DONE ]  ← Go
+Shutting down network ...................................... [ SKIP ]  ← Go
+```
 
 ### Phase 2 — Console UI (2-panel)
 

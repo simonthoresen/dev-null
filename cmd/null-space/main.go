@@ -52,14 +52,6 @@ func main() {
 	}
 
 	if localMode {
-		startBootStep("SSH server")
-		finishBootStep("SKIP")
-		startBootStep("UPnP port mapping")
-		finishBootStep("SKIP")
-		startBootStep("Public IP detection")
-		finishBootStep("SKIP")
-		startBootStep("Pinggy tunnel")
-		finishBootStep("SKIP")
 		startBootStep("Generating invite command")
 		finishBootStep("SKIP")
 
@@ -74,6 +66,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+
+		startBootStep("Initiating shutdown")
+		finishBootStep("DONE")
+		startBootStep("Shutting down network")
+		finishBootStep("SKIP")
 		return
 	}
 
@@ -166,6 +163,8 @@ func main() {
 	}
 
 	startBootStep("Initiating shutdown")
+	finishBootStep("DONE")
+	startBootStep("Shutting down network")
 	finishBootStep("DONE")
 	startBootStep("Stopping SSH server")
 	if err := <-serverErr; err == nil || errors.Is(err, ssh.ErrServerClosed) {
