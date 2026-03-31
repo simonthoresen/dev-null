@@ -22,40 +22,36 @@ var Game = {
         }
         // Build dynamic splash screen with team and player info.
         var t = teams();
-        var p = players();
+        var playerCount = 0;
         var teamNames = [];
         for (var i = 0; i < t.length; i++) {
             teamNames.push(t[i].name + " (" + t[i].players.length + ")");
+            playerCount += t[i].players.length;
         }
         Game.splashScreen = "=== EXAMPLE ARENA ===\n"
             + "Move with arrows, press Space to score\n"
             + "Game lasts 30 seconds\n"
             + "\nHigh score: " + state.highScore
             + "\nTeams: " + teamNames.join(" vs ")
-            + "\nPlayers: " + p.length;
+            + "\nPlayers: " + playerCount;
     },
 
     // Called at splash→playing transition. Set up game state.
     start: function() {
-        var teamByPlayer = {};
         var t = teams();
         for (var i = 0; i < t.length; i++) {
             for (var j = 0; j < t[i].players.length; j++) {
-                teamByPlayer[t[i].players[j]] = t[i].name;
+                var p = t[i].players[j];
+                state.players[p.id] = {
+                    name: p.name,
+                    team: t[i].name,
+                    x: 5 + Math.floor(Math.random() * 20),
+                    y: 2 + Math.floor(Math.random() * 8),
+                    score: 0
+                };
             }
         }
-        var p = players();
-        for (var i = 0; i < p.length; i++) {
-            var teamName = teamByPlayer[p[i].id] || "none";
-            state.players[p[i].id] = {
-                name: p[i].name,
-                team: teamName,
-                x: 5 + Math.floor(Math.random() * 20),
-                y: 2 + Math.floor(Math.random() * 8),
-                score: 0
-            };
-        }
-        log("Example start: " + t.length + " teams, " + p.length + " players");
+        log("Example start: " + t.length + " teams");
     },
 
     onPlayerLeave: function(playerID) {

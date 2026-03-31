@@ -91,7 +91,7 @@ var Game = {
     // --- Lifecycle ---
 
     // Called before splash with persisted state (or null on first run). Mandatory.
-    // players() and teams() globals are available. Can set Game.splashScreen dynamically.
+    // teams() global is available. Can set Game.splashScreen dynamically.
     init: function(savedState) {
         if (savedState) {
             // restore previous state
@@ -100,7 +100,7 @@ var Game = {
 
     // Called at splash→playing transition. Set up game state here. Optional.
     start: function() {
-        // game begins — players() and teams() available
+        // game begins — teams() available
     }
 };
 ```
@@ -270,8 +270,7 @@ These are available in both games and plugins.
 | `log(message)` | Writes to the server log panel (never shown to players). Useful for debugging. |
 | `chat(message)` | Broadcasts a system chat message to all players. `author` will be empty (renders as `[system] message`). |
 | `chatPlayer(playerID, message)` | Sends a private message to one player. |
-| `players()` | Returns an array of `{ id, name, isAdmin }`. During a game, returns only game participants. |
-| `teams()` | Returns an array of `{ name, color, players: [playerID, ...] }` — the current team configuration. |
+| `teams()` | Returns an array of `{ name, color, players: [{id, name}, ...] }`. During a game, returns the game teams snapshot. |
 | `registerCommand(spec)` | Registers a slash command. See below. |
 | `gameOver()` | Signals that the game has ended. Transitions to the game-over screen. |
 | `gameOver(results)` | Same as above, with ranked results displayed on the game-over screen. `results` is an array of `{ name, result }` in ranked order. `name` is the display name (player or team). `result` is a freeform string (e.g. `"4200 pts"`, `"1st"`, `"DNF"`). |
@@ -337,12 +336,13 @@ GAME OVER (framework results screen, up to 15s)
 LOBBY (game unloaded, back to teams + chat)
 ```
 
-- **Load**: Framework locks teams, builds the game player set from team members, loads saved state, and calls `init(savedState)`. `players()` and `teams()` return game participants. Game can set `Game.splashScreen` dynamically.
+- **Load**: Framework snapshots teams for the game (lobby stays independent), loads saved state, calls `init(savedState)`. `teams()` returns game teams. Game can set `Game.splashScreen` dynamically.
 - **Splash screen**: If `splashScreen` is set, that content is rendered. Otherwise, the game name is displayed in a centered box. The admin can press Enter to skip, or it auto-starts after 10s.
 - **Splash→Playing**: Framework calls `start()`. Game sets up its playing state.
 - **Playing**: Normal game mode — `view()`, `onInput()`, `statusBar()`, `commandBar()` are called.
 - **Game over**: Triggered when JS calls `gameOver(results, state)`. The framework renders a "GAME OVER" screen with the ranked results list. Players press Enter to acknowledge; after 15 seconds the game unloads automatically.
-- **Late joiners**: Players who connect while a game is running see the lobby and can chat. They do not join the active game. Teams are locked during a game.
+- **Late joiners**: Players connecting during a game see the lobby and can chat. Lobby teams are independent — players can organize for the next round.
+- **Reconnect**: If a player disconnects mid-game and reconnects with the same name, they rejoin the game automatically. Game teams persist through disconnects.
 
 ## Teams
 
@@ -352,10 +352,9 @@ The first player in a team is the team leader:
 - **Enter** — rename the team
 - **Left/Right** — cycle the team color
 
-Games access teams and players via globals:
+Games access teams via the `teams()` global:
 ```js
-teams()   // [{name, color, players: [playerID, ...]}, ...]
-players() // [{id, name, isAdmin}, ...]
+teams()  // [{name, color, players: [{id, name}, ...]}, ...]
 ```
 
 Games can declare a `teamRange` property to enforce a valid team count:

@@ -320,8 +320,7 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Lobby team panel focus — handle team navigation keys.
-	// Teams are locked (read-only) while a game is running.
-	if !m.inActiveGame && m.lobbyFocus == lobbyFocusTeams && phase == common.PhaseNone {
+	if !m.inActiveGame && m.lobbyFocus == lobbyFocusTeams {
 		return m.handleTeamKey(msg)
 	}
 

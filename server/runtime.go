@@ -161,32 +161,25 @@ func (r *jsRuntime) registerGlobals() {
 		}
 	})
 
-	r.vm.Set("players", func() []map[string]any {
-		// During a game, return only game participants.
-		var players []*common.Player
-		if r.state.GetGamePhase() == common.PhasePlaying {
-			players = r.state.ListGamePlayers()
-		} else {
-			players = r.state.ListPlayers()
-		}
-		result := make([]map[string]any, 0, len(players))
-		for _, p := range players {
-			result = append(result, map[string]any{
-				"id":      p.ID,
-				"name":    p.Name,
-				"isAdmin": p.IsAdmin,
-			})
-		}
-		return result
-	})
-
 	r.vm.Set("teams", func() []map[string]any {
-		teams := r.state.GetTeams()
+		// During a game, return the game teams snapshot.
+		var teams []common.Team
+		if r.state.GetGamePhase() != common.PhaseNone {
+			teams = r.state.GetGameTeams()
+		} else {
+			teams = r.state.GetTeams()
+		}
 		result := make([]map[string]any, 0, len(teams))
 		for _, t := range teams {
-			playerList := make([]any, len(t.Players))
-			for j, pid := range t.Players {
-				playerList[j] = pid
+			playerList := make([]any, 0, len(t.Players))
+			for _, pid := range t.Players {
+				entry := map[string]any{"id": pid}
+				if p := r.state.GetPlayer(pid); p != nil {
+					entry["name"] = p.Name
+				} else {
+					entry["name"] = pid // disconnected — use ID as fallback
+				}
+				playerList = append(playerList, entry)
 			}
 			result = append(result, map[string]any{
 				"name":    t.Name,

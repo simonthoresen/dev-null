@@ -255,6 +255,22 @@ func (a *Server) registerSession(sess ssh.Session) *common.Player {
 	a.broadcastChat(joinMsg)
 	a.broadcastMsg(common.PlayerJoinedMsg{Player: player})
 
+	// Check if this player was disconnected from a running game.
+	a.state.mu.Lock()
+	if oldID, ok := a.state.GameDisconnected[player.Name]; ok {
+		// Rejoin: swap old ID for new ID in game teams.
+		a.state.replaceGamePlayerIDLocked(oldID, player.ID)
+		delete(a.state.GameDisconnected, player.Name)
+		a.state.mu.Unlock()
+		a.serverLog(fmt.Sprintf("player %s rejoined game (was %s, now %s)", player.Name, oldID, player.ID))
+		player.IsAdmin = true // game players were in the lobby before, preserve admin if needed
+	} else {
+		a.state.mu.Unlock()
+		// Not in a game — assign to a lobby team.
+		a.state.EnsurePlayerTeam(player.ID)
+		a.broadcastMsg(common.TeamUpdatedMsg{})
+	}
+
 	plugins, _ := a.state.GetPlugins()
 	for _, p := range plugins {
 		p.OnPlayerJoin(player.ID, player.Name)
@@ -266,24 +282,33 @@ func (a *Server) unregisterSession(playerID string) {
 	player := a.state.GetPlayer(playerID)
 	if player != nil {
 		slog.Info("player left", "player_id", playerID, "name", player.Name)
-		leaveMsg := common.Message{
-			Author: "",
-			Text:   fmt.Sprintf("%s left.", player.Name),
-		}
-		a.broadcastChat(leaveMsg)
+		a.broadcastChat(common.Message{
+			Text: fmt.Sprintf("%s left.", player.Name),
+		})
 	}
 
-	// Only notify the game if this player was in the active game.
-	if a.state.ActiveGame != nil && a.state.IsGamePlayer(playerID) {
-		a.state.ActiveGame.OnPlayerLeave(playerID)
+	inGame := a.state.IsGamePlayer(playerID)
+	if inGame {
+		// Notify the game but keep them in game teams for reconnection.
+		if a.state.ActiveGame != nil {
+			a.state.ActiveGame.OnPlayerLeave(playerID)
+		}
+		if player != nil {
+			a.state.mu.Lock()
+			a.state.GameDisconnected[player.Name] = playerID
+			a.state.mu.Unlock()
+		}
+	} else {
+		// Lobby player — remove from lobby teams (cleans up empty teams).
+		a.state.RemovePlayerFromTeams(playerID)
+		a.broadcastMsg(common.TeamUpdatedMsg{})
 	}
+
 	plugins, _ := a.state.GetPlugins()
 	for _, p := range plugins {
 		p.OnPlayerLeave(playerID)
 	}
 	a.state.RemovePlayer(playerID)
-	a.state.RemovePlayerFromTeams(playerID)
-	a.broadcastMsg(common.TeamUpdatedMsg{})
 
 	a.programsMu.Lock()
 	delete(a.programs, playerID)
@@ -510,16 +535,10 @@ func (a *Server) loadGame(path string) error {
 		return fmt.Errorf("game supports at most %d teams (have %d)", tr.Max, teamCount)
 	}
 
-	// Lock teams and build game player set before init.
-	gamePlayerIDs := make(map[string]bool)
-	for _, t := range teams {
-		for _, id := range t.Players {
-			gamePlayerIDs[id] = true
-		}
-	}
-
 	a.state.mu.Lock()
-	a.state.GamePlayerIDs = gamePlayerIDs
+	// Snapshot teams for the game — lobby teams stay independent.
+	a.state.GameTeams = teams
+	a.state.GameDisconnected = make(map[string]string)
 	a.state.ActiveGame = rt
 	a.state.GameName = name
 	a.state.GamePhase = common.PhaseSplash

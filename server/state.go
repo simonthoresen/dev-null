@@ -30,9 +30,13 @@ type CentralState struct {
 	GameName   string
 	GamePhase  common.GamePhase
 
-	// GamePlayerIDs is the set of player IDs participating in the active game.
-	// Populated at splash→playing transition; cleared on game unload.
-	GamePlayerIDs map[string]bool
+	// GameTeams is a snapshot of the teams at game load time.
+	// Separate from lobby Teams so the lobby stays editable during a game.
+	GameTeams []common.Team
+
+	// GameDisconnected maps player name → game player ID for players who
+	// disconnected mid-game. Used to rejoin them on reconnect.
+	GameDisconnected map[string]string
 
 	// GameOverReady tracks which players have acknowledged the game-over screen.
 	GameOverReady   map[string]bool
@@ -205,7 +209,8 @@ func (s *CentralState) SetGamePhase(phase common.GamePhase) {
 		s.GameOverResults = nil
 	}
 	if phase == common.PhaseNone {
-		s.GamePlayerIDs = nil
+		s.GameTeams = nil
+		s.GameDisconnected = nil
 	}
 }
 
@@ -223,40 +228,66 @@ func (s *CentralState) MarkPlayerReady(playerID string) {
 	}
 }
 
-// AllPlayersReady returns true if every connected player has acknowledged.
+// AllPlayersReady returns true if every connected game player has acknowledged.
 func (s *CentralState) AllPlayersReady() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.GameOverReady == nil {
 		return false
 	}
-	for id := range s.Players {
-		if !s.GameOverReady[id] {
-			return false
+	for _, t := range s.GameTeams {
+		for _, id := range t.Players {
+			// Only check players who are still connected.
+			if s.Players[id] != nil && !s.GameOverReady[id] {
+				return false
+			}
 		}
 	}
 	return true
 }
 
-// IsGamePlayer returns true if the player is participating in the active game.
+// IsGamePlayer returns true if the player is in any game team.
 func (s *CentralState) IsGamePlayer(playerID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.GamePlayerIDs[playerID]
-}
-
-// ListGamePlayers returns only players participating in the active game.
-func (s *CentralState) ListGamePlayers() []*common.Player {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	players := make([]*common.Player, 0, len(s.GamePlayerIDs))
-	for id := range s.GamePlayerIDs {
-		if p := s.Players[id]; p != nil {
-			players = append(players, p)
+	for _, t := range s.GameTeams {
+		for _, id := range t.Players {
+			if id == playerID {
+				return true
+			}
 		}
 	}
-	return players
+	return false
 }
+
+// GetGameTeams returns a deep copy of the game teams snapshot.
+func (s *CentralState) GetGameTeams() []common.Team {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	teams := make([]common.Team, len(s.GameTeams))
+	for i, t := range s.GameTeams {
+		teams[i] = common.Team{
+			Name:    t.Name,
+			Color:   t.Color,
+			Players: append([]string(nil), t.Players...),
+		}
+	}
+	return teams
+}
+
+// replaceGamePlayerIDLocked swaps an old player ID for a new one in game teams.
+// Caller must hold s.mu.
+func (s *CentralState) replaceGamePlayerIDLocked(oldID, newID string) {
+	for i := range s.GameTeams {
+		for j, id := range s.GameTeams[i].Players {
+			if id == oldID {
+				s.GameTeams[i].Players[j] = newID
+				return
+			}
+		}
+	}
+}
+
 
 // --- Team helpers ---
 

@@ -52,17 +52,18 @@ go run ./cmd/null-space --local --data-dir dist --game example --player alice
 LOBBY (teams + chat) → SPLASH → PLAYING → GAME OVER → LOBBY
 ```
 1. **Lobby**: Players configure teams, chat. Admin loads game with `/game load <name>`.
-2. **Load**: Framework locks teams, builds game player set from team members, loads saved state, calls `init(savedState)`. `players()` and `teams()` are available. Game can set `Game.splashScreen` dynamically.
+2. **Load**: Framework snapshots teams for the game (lobby teams stay independent), loads saved state, calls `init(savedState)`. `teams()` returns game teams. Game can set `Game.splashScreen` dynamically.
 3. **Splash**: Shows game splash screen (custom or default with game name). Admin presses Enter to start, or auto-starts after 10s.
 4. **Splash→Playing**: Framework calls `start()`. Game sets up its playing state.
+5. **Reconnect**: If a player disconnects mid-game and reconnects with the same name, they rejoin the game automatically.
 5. **Playing**: Normal game mode. Game calls `gameOver(results, state)` when done.
 4. **Game Over**: Framework renders ranked results screen. All players press Enter or 15s auto-transition.
 5. Back to **Lobby** — game unloaded, teams preserved for next round.
 
-Late joiners during any game phase see the lobby and can chat but don't join the active game. Teams are locked while a game is running.
+Late joiners see the lobby and can chat but don't join the active game. Lobby teams are independent from game teams — players can freely organize for the next round while a game is running.
 
 ### Teams
-Players manage teams in the lobby panel (right side, 30% width). New players start unassigned (no team). Tab switches focus between chat and team panel. In team panel: Up/Down moves between teams, first player can Enter to rename and Left/Right to cycle color. Games can declare `teamRange: {min, max}` to enforce valid team counts. Teams are available to games via the `teams()` global function. Teams lock during a game — lobby waiters cannot modify them.
+Players manage teams in the lobby panel (right side, 30% width). New players start unassigned (no team). Tab switches focus between chat and team panel. In team panel: Up/Down moves between teams, first player can Enter to rename and Left/Right to cycle color. Games can declare `teamRange: {min, max}` to enforce valid team counts. Games access teams via the `teams()` global, which returns `[{name, color, players: [{id, name}, ...]}, ...]`. Game teams are a snapshot taken at load time — lobby teams remain editable during a game.
 
 ### State Persistence
 Games persist state by passing it as the second argument to `gameOver(results, state)`. On the next load, it's received as the argument to `init(savedState)`. State files are stored as JSON in `dist/state/<gamename>.json`.
@@ -148,7 +149,7 @@ type Game interface {
     Unload()
 }
 ```
-`jsRuntime` implements `Game`. `init()` is mandatory; all other JS hooks are optional. `players()` and `teams()` globals return game participants during `init()`, `start()`, and playing.
+`jsRuntime` implements `Game`. `init()` is mandatory; all other JS hooks are optional. `teams()` global returns game team snapshot during init/start/playing.
 
 ### Game Over
 
@@ -204,7 +205,7 @@ Both are single `.js` files in `dist/games/` or `dist/plugins/`. Loaded at runti
 
 **Plugin** — exports a global `Plugin` object with hooks `onChatMessage`, `onPlayerJoin`, `onPlayerLeave`. Multiple active simultaneously; persistent across game switches.
 
-**Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `players()`, `teams()`, `registerCommand()`, `gameOver(results, state)`.
+**Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `teams()`, `registerCommand()`, `gameOver(results, state)`.
 
 The chat pipeline runs all active plugin `onChatMessage` hooks (in load order) before committing a message to history. Return `null` to drop.
 
