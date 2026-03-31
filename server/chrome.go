@@ -388,7 +388,13 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			game := m.app.state.ActiveGame
 			m.app.state.mu.RUnlock()
 			if game != nil {
-				game.OnInput(m.playerID, msg.String())
+				key := msg.String()
+				// Bubble Tea v2 returns "space" for spacebar; normalize to " "
+				// so game scripts can use the intuitive key === " " check.
+				if key == "space" {
+					key = " "
+				}
+				game.OnInput(m.playerID, key)
 			}
 			return m, nil
 		}
