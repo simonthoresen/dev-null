@@ -255,20 +255,19 @@ func (a *Server) registerSession(sess ssh.Session) *common.Player {
 	a.broadcastChat(joinMsg)
 	a.broadcastMsg(common.PlayerJoinedMsg{Player: player})
 
+	// Assign a lobby team for the new player.
+	a.state.EnsurePlayerTeam(player.ID)
+	a.broadcastMsg(common.TeamUpdatedMsg{})
+
 	// Check if this player was disconnected from a running game.
 	a.state.mu.Lock()
 	if oldID, ok := a.state.GameDisconnected[player.Name]; ok {
-		// Rejoin: swap old ID for new ID in game teams.
 		a.state.replaceGamePlayerIDLocked(oldID, player.ID)
 		delete(a.state.GameDisconnected, player.Name)
 		a.state.mu.Unlock()
 		a.serverLog(fmt.Sprintf("player %s rejoined game (was %s, now %s)", player.Name, oldID, player.ID))
-		player.IsAdmin = true // game players were in the lobby before, preserve admin if needed
 	} else {
 		a.state.mu.Unlock()
-		// Not in a game — assign to a lobby team.
-		a.state.EnsurePlayerTeam(player.ID)
-		a.broadcastMsg(common.TeamUpdatedMsg{})
 	}
 
 	plugins, _ := a.state.GetPlugins()
@@ -287,22 +286,19 @@ func (a *Server) unregisterSession(playerID string) {
 		})
 	}
 
-	inGame := a.state.IsGamePlayer(playerID)
-	if inGame {
-		// Notify the game but keep them in game teams for reconnection.
-		if a.state.ActiveGame != nil {
-			a.state.ActiveGame.OnPlayerLeave(playerID)
-		}
+	// Notify the game if this player was in the active game.
+	if a.state.ActiveGame != nil && a.state.IsGamePlayer(playerID) {
+		a.state.ActiveGame.OnPlayerLeave(playerID)
 		if player != nil {
 			a.state.mu.Lock()
 			a.state.GameDisconnected[player.Name] = playerID
 			a.state.mu.Unlock()
 		}
-	} else {
-		// Lobby player — remove from lobby teams (cleans up empty teams).
-		a.state.RemovePlayerFromTeams(playerID)
-		a.broadcastMsg(common.TeamUpdatedMsg{})
 	}
+
+	// Always clean up lobby teams (game teams are a separate snapshot).
+	a.state.RemovePlayerFromTeams(playerID)
+	a.broadcastMsg(common.TeamUpdatedMsg{})
 
 	plugins, _ := a.state.GetPlugins()
 	for _, p := range plugins {
@@ -488,15 +484,35 @@ func (a *Server) uptime() string {
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
 }
 
+var romanNumerals = []string{
+	"", "", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
+	"XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX",
+}
+
 func (a *Server) uniqueName(raw string) string {
 	base := strings.TrimSpace(raw)
 	if base == "" {
 		base = "pilot"
 	}
+	// Replace spaces with hyphens.
+	base = strings.ReplaceAll(base, " ", "-")
+
+	// If this name belongs to a disconnected game player, let them reclaim it.
+	a.state.mu.RLock()
+	_, isReconnect := a.state.GameDisconnected[base]
+	a.state.mu.RUnlock()
+	if isReconnect {
+		return base
+	}
+
 	name := base
 	index := 2
 	for a.state.PlayerByName(name) != nil {
-		name = fmt.Sprintf("%s-%d", base, index)
+		if index < len(romanNumerals) {
+			name = fmt.Sprintf("%s-%s", base, romanNumerals[index])
+		} else {
+			name = fmt.Sprintf("%s-%d", base, index)
+		}
 		index++
 	}
 	return name
