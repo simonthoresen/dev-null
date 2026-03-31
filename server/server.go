@@ -255,13 +255,6 @@ func (a *Server) registerSession(sess ssh.Session) *common.Player {
 	a.broadcastChat(joinMsg)
 	a.broadcastMsg(common.PlayerJoinedMsg{Player: player})
 
-	// If no game is running, create a solo team for the new player.
-	// During a game, late joiners stay unassigned and wait in the lobby.
-	if a.state.GetGamePhase() == common.PhaseNone {
-		a.state.EnsurePlayerTeam(player.ID)
-		a.broadcastMsg(common.TeamUpdatedMsg{})
-	}
-
 	plugins, _ := a.state.GetPlugins()
 	for _, p := range plugins {
 		p.OnPlayerJoin(player.ID, player.Name)
