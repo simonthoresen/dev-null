@@ -74,6 +74,7 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = max(40, msg.Width)
 		m.height = max(12, msg.Height)
+		m.app.consoleWidth = m.width
 		m.resize()
 		return m, nil
 

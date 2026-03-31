@@ -48,6 +48,7 @@ type Server struct {
 
 	consoleProgramMu sync.Mutex
 	consoleProgram   *tea.Program
+	consoleWidth     int
 
 	upnpMapping *upnpMapping
 
@@ -242,18 +243,36 @@ func (a *Server) inviteToken() string {
 const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/null-space/main/join.ps1"
 
 // inviteCommand returns the invite command formatted for terminal display.
-// Uses PowerShell line continuations so the command can be copied across
-// wrapped lines and still paste as a single command:
-//   - Line 1 ends with backtick = command-level continuation
-//   - Line 2 ends with backtick inside "..." = string-level continuation
-//     (backtick + newline inside a double-quoted string drops the newline)
+// It inserts PowerShell line continuations (backtick + newline) to keep each
+// line within the console width so the command can be copied and pasted:
+//   - Command-level backtick: between "powershell -c" and the argument
+//   - In-string backtick: inside "..." drops the newline on paste
 func (a *Server) inviteCommand() string {
-	return fmt.Sprintf(
-		"powershell -c `\n"+
-			"  \"$env:NS='%s'; `\n"+
-			"  irm %s|iex\"",
-		a.inviteToken(), joinScriptURL,
-	)
+	token := a.inviteToken()
+	width := a.consoleWidth
+	if width < 40 {
+		width = 120 // default before first resize
+	}
+
+	// Build segments that can be joined on one line or split with continuations.
+	seg1 := "powershell -c"
+	seg2 := fmt.Sprintf("\"$env:NS='%s';", token)
+	seg3 := fmt.Sprintf("irm %s|iex\"", joinScriptURL)
+
+	// Try single line first.
+	oneLine := seg1 + " " + seg2 + seg3
+	if len(oneLine) <= width {
+		return oneLine
+	}
+
+	// Try two lines: break after -c.
+	line2 := "  " + seg2 + seg3
+	if len(line2) <= width {
+		return seg1 + " `\n" + line2
+	}
+
+	// Three lines: break after -c and between token and irm.
+	return seg1 + " `\n  " + seg2 + " `\n  " + seg3
 }
 
 // LogInviteCommand writes the current invite command to the server log.
