@@ -1022,6 +1022,29 @@ func (a *Server) registerBuiltins() {
 		},
 	})
 
+	// /games → /game list, /load <name> → /game load <name>
+	a.registry.Register(common.Command{
+		Name:        "games",
+		Description: "Alias for /game (list available games)",
+		Handler: func(ctx common.CommandContext, args []string) {
+			a.registry.Dispatch("/game "+strings.Join(args, " "), ctx)
+		},
+	})
+	a.registry.Register(common.Command{
+		Name:        "load",
+		Description: "Alias for /game load <name>",
+		AdminOnly:   true,
+		Complete: func(before []string) []string {
+			if len(before) == 0 {
+				return listDir(filepath.Join(a.dataDir, "games"), ".js")
+			}
+			return nil
+		},
+		Handler: func(ctx common.CommandContext, args []string) {
+			a.registry.Dispatch("/game load "+strings.Join(args, " "), ctx)
+		},
+	})
+
 	a.registry.Register(common.Command{
 		Name:        "plugin",
 		Description: "Plugin management. No args = list available. /plugin load|unload <name>",
