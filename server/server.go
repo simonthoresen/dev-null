@@ -66,7 +66,7 @@ func New(address, password, dataDir string) (*Server, error) {
 		chatCh:   make(chan common.Message, 256),
 	}
 
-	app.registerBuiltins(address)
+	app.registerBuiltins()
 
 	server, err := wish.NewServer(
 		ssh.EmulatePty(),
@@ -88,10 +88,6 @@ func New(address, password, dataDir string) (*Server, error) {
 
 func (a *Server) SetShutdownFunc(fn func()) {
 	a.shutdownFn = fn
-}
-
-func (a *Server) State() *CentralState {
-	return a.state
 }
 
 func (a *Server) LogCh() <-chan string {
@@ -124,14 +120,13 @@ func (a *Server) Start(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		slog.Info("server context cancelled, shutting down")
-		return a.Shutdown(context.Background())
+		return a.shutdown()
 	case err := <-errCh:
 		return err
 	}
 }
 
-func (a *Server) Shutdown(ctx context.Context) error {
-	_ = ctx
+func (a *Server) shutdown() error {
 	slog.Info("server shutdown requested")
 	a.upnpMapping.removeMapping()
 	if err := a.sshServer.Close(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
@@ -178,7 +173,7 @@ func (a *Server) SetPort(port string) { a.port = port }
 //
 // join.ps1 always tries localhost first (not encoded). Field presence is
 // determined by token length: ≥6 → LAN, ≥10 → public IP, ≥12 → Pinggy.
-func (a *Server) InviteToken() string {
+func (a *Server) inviteToken() string {
 	a.state.mu.RLock()
 	n := a.state.Net
 	a.state.mu.RUnlock()
@@ -248,16 +243,16 @@ const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/null-spac
 
 // InviteCommand returns a PowerShell one-liner that downloads join.ps1
 // from GitHub and runs it with the compact binary token.
-func (a *Server) InviteCommand() string {
+func (a *Server) inviteCommand() string {
 	return fmt.Sprintf(
 		`powershell -c "$env:NS='%s';irm %s|iex"`,
-		a.InviteToken(), joinScriptURL,
+		a.inviteToken(), joinScriptURL,
 	)
 }
 
 // LogInviteCommand writes the current invite command to the server log.
 func (a *Server) LogInviteCommand() {
-	a.serverLog("Invite: " + a.InviteCommand())
+	a.serverLog("Invite: " + a.inviteCommand())
 }
 
 func (a *Server) sessionMiddleware() wish.Middleware {
@@ -766,12 +761,12 @@ func (a *Server) SetConsoleProgram(p *tea.Program) {
 	a.consoleProgramMu.Unlock()
 }
 
-func (a *Server) registerBuiltins(address string) {
+func (a *Server) registerBuiltins() {
 	a.registry.Register(common.Command{
 		Name:        "invite",
 		Description: "Show the shareable join command for this server",
 		Handler: func(ctx common.CommandContext, args []string) {
-			ctx.Reply(a.InviteCommand())
+			ctx.Reply(a.inviteCommand())
 		},
 	})
 
@@ -1144,44 +1139,6 @@ func (a *Server) registerBuiltins(address string) {
 		},
 	})
 
-	_ = address // used for future connection info commands
-}
-
-func (a *Server) MakeCommandContext(playerID string) common.CommandContext {
-	isAdmin := false
-	if playerID == "" {
-		isAdmin = true
-	} else if p := a.state.GetPlayer(playerID); p != nil {
-		isAdmin = p.IsAdmin
-	}
-	return common.CommandContext{
-		PlayerID: playerID,
-		IsAdmin:  isAdmin,
-		Reply: func(text string) {
-			msg := common.Message{
-				Text:      text,
-				IsPrivate: true,
-				IsReply:   true,
-				ToID:      playerID,
-			}
-			if playerID == "" {
-				a.consoleProgramMu.Lock()
-				cp := a.consoleProgram
-				a.consoleProgramMu.Unlock()
-				if cp != nil {
-					go cp.Send(common.ChatMsg{Msg: msg})
-				}
-			} else {
-				a.sendToPlayer(playerID, common.ChatMsg{Msg: msg})
-			}
-		},
-		Broadcast: func(text string) {
-			a.broadcastChat(common.Message{Text: text})
-		},
-		ServerLog: func(text string) {
-			a.serverLog(text)
-		},
-	}
 }
 
 // probeGameTeamRange reads a game JS file and extracts the Game.teamRange property
@@ -1297,12 +1254,6 @@ func listDir(dir, ext string) []string {
 	return names
 }
 
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 // noDelayListener wraps a net.Listener and ensures TCP_NODELAY is set on
 // every accepted connection, disabling Nagle's algorithm so that single

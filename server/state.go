@@ -423,22 +423,6 @@ func (s *CentralState) RenameTeam(teamIndex int, name string) bool {
 	return true
 }
 
-// SetTeamColor sets the color of the team at the given index. Returns false if color is taken.
-func (s *CentralState) SetTeamColor(teamIndex int, color string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if teamIndex < 0 || teamIndex >= len(s.Teams) {
-		return false
-	}
-	for i, t := range s.Teams {
-		if i != teamIndex && t.Color == color {
-			return false
-		}
-	}
-	s.Teams[teamIndex].Color = color
-	return true
-}
-
 // NextTeamColor cycles to the next available color for the team at the given index.
 // direction: +1 = forward, -1 = backward.
 func (s *CentralState) NextTeamColor(teamIndex, direction int) {

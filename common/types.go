@@ -60,4 +60,3 @@ type GameLoadedMsg struct{ Name string }
 type GameUnloadedMsg struct{}
 type GamePhaseMsg struct{ Phase GamePhase } // broadcast when game phase changes
 type TeamUpdatedMsg struct{}                // broadcast when team assignments change
-type PlayerReadyMsg struct{ PlayerID string } // player acknowledged game-over or splash

@@ -70,8 +70,8 @@ func (m *consoleModel) Init() tea.Cmd {
 func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = maxInt(40, msg.Width)
-		m.height = maxInt(12, msg.Height)
+		m.width = max(40, msg.Width)
+		m.height = max(12, msg.Height)
 		m.resize()
 		return m, nil
 
@@ -199,9 +199,9 @@ func (m *consoleModel) View() tea.View {
 	headerText := fmt.Sprintf("null-space | game: %s | teams: %d | uptime %s", gameLabel, m.app.state.TeamCount(), m.app.uptime())
 	header := consoleHeaderStyle.Width(m.width).Render(headerWithSpinner(headerText, m.width, spinChar))
 
-	availH := maxInt(6, m.height-4) // header + 2 section labels + input
-	logsH := maxInt(3, availH/2)
-	chatH := maxInt(3, availH-logsH)
+	availH := max(6, m.height-4) // header + 2 section labels + input
+	logsH := max(3, availH/2)
+	chatH := max(3, availH-logsH)
 
 	logsLabel := consoleSectionStyle.Width(m.width).Render("Server Log")
 	chatLabel := consoleSectionStyle.Width(m.width).Render(fmt.Sprintf("Chat (%d players online)", m.app.state.PlayerCount()))
@@ -215,15 +215,15 @@ func (m *consoleModel) View() tea.View {
 }
 
 func (m *consoleModel) resize() {
-	availH := maxInt(6, m.height-4)
-	logsH := maxInt(3, availH/2)
-	chatH := maxInt(3, availH-logsH)
+	availH := max(6, m.height-4)
+	logsH := max(3, availH/2)
+	chatH := max(3, availH-logsH)
 
 	m.logs.SetWidth(m.width)
 	m.logs.SetHeight(logsH)
 	m.chat.SetWidth(m.width)
 	m.chat.SetHeight(chatH)
-	m.input.SetWidth(maxInt(1, m.width-2))
+	m.input.SetWidth(max(1, m.width-2))
 }
 
 func (m *consoleModel) submitInput() {

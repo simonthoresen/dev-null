@@ -189,8 +189,8 @@ func (m chromeModel) Init() tea.Cmd {
 func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = maxInt(1, msg.Width)
-		m.height = maxInt(8, msg.Height)
+		m.width = max(1, msg.Width)
+		m.height = max(8, msg.Height)
 		m.resizeViewports()
 		m.syncChat()
 		return m, nil
@@ -295,7 +295,7 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Chat scroll — handled in all modes.
 	switch msg.String() {
 	case "pgup":
-		chatH := maxInt(1, m.chatH)
+		chatH := max(1, m.chatH)
 		m.chatScrollOffset += chatH - 1
 		maxOffset := len(m.chatLines) - chatH
 		if maxOffset < 0 {
@@ -306,7 +306,7 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "pgdown":
-		chatH := maxInt(1, m.chatH)
+		chatH := max(1, m.chatH)
 		m.chatScrollOffset -= chatH - 1
 		if m.chatScrollOffset < 0 {
 			m.chatScrollOffset = 0
@@ -692,7 +692,7 @@ func (m chromeModel) viewPlaying(game common.Game, gameName string, sbStyle, chS
 
 	gameH := m.width * 9 / 16
 	chatH := m.height - 1 - gameH - 1
-	minChatH := maxInt(5, (m.height-2)/3)
+	minChatH := max(5, (m.height-2)/3)
 	if chatH < minChatH {
 		chatH = minChatH
 		gameH = m.height - 1 - chatH - 1
@@ -917,7 +917,7 @@ func (m *chromeModel) resizeViewports() {
 	} else if phase == common.PhasePlaying {
 		gameH := m.width * 9 / 16
 		chatH := m.height - 1 - gameH - 1
-		minChatH := maxInt(5, (m.height-2)/3)
+		minChatH := max(5, (m.height-2)/3)
 		if chatH < minChatH {
 			chatH = minChatH
 		}
@@ -928,7 +928,7 @@ func (m *chromeModel) resizeViewports() {
 		// Splash or GameOver — no chat viewport needed.
 		m.chatH = 0
 	}
-	m.input.SetWidth(maxInt(1, m.width-2))
+	m.input.SetWidth(max(1, m.width-2))
 }
 
 func (m *chromeModel) submitInput() {

@@ -203,13 +203,12 @@ var AI_NAMES = ["Ace", "Bluff", "Cash", "Dice", "Edge", "Flint", "Grit", "Hawk",
 var AI_PREFIX = "ai_";
 
 var state = {
-    players: {},     // id -> { name, chips, hand, folded, bet, allIn, seatIndex, bustedOut }
+    players: {},     // id -> { name, chips, hand, folded, bet, allIn, bustedOut }
     seatOrder: [],   // player IDs in seat order
     phase: "waiting", // waiting, preflop, flop, turn, river, showdown
     deck: [],
     community: [],
     pot: 0,
-    sidePots: [],
     currentBet: 0,
     actionOn: -1,    // index into seatOrder
     dealerIdx: 0,
@@ -272,7 +271,6 @@ function startHand() {
     state.deck = shuffle(makeDeck());
     state.community = [];
     state.pot = 0;
-    state.sidePots = [];
     state.currentBet = 0;
     state.lastAction = "";
     state.showdownResults = null;
@@ -288,7 +286,6 @@ function startHand() {
         p.folded = p.bustedOut;
         p.bet = 0;
         p.allIn = false;
-        p.roundBet = 0;
     }
 
     // Move dealer
@@ -325,7 +322,6 @@ function postBlind(seatIdx, amount) {
     var actual = Math.min(amount, p.chips);
     p.chips -= actual;
     p.bet = actual;
-    p.roundBet = actual;
     state.pot += actual;
     if (p.chips === 0) p.allIn = true;
 }
@@ -375,7 +371,6 @@ function doCall(playerID) {
     var actual = Math.min(toCall, p.chips);
     p.chips -= actual;
     p.bet += actual;
-    p.roundBet += actual;
     state.pot += actual;
     if (p.chips === 0) p.allIn = true;
     state.lastAction = p.name + " calls" + (p.allIn ? " (all-in)" : "");
@@ -392,7 +387,6 @@ function doRaise(playerID, amount) {
     var actual = Math.min(totalCost, p.chips);
     p.chips -= actual;
     p.bet += actual;
-    p.roundBet += actual;
     state.pot += actual;
     if (p.chips === 0) p.allIn = true;
     var newBet = p.bet;
@@ -417,7 +411,6 @@ function doAllIn(playerID) {
     var amount = p.chips;
     p.chips = 0;
     p.bet += amount;
-    p.roundBet += amount;
     state.pot += amount;
     p.allIn = true;
     if (p.bet > state.currentBet) {
@@ -942,9 +935,7 @@ function addAIPlayer() {
         hand: [],
         folded: false,
         bet: 0,
-        roundBet: 0,
         allIn: false,
-        seatIndex: state.seatOrder.length,
         bustedOut: false,
         isAI: true,
         aiThinkTimer: 0
@@ -1076,9 +1067,7 @@ var Game = {
             hand: [],
             folded: false,
             bet: 0,
-            roundBet: 0,
             allIn: false,
-            seatIndex: state.seatOrder.length,
             bustedOut: false,
             isAI: false,
             aiThinkTimer: 0

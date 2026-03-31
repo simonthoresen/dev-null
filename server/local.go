@@ -25,7 +25,7 @@ func NewLocal(dataDir string) *Server {
 		logCh:  make(chan string, 256),
 		chatCh: make(chan common.Message, 256),
 	}
-	app.registerBuiltins("")
+	app.registerBuiltins()
 	return app
 }
 
