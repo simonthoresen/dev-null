@@ -635,15 +635,12 @@ func (m chromeModel) View() tea.View {
 			teams := m.app.state.GetTeams()
 			unassigned := m.app.state.UnassignedPlayers()
 			idx := m.app.state.PlayerTeamIndex(m.playerID)
-			row := 0
-			if len(unassigned) > 0 {
-				row += 1 + len(unassigned)
-			}
+			row := 1 + len(unassigned) // "Unassigned" header + player rows
 			for i := 0; i < idx && i < len(teams); i++ {
-				row += 1 + len(teams[i].Players)
+				row += 1 + len(teams[i].Players) // team header + members (no blank separator)
 			}
 			cursor.Position.Y = 1 + row // +1 for status bar
-			cursor.Position.X += (m.width - teamW) + 4
+			cursor.Position.X += (m.width - teamW) + 5 // +1 for border │
 			view.Cursor = cursor
 		}
 	}
@@ -699,12 +696,18 @@ func (m chromeModel) viewLobby(sbStyle, chStyle, ciStyle lipgloss.Style, spinCha
 	teamStatus := teamBarStyle.Width(teamW).Render(headerWithSpinner(" Teams", teamW, spinChar))
 	statusBar := chatStatus + teamStatus
 
-	// Content area — join chat and team rows manually; lipgloss.JoinHorizontal
-	// miscalculates ANSI string widths and inserts extra blank padding rows.
-	chatView := renderChatLines(m.chatLines, chatW, contentH, m.chatScrollOffset, chatBodyStyle, chatBg)
-	teamView := m.renderTeamPanel(teamW, contentH, teamBodyStyle, teamPanelBg)
+	// Content area — each row is: chat content (chatW-1) + border "│" + team content (teamW-1) + border "│"
+	// The border characters are visible foreground chars that force the
+	// bubbletea/ultraviolet renderer to use absolute cursor positioning
+	// (CUP) instead of CR+LF, which mispositions content over SSH.
+	innerChatW := chatW - 1 // reserve 1 col for right border
+	innerTeamW := teamW - 1 // reserve 1 col for right border
+	chatView := renderChatLines(m.chatLines, innerChatW, contentH, m.chatScrollOffset, chatBodyStyle, chatBg)
+	teamView := m.renderTeamPanel(innerTeamW, contentH, teamBodyStyle, teamPanelBg)
 	chatRows := strings.Split(chatView, "\n")
 	teamRows := strings.Split(teamView, "\n")
+	chatBorder := chatBodyStyle.Render("│")
+	teamBorder := teamBodyStyle.Render("│")
 	middleRows := make([]string, contentH)
 	for i := 0; i < contentH; i++ {
 		var c, t string
@@ -714,7 +717,7 @@ func (m chromeModel) viewLobby(sbStyle, chStyle, ciStyle lipgloss.Style, spinCha
 		if i < len(teamRows) {
 			t = teamRows[i]
 		}
-		middleRows[i] = c + t
+		middleRows[i] = c + chatBorder + t + teamBorder
 	}
 	middle := strings.Join(middleRows, "\n")
 
