@@ -250,9 +250,19 @@ func (a *Server) inviteCommand() string {
 	)
 }
 
+// inviteCommandDisplay returns the invite command formatted for terminal display.
+// It inserts PowerShell line continuation (backtick + newline) so the command can
+// be copied from a wrapped terminal and still paste as a single command.
+func (a *Server) inviteCommandDisplay() string {
+	return fmt.Sprintf(
+		"powershell -c `\n  \"$env:NS='%s';irm %s|iex\"",
+		a.inviteToken(), joinScriptURL,
+	)
+}
+
 // LogInviteCommand writes the current invite command to the server log.
 func (a *Server) LogInviteCommand() {
-	a.serverLog("Invite: " + a.inviteCommand())
+	a.serverLog("Invite:\n" + a.inviteCommandDisplay())
 }
 
 func (a *Server) sessionMiddleware() wish.Middleware {
@@ -764,7 +774,7 @@ func (a *Server) registerBuiltins() {
 		Name:        "invite",
 		Description: "Show the shareable join command for this server",
 		Handler: func(ctx common.CommandContext, args []string) {
-			ctx.Reply(a.inviteCommand())
+			ctx.Reply(a.inviteCommandDisplay())
 		},
 	})
 
