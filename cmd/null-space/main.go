@@ -124,10 +124,9 @@ func main() {
 		finishBootStep("DONE")
 	} else {
 		finishBootStep("SKIP")
+		// No Pinggy — log invite now with whatever endpoints are available.
+		go app.LogInviteCommand()
 	}
-
-	startBootStep("Generating invite command")
-	finishBootStep("DONE")
 
 	startBootStep("Starting console")
 	consoleModel := server.NewConsoleModel(app, stop)
@@ -157,7 +156,6 @@ func main() {
 	}()
 
 	finishBootStep("DONE")
-	go app.LogInviteCommand()
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "console error: %v\n", err)
 	}

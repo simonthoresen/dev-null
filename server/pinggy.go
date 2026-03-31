@@ -37,8 +37,12 @@ func (a *Server) runPinggyLogBridge(ctx context.Context, statusFile string) {
 
 			if status.TcpAddress != "" {
 				a.state.mu.Lock()
+				changed := a.state.Net.PinggyURL != status.TcpAddress
 				a.state.Net.PinggyURL = status.TcpAddress
 				a.state.mu.Unlock()
+				if changed {
+					a.LogInviteCommand()
+				}
 			}
 
 			if seenCount > len(status.LogLines) {
