@@ -836,6 +836,7 @@ func (m chromeModel) renderTeamPanel(width, height int, baseStyle lipgloss.Style
 	}
 
 	for i, team := range teams {
+		lines = append(lines, baseStyle.Width(width).Render(""))
 		teamColor := lipgloss.Color(team.Color)
 		colorBlock := lipgloss.NewStyle().Background(teamColor).Render("  ")
 		nameText := fmt.Sprintf(" %s %s", colorBlock, team.Name)
