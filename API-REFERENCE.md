@@ -91,14 +91,13 @@ var Game = {
     // renders the game name centered in a box. Read once at load time.
     splashScreen: "=== MY GAME ===\nPress Enter to start",
 
-    // --- Lifecycle (optional) ---
+    // --- Lifecycle (mandatory) ---
 
     // Called once after the script loads, before onPlayerJoin.
-    // config.teams = [{ name, color, players: [playerID, ...] }, ...]
-    // config.savedState = previously persisted state (or null on first run)
-    // config.players = [{ id, name, isAdmin }, ...] — all connected players
-    init: function(config) {
-        if (config.savedState) {
+    // savedState = previously persisted state (or null on first run).
+    // Use teams() and players() globals to query current teams and players.
+    init: function(savedState) {
+        if (savedState) {
             // restore previous state
         }
     }
@@ -270,7 +269,8 @@ These are available in both games and plugins.
 | `log(message)` | Writes to the server log panel (never shown to players). Useful for debugging. |
 | `chat(message)` | Broadcasts a system chat message to all players. `author` will be empty (renders as `[system] message`). |
 | `chatPlayer(playerID, message)` | Sends a private message to one player. |
-| `players()` | Returns an array of `{ id, name, isAdmin }` for every connected player. |
+| `players()` | Returns an array of `{ id, name, isAdmin }`. During a game, returns only game participants. |
+| `teams()` | Returns an array of `{ name, color, players: [playerID, ...] }` — the current team configuration. |
 | `registerCommand(spec)` | Registers a slash command. See below. |
 | `gameOver()` | Signals that the game has ended. Transitions to the game-over screen. |
 | `gameOver(results)` | Same as above, with ranked results displayed on the game-over screen. `results` is an array of `{ name, result }` in ranked order. `name` is the display name (player or team). `result` is a freeform string (e.g. `"4200 pts"`, `"1st"`, `"DNF"`). |
@@ -369,7 +369,7 @@ Games can persist data between runs. Saved state is stored as JSON in `dist/stat
 
 **Saving**: Pass state as the second argument to `gameOver(results, state)`. Only saved when the game ends naturally — manual `/game unload` does not persist state.
 
-**Loading**: Receive previous state in `init(config)` via `config.savedState` (null on first run).
+**Loading**: Receive previous state as the argument to `init(savedState)` (null on first run).
 
 ## Layout and sizing
 

@@ -30,6 +30,10 @@ type CentralState struct {
 	GameName   string
 	GamePhase  common.GamePhase
 
+	// GamePlayerIDs is the set of player IDs participating in the active game.
+	// Populated at splash→playing transition; cleared on game unload.
+	GamePlayerIDs map[string]bool
+
 	// GameOverReady tracks which players have acknowledged the game-over screen.
 	GameOverReady   map[string]bool
 	GameOverResults []common.GameResult // ranked results from gameOver()
@@ -200,6 +204,9 @@ func (s *CentralState) SetGamePhase(phase common.GamePhase) {
 		s.GameOverReady = nil
 		s.GameOverResults = nil
 	}
+	if phase == common.PhaseNone {
+		s.GamePlayerIDs = nil
+	}
 }
 
 func (s *CentralState) GetGamePhase() common.GamePhase {
@@ -229,6 +236,26 @@ func (s *CentralState) AllPlayersReady() bool {
 		}
 	}
 	return true
+}
+
+// IsGamePlayer returns true if the player is participating in the active game.
+func (s *CentralState) IsGamePlayer(playerID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.GamePlayerIDs[playerID]
+}
+
+// ListGamePlayers returns only players participating in the active game.
+func (s *CentralState) ListGamePlayers() []*common.Player {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	players := make([]*common.Player, 0, len(s.GamePlayerIDs))
+	for id := range s.GamePlayerIDs {
+		if p := s.Players[id]; p != nil {
+			players = append(players, p)
+		}
+	}
+	return players
 }
 
 // --- Team helpers ---

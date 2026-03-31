@@ -78,10 +78,8 @@ type jsRuntime struct {
 }
 
 // LoadGame loads and executes a JS file from games/, extracts the Game object
-// methods, and returns a common.Game.
-// savedState is the previously persisted state (nil if none), teams is the current
-// lobby team configuration. Both are passed to Game.init() if the game defines it.
-func LoadGame(path string, state *CentralState, logFn func(string), chatFn func(common.Message), savedState any, teams []common.Team) (common.Game, error) {
+// methods, and returns a common.Game. init(savedState) is called during load.
+func LoadGame(path string, state *CentralState, logFn func(string), chatFn func(common.Message), savedState any) (common.Game, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read game file: %w", err)
@@ -105,52 +103,18 @@ func LoadGame(path string, state *CentralState, logFn func(string), chatFn func(
 		return nil, fmt.Errorf("extract game object: %w", err)
 	}
 
-	// Call Game.init(config) if defined.
-	if rt.initFn != nil {
-		rt.callInit(savedState, teams)
-	}
-
+	rt.callInit(savedState)
 	return rt, nil
 }
 
-func (r *jsRuntime) callInit(savedState any, teams []common.Team) {
-	jsTeams := make([]map[string]any, len(teams))
-	for i, t := range teams {
-		playerList := make([]any, len(t.Players))
-		for j, pid := range t.Players {
-			playerList[j] = pid
-		}
-		jsTeams[i] = map[string]any{
-			"name":    t.Name,
-			"color":   t.Color,
-			"players": playerList,
-		}
-	}
-	config := map[string]any{
-		"teams":      jsTeams,
-		"savedState": savedState,
-		"players":    r.playersSnapshot(),
-	}
+func (r *jsRuntime) callInit(savedState any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("Init")
 	defer traceJS(r.vm, "Init")()
 	cancel := watchdogJS(r.vm, "Init")
 	defer cancel()
-	_, _ = r.initFn(goja.Undefined(), r.vm.ToValue(config))
-}
-
-func (r *jsRuntime) playersSnapshot() []map[string]any {
-	players := r.state.ListPlayers()
-	result := make([]map[string]any, 0, len(players))
-	for _, p := range players {
-		result = append(result, map[string]any{
-			"id":      p.ID,
-			"name":    p.Name,
-			"isAdmin": p.IsAdmin,
-		})
-	}
-	return result
+	_, _ = r.initFn(goja.Undefined(), r.vm.ToValue(savedState))
 }
 
 func (r *jsRuntime) registerGlobals() {
@@ -176,14 +140,37 @@ func (r *jsRuntime) registerGlobals() {
 		}
 	})
 
-	r.vm.Set("players", func() []map[string]interface{} {
-		players := r.state.ListPlayers()
-		result := make([]map[string]interface{}, 0, len(players))
+	r.vm.Set("players", func() []map[string]any {
+		// During a game, return only game participants.
+		var players []*common.Player
+		if r.state.GetGamePhase() == common.PhasePlaying {
+			players = r.state.ListGamePlayers()
+		} else {
+			players = r.state.ListPlayers()
+		}
+		result := make([]map[string]any, 0, len(players))
 		for _, p := range players {
-			result = append(result, map[string]interface{}{
+			result = append(result, map[string]any{
 				"id":      p.ID,
 				"name":    p.Name,
 				"isAdmin": p.IsAdmin,
+			})
+		}
+		return result
+	})
+
+	r.vm.Set("teams", func() []map[string]any {
+		teams := r.state.GetTeams()
+		result := make([]map[string]any, 0, len(teams))
+		for _, t := range teams {
+			playerList := make([]any, len(t.Players))
+			for j, pid := range t.Players {
+				playerList[j] = pid
+			}
+			result = append(result, map[string]any{
+				"name":    t.Name,
+				"color":   t.Color,
+				"players": playerList,
 			})
 		}
 		return result
@@ -307,8 +294,11 @@ func (r *jsRuntime) extractGameObject() error {
 	r.statusBarFn = extractCallable(gameObj, "statusBar")
 	r.commandBarFn = extractCallable(gameObj, "commandBar")
 
-	// Lifecycle (all optional)
+	// init is mandatory
 	r.initFn = extractCallable(gameObj, "init")
+	if r.initFn == nil {
+		return fmt.Errorf("Game must define an init(savedState) function")
+	}
 
 	// Read gameName property (string, not callable)
 	if v := gameObj.Get("gameName"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {

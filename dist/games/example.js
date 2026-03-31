@@ -3,7 +3,6 @@
 
 var state = {
     players: {},
-    teams: [],
     tick: 0,
     maxTicks: 300,  // game lasts 30 seconds (300 ticks at 100ms)
     highScore: 0
@@ -15,23 +14,26 @@ var Game = {
     // Require 1-4 teams.
     teamRange: { min: 1, max: 4 },
 
-    // Called once after loading — receives teams, saved state, and player list.
-    init: function(config) {
-        state.teams = config.teams || [];
-        if (config.savedState && config.savedState.highScore) {
-            state.highScore = config.savedState.highScore;
+    // Custom splash screen (optional — omit to use the default).
+    splashScreen: "=== EXAMPLE ARENA ===\nMove with arrows, press Space to score\nGame lasts 30 seconds",
+
+    // Called once after loading with saved state from previous run (or null).
+    // Use the teams() and players() globals to query current teams and players.
+    init: function(savedState) {
+        if (savedState && savedState.highScore) {
+            state.highScore = savedState.highScore;
         }
-        log("Example init: " + state.teams.length + " teams, high score: " + state.highScore);
+        log("Example init: " + teams().length + " teams, high score: " + state.highScore);
     },
 
     onPlayerJoin: function(playerID, playerName) {
         // Find which team this player belongs to.
         var teamName = "none";
-        for (var i = 0; i < state.teams.length; i++) {
-            var t = state.teams[i];
-            for (var j = 0; j < t.players.length; j++) {
-                if (t.players[j] === playerID) {
-                    teamName = t.name;
+        var t = teams();
+        for (var i = 0; i < t.length; i++) {
+            for (var j = 0; j < t[i].players.length; j++) {
+                if (t[i].players[j] === playerID) {
+                    teamName = t[i].name;
                 }
             }
         }
@@ -114,9 +116,5 @@ var Game = {
 
     commandBar: function(playerID) {
         return "[arrow] Move  [Space] Score  [Enter] Chat";
-    },
-
-    // Custom splash screen (optional — omit to use the default).
-    // This is a string property, read once at load time.
-    splashScreen: "=== EXAMPLE ARENA ===\nMove with arrows, press Space to score\nGame lasts 30 seconds"
+    }
 };

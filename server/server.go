@@ -255,16 +255,13 @@ func (a *Server) registerSession(sess ssh.Session) *common.Player {
 	a.broadcastChat(joinMsg)
 	a.broadcastMsg(common.PlayerJoinedMsg{Player: player})
 
-	// Create a solo team for the new player in the lobby.
-	a.state.EnsurePlayerTeam(player.ID)
-	a.broadcastMsg(common.TeamUpdatedMsg{})
-
-	// Only notify the active game if we're in the playing phase.
-	// Late joiners during splash/playing/gameover go to lobby and wait.
-	phase := a.state.GetGamePhase()
-	if phase == common.PhasePlaying && a.state.ActiveGame != nil {
-		a.state.ActiveGame.OnPlayerJoin(player.ID, player.Name)
+	// If no game is running, create a solo team for the new player.
+	// During a game, late joiners stay unassigned and wait in the lobby.
+	if a.state.GetGamePhase() == common.PhaseNone {
+		a.state.EnsurePlayerTeam(player.ID)
+		a.broadcastMsg(common.TeamUpdatedMsg{})
 	}
+
 	plugins, _ := a.state.GetPlugins()
 	for _, p := range plugins {
 		p.OnPlayerJoin(player.ID, player.Name)
@@ -283,8 +280,8 @@ func (a *Server) unregisterSession(playerID string) {
 		a.broadcastChat(leaveMsg)
 	}
 
-	// notify active app and all plugins
-	if a.state.ActiveGame != nil {
+	// Only notify the game if this player was in the active game.
+	if a.state.ActiveGame != nil && a.state.IsGamePlayer(playerID) {
 		a.state.ActiveGame.OnPlayerLeave(playerID)
 	}
 	plugins, _ := a.state.GetPlugins()
@@ -508,17 +505,15 @@ func (a *Server) loadGame(path string) error {
 		a.serverLog(fmt.Sprintf("warning: could not load saved state: %v", err))
 	}
 
-	// Get current team configuration from lobby.
-	teams := a.state.GetTeams()
-
 	rt, err := LoadGame(path, a.state, a.serverLog, func(msg common.Message) {
 		a.broadcastChat(msg)
-	}, savedState, teams)
+	}, savedState)
 	if err != nil {
 		return err
 	}
 
 	// Validate team count against game's declared range.
+	teams := a.state.GetTeams()
 	tr := rt.TeamRange()
 	teamCount := len(teams)
 	if tr.Min > 0 && teamCount < tr.Min {
@@ -562,6 +557,15 @@ func (a *Server) splashTimer() {
 		a.state.mu.Unlock()
 		return
 	}
+
+	// Build the set of game players: everyone who is in a team.
+	gamePlayerIDs := make(map[string]bool)
+	for _, t := range a.state.Teams {
+		for _, id := range t.Players {
+			gamePlayerIDs[id] = true
+		}
+	}
+	a.state.GamePlayerIDs = gamePlayerIDs
 	a.state.GamePhase = common.PhasePlaying
 	game := a.state.ActiveGame
 	a.state.mu.Unlock()
@@ -569,11 +573,12 @@ func (a *Server) splashTimer() {
 	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhasePlaying})
 	a.serverLog("game started (playing)")
 
-	// Notify existing players now that game is playing.
+	// Notify game of all participating players.
 	if game != nil {
-		players := a.state.ListPlayers()
-		for _, p := range players {
-			game.OnPlayerJoin(p.ID, p.Name)
+		for id := range gamePlayerIDs {
+			if p := a.state.GetPlayer(id); p != nil {
+				game.OnPlayerJoin(p.ID, p.Name)
+			}
 		}
 	}
 }

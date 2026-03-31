@@ -53,17 +53,17 @@ LOBBY (teams + chat) → SPLASH → PLAYING → GAME OVER → LOBBY
 ```
 1. **Lobby**: Players configure teams, chat. Admin loads game with `/game load <name>`.
 2. **Splash**: Shows game splash screen (custom or default with game name). Admin presses Enter to start, or auto-starts after 10s.
-3. **Playing**: Normal game mode. Game calls `gameOver()` when done.
-4. **Game Over**: Shows game-over screen (custom or default scoreboard). All players press Enter or 15s auto-transition.
+3. **Playing**: Normal game mode. Game calls `gameOver(results, state)` when done. Only players who had teams at game start participate.
+4. **Game Over**: Framework renders ranked results screen. All players press Enter or 15s auto-transition.
 5. Back to **Lobby** — game unloaded, teams preserved for next round.
 
-Late joiners during any game phase see the lobby and can chat but don't join the active game.
+Late joiners during any game phase see the lobby and can chat but don't join the active game. Teams are locked while a game is running.
 
 ### Teams
-Players manage teams in the lobby panel (right side, 30% width). Each player starts in a solo team. Tab switches focus between chat and team panel. In team panel: Up/Down moves between teams, first player can Enter to rename and Left/Right to cycle color. Teams are passed to games via `init(config)`. Games can declare `teamRange: {min, max}` to enforce valid team counts.
+Players manage teams in the lobby panel (right side, 30% width). New players start unassigned (no team). Tab switches focus between chat and team panel. In team panel: Up/Down moves between teams, first player can Enter to rename and Left/Right to cycle color. Games can declare `teamRange: {min, max}` to enforce valid team counts. Teams are available to games via the `teams()` global function. Teams lock during a game — lobby waiters cannot modify them.
 
 ### State Persistence
-Games persist state by passing it as the second argument to `gameOver(results, state)`. On the next load, it's available via `config.savedState` in `init()`. State files are stored as JSON in `dist/state/<gamename>.json`.
+Games persist state by passing it as the second argument to `gameOver(results, state)`. On the next load, it's received as the argument to `init(savedState)`. State files are stored as JSON in `dist/state/<gamename>.json`.
 
 ### UI Layout
 
@@ -197,11 +197,11 @@ type Message struct {
 
 Both are single `.js` files in `dist/games/` or `dist/plugins/`. Loaded at runtime via `/game load <name>` / `/plugin load <name>`. A HTTPS URL can be given instead of a name — the file is downloaded and cached in `dist/games/.cache/` or `dist/plugins/.cache/`. GitHub blob URLs are converted to raw automatically.
 
-**Game** — exports a global `Game` object with hooks `onPlayerJoin`, `onPlayerLeave`, `onInput`, `view`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `splashScreen`. Optional `init(config)` called on load. Loaded one at a time; owns the viewport.
+**Game** — exports a global `Game` object with hooks `onPlayerJoin`, `onPlayerLeave`, `onInput`, `view`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `splashScreen`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport.
 
 **Plugin** — exports a global `Plugin` object with hooks `onChatMessage`, `onPlayerJoin`, `onPlayerLeave`. Multiple active simultaneously; persistent across game switches.
 
-**Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `players()`, `registerCommand()`, `gameOver(results, state)`.
+**Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `players()`, `teams()`, `registerCommand()`, `gameOver(results, state)`.
 
 The chat pipeline runs all active plugin `onChatMessage` hooks (in load order) before committing a message to history. Return `null` to drop.
 
