@@ -680,10 +680,10 @@ func (m chromeModel) viewLobby(_, _, _ lipgloss.Style, spinChar string) string {
 		teamCmdStyle = lipgloss.NewStyle().Background(lobbyTeamBarActiveBg).Foreground(lobbyTeamBarActiveFg)
 	}
 
-	// Status bar (split across panels).
+	// Status bar (split across panels). Spinner lives in the teams bar (far right).
 	statusText := fmt.Sprintf("null-space | %d players | uptime %s", m.app.state.PlayerCount(), m.app.uptime())
-	chatStatus := chatBarStyle.Width(chatW).Render(headerWithSpinner(statusText, chatW, spinChar))
-	teamStatus := teamBarStyle.Width(teamW).Render(truncateStyled(" Teams", teamW))
+	chatStatus := chatBarStyle.Width(chatW).Render(truncateStyled(statusText, chatW))
+	teamStatus := teamBarStyle.Width(teamW).Render(headerWithSpinner(" Teams", teamW, spinChar))
 	statusBar := chatStatus + teamStatus
 
 	// Content area.
