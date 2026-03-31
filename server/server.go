@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -162,38 +164,94 @@ func (a *Server) SetupPublicIP() string {
 // SetPort stores the SSH listen port so invite scripts can reference it.
 func (a *Server) SetPort(port string) { a.port = port }
 
-// InviteEndpoints returns a comma-separated list of host:port endpoints
-// that players can try in order (localhost → UPnP direct → Pinggy relay).
-func (a *Server) InviteEndpoints() string {
-	endpoints := []string{"localhost:" + a.port}
-
+// InviteToken returns a base64url-encoded binary token containing the server's
+// connection endpoints. The token is variable-length — trailing absent fields
+// are omitted to keep it short.
+//
+// Format:
+//
+//	Bytes 0–1:  SSH port (uint16 big-endian)
+//	Bytes 2–5:  LAN IP (4 bytes; 0.0.0.0 = absent) — reserved, currently always zero
+//	Bytes 6–9:  Public/UPnP IP (4 bytes; 0.0.0.0 = absent)
+//	Bytes 10–11: Pinggy port (uint16 big-endian; 0 = no Pinggy)
+//	Bytes 12+:  Pinggy hostname (UTF-8, remaining bytes)
+//
+// join.ps1 always tries localhost first (not encoded). Field presence is
+// determined by token length: ≥6 → LAN, ≥10 → public IP, ≥12 → Pinggy.
+func (a *Server) InviteToken() string {
 	a.state.mu.RLock()
 	n := a.state.Net
 	a.state.mu.RUnlock()
 
+	// Parse SSH port.
+	var sshPort uint16
+	if p, err := net.LookupPort("tcp", a.port); err == nil {
+		sshPort = uint16(p)
+	}
+
+	// Parse public IP if UPnP mapped.
+	var publicIP net.IP
 	if n.PublicIP != "" && n.UPnPMapped {
-		endpoints = append(endpoints, n.PublicIP+":"+a.port)
+		publicIP = net.ParseIP(n.PublicIP).To4()
 	}
+
+	// Parse Pinggy host:port.
+	var pinggyHost string
+	var pinggyPort uint16
 	if n.PinggyURL != "" {
-		host := n.PinggyURL
-		port := "22"
-		if idx := strings.LastIndex(host, ":"); idx >= 0 {
-			port = host[idx+1:]
-			host = host[:idx]
+		pinggyHost = n.PinggyURL
+		pp := "22"
+		if idx := strings.LastIndex(pinggyHost, ":"); idx >= 0 {
+			pp = pinggyHost[idx+1:]
+			pinggyHost = pinggyHost[:idx]
 		}
-		endpoints = append(endpoints, host+":"+port)
+		if p, err := net.LookupPort("tcp", pp); err == nil {
+			pinggyPort = uint16(p)
+		}
 	}
-	return strings.Join(endpoints, ",")
+
+	// Build variable-length token, trimming trailing absent fields.
+	buf := make([]byte, 2, 32)
+	binary.BigEndian.PutUint16(buf[0:2], sshPort)
+
+	// Determine how far we need to encode.
+	hasPinggy := pinggyPort != 0 && pinggyHost != ""
+	hasPublic := publicIP != nil
+	needLAN := hasPublic || hasPinggy // must include LAN placeholder if later fields exist
+
+	if needLAN || n.LANIP != "" {
+		lanIP := net.ParseIP(n.LANIP).To4()
+		if lanIP == nil {
+			lanIP = net.IPv4zero.To4()
+		}
+		buf = append(buf, lanIP...)
+	}
+
+	if hasPublic || hasPinggy {
+		if publicIP == nil {
+			publicIP = net.IPv4zero.To4()
+		}
+		buf = append(buf, publicIP...)
+	}
+
+	if hasPinggy {
+		pp := make([]byte, 2)
+		binary.BigEndian.PutUint16(pp, pinggyPort)
+		buf = append(buf, pp...)
+		buf = append(buf, []byte(pinggyHost)...)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
 const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/null-space/main/join.ps1"
 
 // InviteCommand returns a PowerShell one-liner that downloads join.ps1
-// from GitHub and runs it with the current server endpoints.
+// from GitHub and runs it with the compact binary token.
 func (a *Server) InviteCommand() string {
 	return fmt.Sprintf(
-		`powershell -c "$env:NS_ENDPOINTS='%s';irm %s|iex"`,
-		a.InviteEndpoints(), joinScriptURL,
+		`powershell -c "$env:NS='%s';irm %s|iex"`,
+		a.InviteToken(), joinScriptURL,
 	)
 }
 

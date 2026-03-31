@@ -287,10 +287,17 @@ The server console is always admin. SSH clients elevate via `/admin <password>`.
 
 Startup order: UPnP → Pinggy → generate invite script.
 
-The invite script is a PowerShell one-liner that tries in order:
-1. `localhost:<port>` — same machine
-2. `<UPnP public IP>:<port>` — direct internet
-3. Pinggy relay — always works, highest latency
+The invite command is a PowerShell one-liner: `powershell -c "$env:NS='<token>';irm <join.ps1 URL>|iex"`. The `NS` environment variable is a base64url-encoded binary token:
+
+| Bytes | Field | Notes |
+|-------|-------|-------|
+| 0–1 | SSH port (uint16 BE) | Shared by localhost, LAN, UPnP |
+| 2–5 | LAN IP (4 bytes) | `0.0.0.0` = absent |
+| 6–9 | Public/UPnP IP (4 bytes) | `0.0.0.0` = absent |
+| 10–11 | Pinggy port (uint16 BE) | `0` = no Pinggy |
+| 12+ | Pinggy hostname (UTF-8) | Remaining bytes |
+
+Variable-length: trailing absent fields are omitted. `join.ps1` always tries `localhost` first (not encoded). Field presence is determined by token length: ≥6 → LAN, ≥10 → public IP, ≥12 → Pinggy.
 
 Each attempt uses a short `ConnectTimeout`; falls through on failure.
 
