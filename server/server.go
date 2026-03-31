@@ -241,19 +241,10 @@ func (a *Server) inviteToken() string {
 
 const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/null-space/main/join.ps1"
 
-// InviteCommand returns a PowerShell one-liner that downloads join.ps1
-// from GitHub and runs it with the compact binary token.
-func (a *Server) inviteCommand() string {
-	return fmt.Sprintf(
-		`powershell -c "$env:NS='%s';irm %s|iex"`,
-		a.inviteToken(), joinScriptURL,
-	)
-}
-
-// inviteCommandDisplay returns the invite command formatted for terminal display.
+// inviteCommand returns the invite command formatted for terminal display.
 // It inserts PowerShell line continuation (backtick + newline) so the command can
 // be copied from a wrapped terminal and still paste as a single command.
-func (a *Server) inviteCommandDisplay() string {
+func (a *Server) inviteCommand() string {
 	return fmt.Sprintf(
 		"powershell -c `\n  \"$env:NS='%s';irm %s|iex\"",
 		a.inviteToken(), joinScriptURL,
@@ -262,7 +253,7 @@ func (a *Server) inviteCommandDisplay() string {
 
 // LogInviteCommand writes the current invite command to the server log.
 func (a *Server) LogInviteCommand() {
-	a.serverLog("Invite:\n" + a.inviteCommandDisplay())
+	a.serverLog("Invite:\n" + a.inviteCommand())
 }
 
 func (a *Server) sessionMiddleware() wish.Middleware {
@@ -774,7 +765,7 @@ func (a *Server) registerBuiltins() {
 		Name:        "invite",
 		Description: "Show the shareable join command for this server",
 		Handler: func(ctx common.CommandContext, args []string) {
-			ctx.Reply(a.inviteCommandDisplay())
+			ctx.Reply(a.inviteCommand())
 		},
 	})
 
