@@ -724,18 +724,20 @@ func (a *Server) unloadGame() {
 
 	a.state.mu.Lock()
 	game := a.state.ActiveGame
+	if game == nil {
+		a.state.mu.Unlock()
+		return // already unloaded
+	}
 	a.state.ActiveGame = nil
 	a.state.GameName = ""
 	a.state.GamePhase = common.PhaseNone
 	a.state.GameOverReady = nil
 	a.state.mu.Unlock()
 
-	if game != nil {
-		for _, cmd := range game.Commands() {
-			a.registry.Unregister(cmd.Name)
-		}
-		game.Unload()
+	for _, cmd := range game.Commands() {
+		a.registry.Unregister(cmd.Name)
 	}
+	game.Unload()
 
 	a.broadcastMsg(common.GameUnloadedMsg{})
 	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhaseNone})
