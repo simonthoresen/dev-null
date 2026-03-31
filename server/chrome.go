@@ -619,7 +619,7 @@ func (m chromeModel) View() tea.View {
 
 	view.SetContent(content)
 	view.AltScreen = true
-	view.BackgroundColor = col.chatBg // fill alt screen with chat bg
+	view.BackgroundColor = col.chatBg
 	if m.mode == modeInput {
 		if cursor := m.input.Cursor(); cursor != nil {
 			cursor.Position.Y = m.height - 1
