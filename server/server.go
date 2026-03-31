@@ -341,6 +341,21 @@ func (a *Server) checkGameOver() {
 		return
 	}
 
+	// Save state if the game passed one as the second arg to gameOver().
+	gameOverState := rt.GameOverStateExport()
+
+	a.state.mu.RLock()
+	gameName := a.state.GameName
+	a.state.mu.RUnlock()
+
+	if gameOverState != nil {
+		if err := saveGameState(a.dataDir, gameName, gameOverState); err != nil {
+			a.serverLog(fmt.Sprintf("warning: could not save game state: %v", err))
+		} else {
+			a.serverLog(fmt.Sprintf("game state saved: %s", gameName))
+		}
+	}
+
 	a.state.SetGamePhase(common.PhaseGameOver)
 	a.state.mu.Lock()
 	a.state.GameOverResults = rt.GameOverResults()
@@ -594,7 +609,6 @@ func (a *Server) unloadGame() {
 
 	a.state.mu.Lock()
 	game := a.state.ActiveGame
-	gameName := a.state.GameName
 	a.state.ActiveGame = nil
 	a.state.GameName = ""
 	a.state.GamePhase = common.PhaseNone
@@ -602,16 +616,6 @@ func (a *Server) unloadGame() {
 	a.state.mu.Unlock()
 
 	if game != nil {
-		// Persist state before unloading.
-		if lc, ok := game.(common.GameLifecycle); ok {
-			if state := lc.SaveState(); state != nil {
-				if err := saveGameState(a.dataDir, gameName, state); err != nil {
-					a.serverLog(fmt.Sprintf("warning: could not save game state: %v", err))
-				} else {
-					a.serverLog(fmt.Sprintf("game state saved: %s", gameName))
-				}
-			}
-		}
 		for _, cmd := range game.Commands() {
 			a.registry.Unregister(cmd.Name)
 		}

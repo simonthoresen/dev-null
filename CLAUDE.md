@@ -63,7 +63,7 @@ Late joiners during any game phase see the lobby and can chat but don't join the
 Players manage teams in the lobby panel (right side, 30% width). Each player starts in a solo team. Tab switches focus between chat and team panel. In team panel: Up/Down moves between teams, first player can Enter to rename and Left/Right to cycle color. Teams are passed to games via `init(config)`. Games can declare `teamRange: {min, max}` to enforce valid team counts.
 
 ### State Persistence
-Games can persist state between runs via `saveState()` and `init(config.savedState)`. State files are stored as JSON in `dist/state/<gamename>.json`.
+Games persist state by passing it as the second argument to `gameOver(results, state)`. On the next load, it's available via `config.savedState` in `init()`. State files are stored as JSON in `dist/state/<gamename>.json`.
 
 ### UI Layout
 
@@ -149,7 +149,6 @@ type GameLifecycle interface {
     GameName() string                      // display name (fallback: filename stem)
     TeamRange() TeamRange                  // {Min, Max} — zero = no constraint
     SplashScreen(width, height int) string // custom splash screen
-    SaveState() any                        // state to persist between runs
     Init(config map[string]any)            // called after load with teams, savedState, players
 }
 ```
@@ -157,7 +156,7 @@ type GameLifecycle interface {
 
 ### Game Over
 
-Games call `gameOver(results)` where `results` is an array of `{ name, result }` in ranked order. The framework renders the game-over screen — games don't need to provide their own. `name` is the display name (player or team). `result` is a freeform string (e.g. `"4200 pts"`, `"1st"`, `"DNF"`). Calling `gameOver()` with no argument shows just the "GAME OVER" title.
+Games call `gameOver(results, state)` where `results` is an array of `{ name, result }` in ranked order and `state` is an optional object to persist for the next run. The framework renders the game-over screen — games don't need to provide their own. `name` is the display name (player or team). `result` is a freeform string (e.g. `"4200 pts"`, `"1st"`, `"DNF"`). Both arguments are optional. State is received via `config.savedState` in `init()` on the next load.
 
 ### The `Plugin` Interface
 ```go
@@ -205,11 +204,11 @@ type Message struct {
 
 Both are single `.js` files in `dist/games/` or `dist/plugins/`. Loaded at runtime via `/game load <name>` / `/plugin load <name>`. A HTTPS URL can be given instead of a name — the file is downloaded and cached in `dist/games/.cache/` or `dist/plugins/.cache/`. GitHub blob URLs are converted to raw automatically.
 
-**Game** — exports a global `Game` object with hooks `onPlayerJoin`, `onPlayerLeave`, `onInput`, `view`, `statusBar`, `commandBar`. Optional lifecycle hooks: `gameName`, `teamRange`, `init`, `splashScreen`, `saveState`. Loaded one at a time; owns the viewport.
+**Game** — exports a global `Game` object with hooks `onPlayerJoin`, `onPlayerLeave`, `onInput`, `view`, `statusBar`, `commandBar`. Optional lifecycle hooks: `gameName`, `teamRange`, `init`, `splashScreen`. Loaded one at a time; owns the viewport.
 
 **Plugin** — exports a global `Plugin` object with hooks `onChatMessage`, `onPlayerJoin`, `onPlayerLeave`. Multiple active simultaneously; persistent across game switches.
 
-**Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `players()`, `registerCommand()`, `gameOver()` / `gameOver(results)`.
+**Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `players()`, `registerCommand()`, `gameOver(results, state)`.
 
 The chat pipeline runs all active plugin `onChatMessage` hooks (in load order) before committing a message to history. Return `null` to drop.
 

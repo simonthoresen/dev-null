@@ -102,12 +102,6 @@ var Game = {
     // renders the game name centered in a box.
     splashScreen: function(width, height) {
         return "";
-    },
-
-    // Return an object to persist between game runs. Saved to dist/state/<gamename>.json.
-    // Called on game over and on manual unload. Null/undefined = nothing saved.
-    saveState: function() {
-        return { highScores: [] };
     }
 };
 ```
@@ -281,6 +275,7 @@ These are available in both games and plugins.
 | `registerCommand(spec)` | Registers a slash command. See below. |
 | `gameOver()` | Signals that the game has ended. Transitions to the game-over screen. |
 | `gameOver(results)` | Same as above, with ranked results displayed on the game-over screen. `results` is an array of `{ name, result }` in ranked order. `name` is the display name (player or team). `result` is a freeform string (e.g. `"4200 pts"`, `"1st"`, `"DNF"`). |
+| `gameOver(results, state)` | Same as above, plus persists `state` to `dist/state/<gamename>.json` for the next run. Received via `config.savedState` in `init()`. |
 
 ### `registerCommand(spec)`
 
@@ -373,7 +368,7 @@ The framework blocks loading if the lobby has too few or too many teams.
 
 Games can persist data between runs. Saved state is stored as JSON in `dist/state/<gamename>.json`.
 
-**Saving**: Return data from `saveState()`. Called automatically on game unload.
+**Saving**: Pass state as the second argument to `gameOver(results, state)`. Only saved when the game ends naturally — manual `/game unload` does not persist state.
 
 **Loading**: Receive previous state in `init(config)` via `config.savedState` (null on first run).
 

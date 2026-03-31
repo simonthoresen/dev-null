@@ -67,13 +67,12 @@ type jsRuntime struct {
 	gameNameProp       string // read from Game.gameName property
 	teamRangeProp      common.TeamRange // read from Game.teamRange property
 	splashScreenFn     goja.Callable
-	saveStateFn        goja.Callable
 	initFn             goja.Callable
 
 	// gameOver() callback state — set by JS, detected by tick loop
 	gameOverPending bool
 	gameOverResults []common.GameResult // results passed to gameOver()
-	gameOverFn      func(state goja.Value) // callback set by server to handle gameOver
+	gameOverState   goja.Value          // state argument passed as second arg to gameOver()
 }
 
 // LoadGame loads and executes a JS file from games/, extracts the Game object
@@ -191,6 +190,9 @@ func (r *jsRuntime) registerGlobals() {
 	r.vm.Set("gameOver", func(call goja.FunctionCall) goja.Value {
 		r.gameOverPending = true
 		r.gameOverResults = nil
+		r.gameOverState = nil
+
+		// First arg: results array [{name, result}, ...]
 		if len(call.Arguments) > 0 {
 			arg := call.Argument(0)
 			if arg != nil && !goja.IsUndefined(arg) && !goja.IsNull(arg) {
@@ -217,6 +219,12 @@ func (r *jsRuntime) registerGlobals() {
 				}
 			}
 		}
+
+		// Second arg: state to persist
+		if len(call.Arguments) > 1 {
+			r.gameOverState = call.Argument(1)
+		}
+
 		return goja.Undefined()
 	})
 
@@ -299,7 +307,6 @@ func (r *jsRuntime) extractGameObject() error {
 
 	// Lifecycle methods (all optional)
 	r.splashScreenFn = extractCallable(gameObj, "splashScreen")
-	r.saveStateFn = extractCallable(gameObj, "saveState")
 	r.initFn = extractCallable(gameObj, "init")
 
 	// Read gameName property (string, not callable)
@@ -472,27 +479,6 @@ func (r *jsRuntime) SplashScreen(width, height int) string {
 	return val.String()
 }
 
-func (r *jsRuntime) SaveState() any {
-	if r.saveStateFn == nil {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	defer r.recoverJS("SaveState")
-	defer traceJS(r.vm, "SaveState")()
-	cancel := watchdogJS(r.vm, "SaveState")
-	defer cancel()
-	val, err := r.saveStateFn(goja.Undefined())
-	if err != nil {
-		slog.Error("JS SaveState error", "error", err)
-		return nil
-	}
-	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
-		return nil
-	}
-	return val.Export()
-}
-
 func (r *jsRuntime) Init(config map[string]any) {
 	// Init is called from LoadGame directly, not through this method.
 	// This satisfies the interface but is not used directly.
@@ -514,6 +500,16 @@ func (r *jsRuntime) GameOverResults() []common.GameResult {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.gameOverResults
+}
+
+// GameOverStateExport returns the state object passed as the second arg to gameOver().
+func (r *jsRuntime) GameOverStateExport() any {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.gameOverState == nil || goja.IsUndefined(r.gameOverState) || goja.IsNull(r.gameOverState) {
+		return nil
+	}
+	return r.gameOverState.Export()
 }
 
 func (r *jsRuntime) recoverJS(method string) {

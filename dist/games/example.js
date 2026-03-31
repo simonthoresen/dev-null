@@ -81,7 +81,7 @@ var Game = {
             results.sort(function(a, b) {
                 return parseInt(b.result) - parseInt(a.result);
             });
-            gameOver(results);
+            gameOver(results, { highScore: state.highScore });
         }
 
         var me = state.players[playerID];
@@ -145,11 +145,6 @@ var Game = {
             }
         }
         return lines.join("\n");
-    },
-
-    // Persist high score between runs.
-    saveState: function() {
-        return { highScore: state.highScore };
     }
 };
 
