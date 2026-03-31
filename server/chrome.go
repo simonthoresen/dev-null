@@ -637,8 +637,9 @@ func (m chromeModel) View() tea.View {
 			idx := m.app.state.PlayerTeamIndex(m.playerID)
 			row := 1 + len(unassigned) // "Unassigned" header + player rows
 			for i := 0; i < idx && i < len(teams); i++ {
-				row += 1 + len(teams[i].Players) // team header + members (no blank separator)
+				row += 1 + 1 + len(teams[i].Players) // separator + team header + members
 			}
+			row += 1 // separator before current team
 			cursor.Position.Y = 1 + row // +1 for status bar
 			cursor.Position.X += (m.width - teamW) + 5 // +1 for border │
 			view.Cursor = cursor
@@ -863,10 +864,12 @@ func (m chromeModel) renderTeamPanel(width, height int, baseStyle lipgloss.Style
 
 	blank := strings.Repeat(" ", width)
 	blankLine := baseStyle.Width(width).Render(blank)
+	// Separator between sections: a thin line with visible foreground chars.
+	// Pure blank rows trigger a CR+LF cursor bug in the ultraviolet renderer
+	// over SSH, so we use a dim line instead.
+	sepLine := baseStyle.Faint(true).Width(width).Render(strings.Repeat("─", width))
 	for i, team := range teams {
-		// No blank separator — the color block on team headers provides
-		// enough visual distinction, and blank rows trigger a cursor
-		// positioning bug in the ultraviolet renderer over SSH.
+		lines = append(lines, sepLine)
 		block := colorSwatch(lipgloss.Color(team.Color), bg)
 		nameText := fmt.Sprintf(" %s %s", block, team.Name)
 		if m.teamEditing && i == myTeamIdx {
