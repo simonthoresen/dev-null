@@ -799,3 +799,134 @@ func (h *discardHandler) Handle(_ context.Context, _ slog.Record) error { return
 func (h *discardHandler) WithAttrs(_ []slog.Attr) slog.Handler         { return h }
 func (h *discardHandler) WithGroup(_ string) slog.Handler               { return h }
 
+// TestAboutDialogClickDetection verifies that renderDialog and handleDialogClick
+// agree on the dialog position and button row, so clicking OK actually works.
+func TestAboutDialogClickDetection(t *testing.T) {
+	o := overlayState{openMenu: -1}
+	body := aboutLogo()
+	o.pushDialog(common.DialogRequest{
+		Title:   "About",
+		Body:    body,
+		Buttons: []string{"OK"},
+	})
+
+	screenW, screenH := 120, 30
+	pal := testTheme().PaletteAt(2)
+	th := testTheme()
+
+	// Get the rendered dialog position.
+	dlgStr, renderCol, renderRow := o.renderDialog(screenW, screenH, pal, th)
+	if dlgStr == "" {
+		t.Fatal("renderDialog returned empty string")
+	}
+	dlgLines := strings.Split(dlgStr, "\n")
+	t.Logf("renderDialog: col=%d row=%d lines=%d", renderCol, renderRow, len(dlgLines))
+
+	// Find the button row in the rendered output (look for "[ OK ]").
+	renderBtnRow := -1
+	for i, line := range dlgLines {
+		if strings.Contains(stripANSI(line), "[ OK ]") {
+			renderBtnRow = renderRow + i
+			t.Logf("OK button rendered at screen row %d (line %d of dialog)", renderBtnRow, i)
+			break
+		}
+	}
+	if renderBtnRow < 0 {
+		t.Fatal("could not find [ OK ] in rendered dialog")
+	}
+
+	// Now simulate clicking on the OK button.
+	// Find the X position of "[ OK ]" in the rendered button row line.
+	btnLineIdx := renderBtnRow - renderRow
+	btnLine := stripANSI(dlgLines[btnLineIdx])
+	btnX := strings.Index(btnLine, "[ OK ]")
+	if btnX < 0 {
+		t.Fatal("could not find [ OK ] in button line")
+	}
+	clickX := renderCol + btnX + 1 // +1 to be inside the button
+	clickY := renderBtnRow
+
+	t.Logf("clicking at (%d, %d) to hit OK button", clickX, clickY)
+
+	// The click should dismiss the dialog.
+	consumed := o.handleDialogClick(clickX, clickY, screenW, screenH)
+	if !consumed {
+		t.Error("click on OK button was not consumed")
+	}
+	if o.hasDialog() {
+		t.Error("dialog should have been dismissed after clicking OK, but it's still open")
+	}
+}
+
+// TestDialogClickMultiButton verifies click detection for multi-button dialogs.
+func TestDialogClickMultiButton(t *testing.T) {
+	o := overlayState{openMenu: -1}
+	var clicked string
+	o.pushDialog(common.DialogRequest{
+		Title:   "Confirm",
+		Body:    "Are you sure?",
+		Buttons: []string{"Yes", "No", "Cancel"},
+		OnClose: func(btn string) { clicked = btn },
+	})
+
+	screenW, screenH := 80, 24
+	pal := testTheme().PaletteAt(2)
+	th := testTheme()
+
+	// Render to find button positions.
+	dlgStr, renderCol, renderRow := o.renderDialog(screenW, screenH, pal, th)
+	dlgLines := strings.Split(dlgStr, "\n")
+
+	// Find button row.
+	btnRowIdx := -1
+	for i, line := range dlgLines {
+		if strings.Contains(stripANSI(line), "[ Yes ]") {
+			btnRowIdx = i
+			break
+		}
+	}
+	if btnRowIdx < 0 {
+		t.Fatal("could not find buttons in rendered dialog")
+	}
+
+	btnLine := stripANSI(dlgLines[btnRowIdx])
+	clickY := renderRow + btnRowIdx
+
+	// Click "No" button.
+	noX := strings.Index(btnLine, "[ No ]")
+	if noX < 0 {
+		t.Fatal("could not find [ No ] in button line")
+	}
+	o.handleDialogClick(renderCol+noX+1, clickY, screenW, screenH)
+	if o.hasDialog() {
+		t.Error("dialog should be dismissed after clicking No")
+	}
+	if clicked != "No" {
+		t.Errorf("expected OnClose('No'), got %q", clicked)
+	}
+}
+
+// TestAboutDialogKeyDismiss verifies that pressing Enter closes the About dialog.
+func TestAboutDialogKeyDismiss(t *testing.T) {
+	o := overlayState{openMenu: -1}
+	body := aboutLogo()
+	o.pushDialog(common.DialogRequest{
+		Title:   "About",
+		Body:    body,
+		Buttons: []string{"OK"},
+	})
+
+	if !o.hasDialog() {
+		t.Fatal("dialog should be open")
+	}
+
+	// Press Enter to close.
+	consumed := o.handleDialogKey("enter")
+	if !consumed {
+		t.Error("enter should be consumed by dialog")
+	}
+	if o.hasDialog() {
+		t.Error("dialog should be dismissed after Enter")
+	}
+}
+

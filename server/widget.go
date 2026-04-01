@@ -420,8 +420,9 @@ func (o *overlayState) handleDialogClick(x, y, screenW, screenH int) bool {
 		innerW = 22
 	}
 
-	totalW := innerW + 2 + 1 // box + shadow
-	totalH := 3 + len(bodyLines) + 3 + 1 // top + title + sep + body + sep + buttons + bottom + shadow
+	// Must match renderDialog's calculation exactly (no shadow offset).
+	totalW := innerW + 2
+	totalH := 3 + len(bodyLines) + 3 // top + title + sep + body + sep + buttons + bottom
 	col := (screenW - totalW) / 2
 	row := (screenH - totalH) / 2
 	if row < 2 {
@@ -450,10 +451,10 @@ func (o *overlayState) handleDialogClick(x, y, screenW, screenH int) bool {
 		}
 	}
 
-	// Any click inside the dialog area consumes the event (don't pass through)
+	// Any click inside the dialog area (including shadow) consumes the event.
 	relX := x - col
 	relY := y - row
-	return relX >= 0 && relX < totalW && relY >= 0 && relY < totalH
+	return relX >= 0 && relX < totalW+1 && relY >= 0 && relY < totalH+1
 }
 
 // ─── Selectable-item helpers ───────────────────────────────────────────────────
