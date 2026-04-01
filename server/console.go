@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
@@ -13,13 +14,11 @@ import (
 	"null-space/common"
 )
 
-// Console uses the same lobby palettes: blue for server log, warm for chat.
+// Console uses the same lobby palettes: blue for the menu/status bars, warm for log body.
 var (
-	consoleLogBarStyle  = lipgloss.NewStyle().Background(lobbyTeamBarActiveBg).Foreground(lobbyTeamBarActiveFg).Bold(true)
-	consoleLogBodyStyle = lipgloss.NewStyle().Background(lobbyTeamActiveBg).Foreground(lobbyTeamFg)
-	consoleChatBarStyle = lipgloss.NewStyle().Background(lobbyChatBarActiveBg).Foreground(lobbyChatBarActiveFg).Bold(true)
-	consoleChatStyle    = lipgloss.NewStyle().Background(lobbyChatActiveBg).Foreground(lobbyChatFg)
-	consoleCmdStyle     = lipgloss.NewStyle().Background(lobbyChatBarActiveBg).Foreground(lobbyChatBarActiveFg)
+	consoleMenuStyle = lipgloss.NewStyle().Background(lobbyTeamBarActiveBg).Foreground(lobbyTeamBarActiveFg).Bold(true)
+	consoleLogStyle  = lipgloss.NewStyle().Background(lobbyTeamActiveBg).Foreground(lobbyTeamFg)
+	consoleCmdStyle  = lipgloss.NewStyle().Background(lobbyChatBarActiveBg).Foreground(lobbyChatBarActiveFg)
 )
 
 type consoleModel struct {
@@ -28,12 +27,10 @@ type consoleModel struct {
 	width  int
 	height int
 
-	logs  viewport.Model
-	chat  viewport.Model
+	log  viewport.Model
 	input textinput.Model
 
-	logLines  []string
-	chatLines []string
+	logLines []string
 
 	inputHistory []string
 	historyIdx   int
@@ -45,13 +42,9 @@ type consoleModel struct {
 }
 
 func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
-	logs := viewport.New(viewport.WithWidth(80), viewport.WithHeight(8))
-	logs.SoftWrap = true
-	logs.MouseWheelEnabled = false
-
-	chat := viewport.New(viewport.WithWidth(80), viewport.WithHeight(8))
-	chat.SoftWrap = true
-	chat.MouseWheelEnabled = false
+	log := viewport.New(viewport.WithWidth(80), viewport.WithHeight(20))
+	log.SoftWrap = true
+	log.MouseWheelEnabled = false
 
 	input := textinput.New()
 	input.Prompt = "> "
@@ -63,8 +56,7 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	return &consoleModel{
 		app:        app,
 		cancel:     cancel,
-		logs:       logs,
-		chat:       chat,
+		log:        log,
 		input:      input,
 		historyIdx: -1,
 	}
@@ -78,22 +70,17 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = max(40, msg.Width)
-		m.height = max(12, msg.Height)
+		m.height = max(6, msg.Height)
 		m.app.consoleWidth = m.width
 		m.resize()
 		return m, nil
 
 	case common.TickMsg:
-		// re-render for spinner update
+		// re-render for spinner and clock update
 		return m, nil
 
 	case logLineMsg:
-		m.logLines = append(m.logLines, string(msg))
-		if len(m.logLines) > 500 {
-			m.logLines = m.logLines[len(m.logLines)-500:]
-		}
-		m.logs.SetContent(strings.Join(m.logLines, "\n"))
-		m.logs.GotoBottom()
+		m.appendLog(string(msg))
 		return m, listenForLogs(m.app.LogCh(), m.app.ChatCh())
 
 	case chatLineMsg:
@@ -123,16 +110,10 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			line = fmt.Sprintf("<%s> %s", chatMsg.Author, chatMsg.Text)
 		}
-		m.chatLines = append(m.chatLines, line)
-		if len(m.chatLines) > 500 {
-			m.chatLines = m.chatLines[len(m.chatLines)-500:]
-		}
-		m.chat.SetContent(strings.Join(m.chatLines, "\n"))
-		m.chat.GotoBottom()
+		m.appendLog(line)
 		return m, listenForLogs(m.app.LogCh(), m.app.ChatCh())
 
 	case common.GamePhaseMsg, common.GameLoadedMsg, common.GameUnloadedMsg, common.TeamUpdatedMsg, common.PlayerJoinedMsg, common.PlayerLeftMsg:
-		// These trigger re-render (status bar updates with phase/player count).
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -142,6 +123,12 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cancel()
 			}
 			return m, tea.Quit
+		case "pgup":
+			m.log.PageUp()
+			return m, nil
+		case "pgdown":
+			m.log.PageDown()
+			return m, nil
 		case "enter":
 			m.tabCandidates = nil
 			m.historyIdx = -1
@@ -221,7 +208,7 @@ func (m *consoleModel) View() tea.View {
 	spinChar := string(m.app.state.SpinnerChar())
 	m.app.state.mu.RUnlock()
 
-	gameLabel := "(none)"
+	gameLabel := "none"
 	if gameName != "" {
 		gameLabel = gameName
 		switch phase {
@@ -234,37 +221,43 @@ func (m *consoleModel) View() tea.View {
 		}
 	}
 
-	// Layout: log title bar + log body + chat title bar + chat body + input bar
-	availH := max(6, m.height-3) // 2 title bars + input bar
-	logsH := max(3, availH/2)
-	chatH := max(3, availH-logsH)
+	menuTitle := fmt.Sprintf("null-space | game: %s | teams: %d | uptime %s", gameLabel, m.app.state.TeamCount(), m.app.uptime())
+	menuBar := consoleMenuStyle.Width(m.width).Render(headerWithSpinner(menuTitle, m.width, spinChar))
 
-	logTitle := fmt.Sprintf("null-space | game: %s | teams: %d | uptime %s", gameLabel, m.app.state.TeamCount(), m.app.uptime())
-	logsBar := consoleLogBarStyle.Width(m.width).Render(headerWithSpinner(logTitle, m.width, spinChar))
-	logsView := fitStyledBlock(m.logs.View(), m.width, logsH, consoleLogBodyStyle)
-
-	chatTitle := fmt.Sprintf("Chat (%d players online)", m.app.state.PlayerCount())
-	chatBar := consoleChatBarStyle.Width(m.width).Render(truncateStyled(chatTitle, m.width))
-	chatView := fitStyledBlock(m.chat.View(), m.width, chatH, consoleChatStyle)
+	logView := fitStyledBlock(m.log.View(), m.width, m.log.Height(), consoleLogStyle)
 
 	setInputStyle(&m.input, lobbyChatBarActiveBg, lobbyChatBarActiveFg)
-	inputView := truncateStyled(m.input.View(), m.width)
+	cmdBar := consoleCmdStyle.Width(m.width).Render(truncateStyled(m.input.View(), m.width))
 
-	view.SetContent(lipgloss.JoinVertical(lipgloss.Left, logsBar, logsView, chatBar, chatView, inputView))
+	statusBar := consoleMenuStyle.Width(m.width).Align(lipgloss.Right).Render(time.Now().Format("2006-01-02 15:04"))
+
+	view.SetContent(lipgloss.JoinVertical(lipgloss.Left, menuBar, logView, cmdBar, statusBar))
 	view.AltScreen = true
+
+	if cursor := m.input.Cursor(); cursor != nil {
+		cursor.Position.Y = m.height - 2
+		view.Cursor = cursor
+	}
+
 	return view
 }
 
 func (m *consoleModel) resize() {
-	availH := max(6, m.height-3) // 2 title bars + input bar
-	logsH := max(3, availH/2)
-	chatH := max(3, availH-logsH)
-
-	m.logs.SetWidth(m.width)
-	m.logs.SetHeight(logsH)
-	m.chat.SetWidth(m.width)
-	m.chat.SetHeight(chatH)
+	logH := max(1, m.height-3) // menu bar + command bar + status bar
+	m.log.SetWidth(m.width)
+	m.log.SetHeight(logH)
 	m.input.SetWidth(max(1, m.width-2))
+}
+
+func (m *consoleModel) appendLog(line string) {
+	for _, l := range strings.Split(line, "\n") {
+		m.logLines = append(m.logLines, l)
+	}
+	if len(m.logLines) > 500 {
+		m.logLines = m.logLines[len(m.logLines)-500:]
+	}
+	m.log.SetContent(strings.Join(m.logLines, "\n"))
+	m.log.GotoBottom()
 }
 
 func (m *consoleModel) submitInput() {
@@ -283,17 +276,13 @@ func (m *consoleModel) submitInput() {
 		PlayerID: "", // console = admin
 		IsAdmin:  true,
 		Reply: func(s string) {
-			m.chatLines = append(m.chatLines, s)
-			m.chat.SetContent(strings.Join(m.chatLines, "\n"))
-			m.chat.GotoBottom()
+			m.appendLog(s)
 		},
 		Broadcast: func(s string) {
 			m.app.broadcastChat(common.Message{Text: s})
 		},
 		ServerLog: func(s string) {
-			m.logLines = append(m.logLines, s)
-			m.logs.SetContent(strings.Join(m.logLines, "\n"))
-			m.logs.GotoBottom()
+			m.appendLog(s)
 		},
 	}
 	if strings.HasPrefix(text, "/") {

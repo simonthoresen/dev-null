@@ -278,19 +278,20 @@ Initiating shutdown ........................................ [ DONE ]  ← Go
 Shutting down network ...................................... [ SKIP ]  ← Go
 ```
 
-### Phase 2 — Console UI (2-panel)
+### Phase 2 — Console UI
 
 ```
 ┌─────────────────────────────────────┐
-│ Status bar (1 row)                  │  "null-space | game: none | uptime 00:42 ⠹"  ← console keeps spinner
+│ Menu bar (1 row, with spinner)      │  "null-space | game: none | teams: 0 | uptime 00:42 ⠹"
 ├─────────────────────────────────────┤
-│ Server log (top half, scrollable)   │  internal log lines; never sent to players
+│                                     │
+│ Log (scrollable, fills height)      │  slog lines + all chat (global + private)
+│                                     │  PgUp/PgDn to scroll
+│                                     │
 ├─────────────────────────────────────┤
-│ Chat label (1 row)                  │  "Chat (N players online)"
+│ Command bar (1 row)                 │  '/' = command; plain text = chat as [admin]
 ├─────────────────────────────────────┤
-│ Chat view (bottom half, scrollable) │  all messages; private prefixed "[PM a→b]"
-├─────────────────────────────────────┤
-│ Admin input (1 row)                 │  '/' = command; plain text = chat as [admin]
+│ Status bar (1 row)                  │  server time right-aligned
 └─────────────────────────────────────┘
 ```
 
