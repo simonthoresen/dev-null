@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
-	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -21,7 +20,6 @@ type consoleModel struct {
 	width  int
 	height int
 
-	log   viewport.Model
 	input textinput.Model
 
 	logLines []string
@@ -46,10 +44,6 @@ type consoleModel struct {
 }
 
 func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
-	log := viewport.New(viewport.WithWidth(80), viewport.WithHeight(20))
-	log.SoftWrap = true
-	log.MouseWheelEnabled = false
-
 	input := textinput.New()
 	input.Prompt = "> "
 	input.Placeholder = ""
@@ -60,7 +54,6 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	return &consoleModel{
 		app:        app,
 		cancel:     cancel,
-		log:        log,
 		input:      input,
 		theme:      DefaultTheme(),
 		overlay:    overlayState{openMenu: -1},
@@ -159,12 +152,6 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cancel()
 			}
 			return m, tea.Quit
-		case "pgup":
-			m.log.PageUp()
-			return m, nil
-		case "pgdown":
-			m.log.PageDown()
-			return m, nil
 		case "enter":
 			m.tabCandidates = nil
 			m.historyIdx = -1
@@ -263,13 +250,34 @@ func (m *consoleModel) View() tea.View {
 	// NC action bar (row 0)
 	ncBar := m.overlay.renderNCBar(m.width, m.consoleMenus(), t)
 
-	// Status info bar (row 1)
+	// Log area — grows from bottom up (most recent lines at the bottom,
+	// empty space at the top when there are fewer lines than the area height).
+	logH := m.logHeight()
+	var logRows []string
+	n := len(m.logLines)
+	if n >= logH {
+		logRows = m.logLines[n-logH:]
+	} else {
+		// Pad with empty lines at the top.
+		for i := 0; i < logH-n; i++ {
+			logRows = append(logRows, "")
+		}
+		logRows = append(logRows, m.logLines...)
+	}
+	var logView string
+	for _, line := range logRows {
+		logView += logStyle.Width(m.width).Render(truncateStyled(line, m.width)) + "\n"
+	}
+	logView = strings.TrimRight(logView, "\n")
+
+	// Command input bar
+	cmdBar := cmdStyle.Width(m.width).Render(truncateStyled(m.input.View(), m.width))
+
+	// Bottom status bar
 	m.app.state.mu.RLock()
 	gameName := m.app.state.GameName
 	phase := m.app.state.GamePhase
-	spinChar := string(m.app.state.SpinnerChar())
 	m.app.state.mu.RUnlock()
-
 	gameLabel := "none"
 	if gameName != "" {
 		gameLabel = gameName
@@ -282,20 +290,10 @@ func (m *consoleModel) View() tea.View {
 			gameLabel += " [game over]"
 		}
 	}
+	statusText := fmt.Sprintf("game: %s | teams: %d | uptime %s | %s", gameLabel, m.app.state.TeamCount(), m.app.uptime(), time.Now().Format("15:04:05"))
+	bottomBar := mbStyle.Width(m.width).Render(truncateStyled(statusText, m.width))
 
-	statusTitle := fmt.Sprintf("game: %s | teams: %d | uptime %s", gameLabel, m.app.state.TeamCount(), m.app.uptime())
-	statusBar := mbStyle.Width(m.width).Render(headerWithSpinner(statusTitle, m.width, spinChar))
-
-	// Log viewport
-	logView := fitStyledBlock(m.log.View(), m.width, m.log.Height(), logStyle)
-
-	// Command input bar
-	cmdBar := cmdStyle.Width(m.width).Render(truncateStyled(m.input.View(), m.width))
-
-	// Bottom status bar
-	bottomBar := mbStyle.Width(m.width).Align(lipgloss.Right).Render(time.Now().Format("2006-01-02 15:04:05"))
-
-	content := lipgloss.JoinVertical(lipgloss.Left, ncBar, statusBar, logView, cmdBar, bottomBar)
+	content := lipgloss.JoinVertical(lipgloss.Left, ncBar, logView, cmdBar, bottomBar)
 
 	// Overlay layers (dropdown menus, dialogs)
 	menus := m.consoleMenus()
@@ -322,10 +320,11 @@ func (m *consoleModel) View() tea.View {
 	return view
 }
 
+func (m *consoleModel) logHeight() int {
+	return max(1, m.height-3) // NC bar + command bar + bottom bar
+}
+
 func (m *consoleModel) resize() {
-	logH := max(1, m.height-4) // NC bar + status bar + command bar + bottom bar
-	m.log.SetWidth(m.width)
-	m.log.SetHeight(logH)
 	m.input.SetWidth(max(1, m.width-2))
 }
 
@@ -336,8 +335,6 @@ func (m *consoleModel) appendLog(line string) {
 	if len(m.logLines) > 500 {
 		m.logLines = m.logLines[len(m.logLines)-500:]
 	}
-	m.log.SetContent(strings.Join(m.logLines, "\n"))
-	m.log.GotoBottom()
 }
 
 func (m *consoleModel) submitInput() {
