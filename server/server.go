@@ -299,7 +299,25 @@ func (a *Server) sessionMiddleware() wish.Middleware {
 
 func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 	playerID := sess.Context().SessionID()
-	program := tea.NewProgram(newChromeModel(a, playerID), a.sessionProgramOptions(sess)...)
+	model := newChromeModel(a, playerID)
+
+	// Check for init commands from ~/.null-space.txt (base64-encoded in env var).
+	for _, e := range sess.Environ() {
+		if strings.HasPrefix(e, "NULL_SPACE_INIT=") {
+			encoded := strings.TrimPrefix(e, "NULL_SPACE_INIT=")
+			if decoded, err := base64.StdEncoding.DecodeString(encoded); err == nil {
+				for _, line := range strings.Split(strings.TrimSpace(string(decoded)), "\n") {
+					line = strings.TrimSpace(line)
+					if line != "" && !strings.HasPrefix(line, "#") {
+						model.initCommands = append(model.initCommands, line)
+					}
+				}
+			}
+			break
+		}
+	}
+
+	program := tea.NewProgram(model, a.sessionProgramOptions(sess)...)
 	a.programsMu.Lock()
 	a.programs[playerID] = program
 	a.programsMu.Unlock()

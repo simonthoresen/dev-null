@@ -70,6 +70,15 @@ $env:TERM = "xterm-256color"
 $env:LANG = "en_US.UTF-8"
 $env:COLORTERM = "truecolor"
 
+# Read init commands from ~/.null-space.txt if it exists.
+$initFile = Join-Path $HOME ".null-space.txt"
+if (Test-Path $initFile) {
+    $initContent = Get-Content $initFile -Raw -ErrorAction SilentlyContinue
+    if ($initContent) {
+        $env:NULL_SPACE_INIT = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($initContent))
+    }
+}
+
 $sshOpts = @(
     "-tt",
     "-o", "ConnectTimeout=5",
@@ -77,7 +86,8 @@ $sshOpts = @(
     "-o", "UserKnownHostsFile=/dev/null",
     "-o", "SendEnv=TERM",
     "-o", "SendEnv=LANG",
-    "-o", "SendEnv=COLORTERM"
+    "-o", "SendEnv=COLORTERM",
+    "-o", "SendEnv=NULL_SPACE_INIT"
 )
 
 foreach ($ep in $endpoints) {

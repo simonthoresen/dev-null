@@ -233,6 +233,17 @@ A plugin exports a `Plugin` object with an `onMessage(author, text, isSystem)` h
 
 **Bundled plugins:** `greeter` (welcomes new players), `echo` (echoes `!echo` messages).
 
+### Client Init File (`~/.null-space.txt`)
+
+Players can create `~/.null-space.txt` with commands to run automatically on join. One command per line; lines starting with `#` are comments. The join script reads this file, base64-encodes it, and sends it via the `NULL_SPACE_INIT` SSH environment variable. The server dispatches each line on the first tick after connection.
+
+Example `~/.null-space.txt`:
+```
+# My null-space setup
+/theme dark
+/plugin load greeter
+```
+
 ### Themes
 
 JSON files in `dist/themes/` that control the NC-style chrome colors (action bar, dropdown menus, dialog boxes, shadows). Switch at runtime with `/theme <name>`. Bundled themes: `norton` (default), `dark`, `light`. Theme fields: `barBg`, `barFg`, `barActiveBg`, `barActiveFg`, `boxBg`, `boxFg`, `boxTitleBg`, `boxTitleFg`, `btnActiveBg`, `btnActiveFg`, `disabledFg`, `shadowBg`. Any omitted field falls back to the norton defaults.
