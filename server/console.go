@@ -73,8 +73,6 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	input.Placeholder = ""
 	input.CharLimit = 256
 	input.SetWidth(78)
-	input.Focus()
-
 	logView := &NCTextView{BottomAlign: true, Scrollable: true}
 	inputCtrl := &NCCommandInput{NCTextInput: NCTextInput{Model: input}}
 
@@ -125,7 +123,7 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 }
 
 func (m *consoleModel) Init() tea.Cmd {
-	return listenForEvents(m.app.ChatCh(), m.app.SlogCh())
+	return tea.Batch(m.inputCtrl.Model.Focus(), listenForEvents(m.app.ChatCh(), m.app.SlogCh()))
 }
 
 func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -219,8 +217,8 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Everything else goes to the focused window control.
-		m.window.HandleUpdate(msg)
-		return m, nil
+		cmd := m.window.HandleUpdate(msg)
+		return m, cmd
 
 	case tea.MouseWheelMsg:
 		// Route scroll events to the panel (NCTextView handles them).
@@ -229,8 +227,8 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Forward other messages to focused control (cursor blink etc.)
-	m.window.HandleUpdate(msg)
-	return m, nil
+	cmd := m.window.HandleUpdate(msg)
+	return m, cmd
 }
 
 func (m *consoleModel) consoleMenus() []common.MenuDef {

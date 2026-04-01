@@ -315,24 +315,26 @@ type TabWanter interface {
 
 // HandleUpdate routes a tea.Msg to the focused child control.
 // If the control signals WantTab/WantBackTab, cycles focus forward/backward.
-func (w *NCWindow) HandleUpdate(msg tea.Msg) {
+// Returns a tea.Cmd when focus changes to a text input (for cursor blink).
+func (w *NCWindow) HandleUpdate(msg tea.Msg) tea.Cmd {
 	if w.FocusIdx < 0 || w.FocusIdx >= len(w.Children) {
-		return
+		return nil
 	}
 	c := w.Children[w.FocusIdx].Control
 	if !c.Focusable() {
-		return
+		return nil
 	}
 	c.Update(msg)
 
 	if tw, ok := c.(TabWanter); ok {
 		fwd, back := tw.TabWant()
 		if fwd {
-			w.CycleFocus()
+			return w.CycleFocus()
 		} else if back {
-			w.CycleFocusBack()
+			return w.CycleFocusBack()
 		}
 	}
+	return nil
 }
 
 // focusOrder returns child indices sorted by TabIndex (stable, preserving
@@ -355,19 +357,19 @@ func (w *NCWindow) focusOrder() []int {
 }
 
 // CycleFocus advances focus to the next focusable control by TabIndex order.
-func (w *NCWindow) CycleFocus() {
-	w.cycleFocusDir(+1)
+func (w *NCWindow) CycleFocus() tea.Cmd {
+	return w.cycleFocusDir(+1)
 }
 
 // CycleFocusBack moves focus to the previous focusable control by TabIndex order.
-func (w *NCWindow) CycleFocusBack() {
-	w.cycleFocusDir(-1)
+func (w *NCWindow) CycleFocusBack() tea.Cmd {
+	return w.cycleFocusDir(-1)
 }
 
-func (w *NCWindow) cycleFocusDir(dir int) {
+func (w *NCWindow) cycleFocusDir(dir int) tea.Cmd {
 	order := w.focusOrder()
 	if len(order) == 0 {
-		return
+		return nil
 	}
 	oldIdx := w.FocusIdx
 	// Find current position in tab order.
@@ -387,22 +389,24 @@ func (w *NCWindow) cycleFocusDir(dir int) {
 	}
 	if oldIdx != w.FocusIdx {
 		w.blurTextInput(oldIdx)
-		w.activateTextInput(w.FocusIdx)
+		return w.activateTextInput(w.FocusIdx)
 	}
+	return nil
 }
 
 // activateTextInput calls Focus() on a textinput.Model if the child at idx is
-// an NCTextInput or NCCommandInput.
-func (w *NCWindow) activateTextInput(idx int) {
+// an NCTextInput or NCCommandInput. Returns the tea.Cmd from Focus() for cursor blink.
+func (w *NCWindow) activateTextInput(idx int) tea.Cmd {
 	if idx < 0 || idx >= len(w.Children) {
-		return
+		return nil
 	}
 	switch ti := w.Children[idx].Control.(type) {
 	case *NCTextInput:
-		ti.Model.Focus()
+		return ti.Model.Focus()
 	case *NCCommandInput:
-		ti.Model.Focus()
+		return ti.Model.Focus()
 	}
+	return nil
 }
 
 // blurTextInput calls Blur() on a textinput.Model if the child at idx is
@@ -420,16 +424,15 @@ func (w *NCWindow) blurTextInput(idx int) {
 }
 
 // FocusFirst sets focus to the focusable control with the lowest TabIndex.
-// If the control is a text input, its underlying model is also Focus()'d
-// so the cursor blinks.
-func (w *NCWindow) FocusFirst() {
+// Returns a tea.Cmd if the focused control is a text input (for cursor blink).
+func (w *NCWindow) FocusFirst() tea.Cmd {
 	order := w.focusOrder()
 	if len(order) == 0 {
 		w.FocusIdx = -1
-		return
+		return nil
 	}
 	w.FocusIdx = order[0]
-	w.activateTextInput(w.FocusIdx)
+	return w.activateTextInput(w.FocusIdx)
 }
 
 // CursorPosition returns the absolute cursor position if a text input has focus.
