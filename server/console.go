@@ -15,20 +15,13 @@ import (
 	"null-space/common"
 )
 
-// Console uses the same lobby palettes: blue for the menu/status bars, warm for log body.
-var (
-	consoleMenuStyle = lipgloss.NewStyle().Background(lobbyTeamBarActiveBg).Foreground(lobbyTeamBarActiveFg).Bold(true)
-	consoleLogStyle  = lipgloss.NewStyle().Background(lobbyTeamActiveBg).Foreground(lobbyTeamFg)
-	consoleCmdStyle  = lipgloss.NewStyle().Background(lobbyChatBarActiveBg).Foreground(lobbyChatBarActiveFg)
-)
-
 type consoleModel struct {
 	app    *Server
 	cancel context.CancelFunc
 	width  int
 	height int
 
-	log  viewport.Model
+	log   viewport.Model
 	input textinput.Model
 
 	logLines []string
@@ -43,6 +36,9 @@ type consoleModel struct {
 
 	// Per-console theme
 	theme *Theme
+
+	// NC overlay (menus, dialogs)
+	overlay overlayState
 
 	// Per-console plugins
 	plugins     []*jsPlugin
@@ -67,6 +63,7 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 		log:        log,
 		input:      input,
 		theme:      DefaultTheme(),
+		overlay:    overlayState{openMenu: -1},
 		historyIdx: -1,
 	}
 }
@@ -138,7 +135,16 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case common.GamePhaseMsg, common.GameLoadedMsg, common.GameUnloadedMsg, common.TeamUpdatedMsg, common.PlayerJoinedMsg, common.PlayerLeftMsg:
 		return m, nil
 
+	case showDialogMsg:
+		m.overlay.pushDialog(msg.dialog)
+		return m, nil
+
 	case tea.KeyPressMsg:
+		// Let the overlay handle F10/menu/dialog keys first.
+		if m.overlay.handleKey(msg.String(), m.consoleMenus(), "") {
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "ctrl+d":
 			if m.cancel != nil {
@@ -216,6 +222,21 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m *consoleModel) consoleMenus() []common.MenuDef {
+	return []common.MenuDef{
+		{
+			Label: "Server",
+			Items: []common.MenuItemDef{
+				{Label: "Shutdown", Handler: func(_ string) {
+					if m.cancel != nil {
+						m.cancel()
+					}
+				}},
+			},
+		},
+	}
+}
+
 func (m *consoleModel) View() tea.View {
 	var view tea.View
 	if m.width == 0 || m.height == 0 {
@@ -224,6 +245,17 @@ func (m *consoleModel) View() tea.View {
 		return view
 	}
 
+	t := m.theme
+	mbStyle := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.DesktopFgC()).Bold(true)
+	logStyle := lipgloss.NewStyle().Background(t.DialogBgC()).Foreground(t.DialogFgC())
+	cmdStyle := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.MenuFgC())
+
+	setInputStyle(&m.input, t.MenuBgC(), t.MenuFgC())
+
+	// NC action bar (row 0)
+	ncBar := m.overlay.renderNCBar(m.width, m.consoleMenus(), t)
+
+	// Status info bar (row 1)
 	m.app.state.mu.RLock()
 	gameName := m.app.state.GameName
 	phase := m.app.state.GamePhase
@@ -243,17 +275,34 @@ func (m *consoleModel) View() tea.View {
 		}
 	}
 
-	menuTitle := fmt.Sprintf("null-space | game: %s | teams: %d | uptime %s", gameLabel, m.app.state.TeamCount(), m.app.uptime())
-	menuBar := consoleMenuStyle.Width(m.width).Render(headerWithSpinner(menuTitle, m.width, spinChar))
+	statusTitle := fmt.Sprintf("game: %s | teams: %d | uptime %s", gameLabel, m.app.state.TeamCount(), m.app.uptime())
+	statusBar := mbStyle.Width(m.width).Render(headerWithSpinner(statusTitle, m.width, spinChar))
 
-	logView := fitStyledBlock(m.log.View(), m.width, m.log.Height(), consoleLogStyle)
+	// Log viewport
+	logView := fitStyledBlock(m.log.View(), m.width, m.log.Height(), logStyle)
 
-	setInputStyle(&m.input, lobbyChatBarActiveBg, lobbyChatBarActiveFg)
-	cmdBar := consoleCmdStyle.Width(m.width).Render(truncateStyled(m.input.View(), m.width))
+	// Command input bar
+	cmdBar := cmdStyle.Width(m.width).Render(truncateStyled(m.input.View(), m.width))
 
-	statusBar := consoleMenuStyle.Width(m.width).Align(lipgloss.Right).Render(time.Now().Format("2006-01-02 15:04"))
+	// Bottom status bar
+	bottomBar := mbStyle.Width(m.width).Align(lipgloss.Right).Render(time.Now().Format("2006-01-02 15:04"))
 
-	view.SetContent(lipgloss.JoinVertical(lipgloss.Left, menuBar, logView, cmdBar, statusBar))
+	content := lipgloss.JoinVertical(lipgloss.Left, ncBar, statusBar, logView, cmdBar, bottomBar)
+
+	// Overlay layers (dropdown menus, dialogs)
+	menus := m.consoleMenus()
+	if m.overlay.openMenu >= 0 {
+		if ddStr, ddCol, ddRow := m.overlay.renderDropdown(menus, 0, t); ddStr != "" {
+			content = PlaceOverlay(ddCol, ddRow+1, ddStr, content)
+		}
+	}
+	if m.overlay.hasDialog() {
+		if dlgStr, dlgCol, dlgRow := m.overlay.renderDialog(m.width, m.height, t); dlgStr != "" {
+			content = PlaceOverlay(dlgCol, dlgRow, dlgStr, content)
+		}
+	}
+
+	view.SetContent(content)
 	view.AltScreen = true
 
 	if cursor := m.input.Cursor(); cursor != nil {
@@ -265,7 +314,7 @@ func (m *consoleModel) View() tea.View {
 }
 
 func (m *consoleModel) resize() {
-	logH := max(1, m.height-3) // menu bar + command bar + status bar
+	logH := max(1, m.height-4) // NC bar + status bar + command bar + bottom bar
 	m.log.SetWidth(m.width)
 	m.log.SetHeight(logH)
 	m.input.SetWidth(max(1, m.width-2))
