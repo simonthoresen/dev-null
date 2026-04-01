@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"null-space/common"
 )
@@ -373,8 +374,9 @@ func (o *overlayState) handleDialogClick(x, y, screenW, screenH int) bool {
 	bodyLines := strings.Split(d.Body, "\n")
 	maxBodyW := 0
 	for _, l := range bodyLines {
-		if len(l) > maxBodyW {
-			maxBodyW = len(l)
+		w := ansi.StringWidth(l)
+		if w > maxBodyW {
+			maxBodyW = w
 		}
 	}
 	btnW := 0
@@ -384,8 +386,8 @@ func (o *overlayState) handleDialogClick(x, y, screenW, screenH int) bool {
 	btnW += (len(btns) - 1) * 2
 
 	innerW := maxBodyW + 2
-	if len(d.Title)+2 > innerW {
-		innerW = len(d.Title) + 2
+	if ansi.StringWidth(d.Title)+2 > innerW {
+		innerW = ansi.StringWidth(d.Title) + 2
 	}
 	if btnW+2 > innerW {
 		innerW = btnW + 2
@@ -613,8 +615,9 @@ func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int
 	bodyLines := strings.Split(d.Body, "\n")
 	maxBodyW := 0
 	for _, l := range bodyLines {
-		if len(l) > maxBodyW {
-			maxBodyW = len(l)
+		w := ansi.StringWidth(l)
+		if w > maxBodyW {
+			maxBodyW = w
 		}
 	}
 
@@ -625,8 +628,8 @@ func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int
 	btnW += (len(btns) - 1) * 2 // gaps between buttons
 
 	innerW := maxBodyW + 2
-	if len(d.Title)+2 > innerW {
-		innerW = len(d.Title) + 2
+	if ansi.StringWidth(d.Title)+2 > innerW {
+		innerW = ansi.StringWidth(d.Title) + 2
 	}
 	if btnW+2 > innerW {
 		innerW = btnW + 2
@@ -649,7 +652,7 @@ func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int
 	lines = append(lines, hbar(t.OTL(), t.OH(), t.OTR()))
 
 	// Title: full-width blue bar.
-	titlePad := " " + d.Title + strings.Repeat(" ", innerW-1-len(d.Title))
+	titlePad := " " + d.Title + strings.Repeat(" ", max(0, innerW-1-ansi.StringWidth(d.Title)))
 	lines = append(lines, lb+titleStyle.Width(innerW).Render(titlePad)+rb)
 
 	lines = append(lines, hbar(t.XL(), t.IH(), t.XR()))
