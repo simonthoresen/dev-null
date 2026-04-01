@@ -215,7 +215,7 @@ Both are single `.js` files in `dist/games/` or `dist/plugins/`. Loaded at runti
 
 **Plugin** — exports a global `Plugin` object with hooks `onChatMessage`, `onPlayerJoin`, `onPlayerLeave`. Multiple active simultaneously; persistent across game switches.
 
-**Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `teams()`, `registerCommand()`, `gameOver(results, state)`, `figlet(text, font?)` (ASCII art via figlet4go; built-in fonts: `"standard"`, `"larry3d"`).
+**Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `teams()`, `registerCommand()`, `gameOver(results, state)`, `figlet(text, font?)` (ASCII art via figlet4go; built-in fonts: `"standard"`, `"larry3d"`; extra fonts loaded from `dist/fonts/*.flf` at startup).
 
 The chat pipeline runs all active plugin `onChatMessage` hooks (in load order) before committing a message to history. Return `null` to drop.
 

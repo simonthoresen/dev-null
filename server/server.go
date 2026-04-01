@@ -68,6 +68,7 @@ func New(address, password, dataDir string) (*Server, error) {
 	}
 
 	app.registerBuiltins()
+	loadFigletFonts(dataDir)
 
 	server, err := wish.NewServer(
 		ssh.EmulatePty(),

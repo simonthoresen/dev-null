@@ -26,6 +26,7 @@ func NewLocal(dataDir string) *Server {
 		chatCh: make(chan common.Message, 256),
 	}
 	app.registerBuiltins()
+	loadFigletFonts(dataDir)
 	return app
 }
 
