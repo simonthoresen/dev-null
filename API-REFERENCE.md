@@ -1,6 +1,6 @@
 # null-space API Reference
 
-This document explains how to write games and plugins for null-space. Both are plain JavaScript files (ES5-compatible, no modules). Drop your file in `dist/games/` or `dist/plugins/`, or share it via URL — no build step required.
+This document explains how to write games for null-space. Games are plain JavaScript files (ES5-compatible, no modules). Drop your file in `dist/games/`, or share it via URL — no build step required.
 
 ---
 
@@ -9,30 +9,26 @@ This document explains how to write games and plugins for null-space. Both are p
 | Concept | What it means |
 |---------|---------------|
 | **Game** | One active at a time; owns the viewport, status bar, and command bar |
-| **Plugin** | Multiple active simultaneously; passive hooks; persists across game switches |
 | **Lobby** | The state when no game is loaded; only chat is visible |
 | **Viewport** | The rectangular region your game renders into (below the game status bar, above chat) |
 
 ---
 
-## Loading a game or plugin
+## Loading a game
 
 ```
-# From a local file in dist/games/ or dist/plugins/
+# From a local file in dist/games/
 /game load example
-/plugin load profanity-filter
 
 # From a URL (GitHub blob or any HTTPS .js URL)
 /game load https://github.com/you/repo/blob/main/mygame.js
-/plugin load https://raw.githubusercontent.com/you/repo/main/myplugin.js
 
 # Local mode (no SSH server)
 null-space --local --game example
 null-space --local --game https://github.com/you/repo/blob/main/mygame.js
-null-space --local --plugins profanity-filter,https://github.com/you/plugin.js
 ```
 
-URL-loaded files are cached in `dist/games/.cache/` or `dist/plugins/.cache/`. Re-loading the same URL always fetches the latest version.
+URL-loaded files are cached in `dist/games/.cache/`. Re-loading the same URL always fetches the latest version.
 
 ---
 
@@ -178,91 +174,9 @@ registerCommand({
 
 ---
 
-## Writing a plugin
-
-A plugin file must define a global `Plugin` object. All hooks are optional.
-
-```js
-var Plugin = {
-
-    // Called for every chat message before it reaches the history.
-    // Return the (possibly modified) msg to allow it, or return null to drop it.
-    // msg fields: author (string), text (string), isPrivate (bool), toID (string), fromID (string)
-    onChatMessage: function(msg) {
-        return msg; // pass through unchanged
-    },
-
-    // Called when a player connects.
-    onPlayerJoin: function(playerID, playerName) {},
-
-    // Called when a player disconnects.
-    onPlayerLeave: function(playerID) {},
-
-    // Optional skin: overrides the framework chrome colors for all connected clients.
-    // Only the first loaded plugin that defines a skin is used.
-    // Omit any field (or the entire skin property) to keep the framework default for that slot.
-    // Colors are CSS hex strings (e.g. "#ff79c6") or standard terminal color names.
-    skin: {
-        menuBg:  "#5e81ac", // menu bar background (top row, always present)
-        menuFg:  "#eceff4", // menu bar foreground
-        chatBg:  "#2e3440", // chat area background
-        chatFg:  "#d8dee9", // chat area foreground
-        cmdBg:   "#3b4252", // command bar background (idle hint mode)
-        cmdFg:   "#4c566a", // command bar foreground (idle hint mode)
-        inputBg: "#3b4252", // input box background (while typing)
-        inputFg: "#eceff4"  // input box foreground (while typing)
-    }
-};
-```
-
-### Minimal working example
-
-```js
-var BANNED = ["badword"];
-
-function censor(text) {
-    BANNED.forEach(function(word) {
-        text = text.replace(new RegExp(word, "gi"), "*".repeat(word.length));
-    });
-    return text;
-}
-
-var Plugin = {
-    onChatMessage: function(msg) {
-        msg.text = censor(msg.text);
-        return msg;
-    }
-};
-```
-
-### Registering plugin commands
-
-Same as for games — call `registerCommand` at the top level. Commands are unregistered automatically when the plugin is unloaded.
-
-```js
-registerCommand({
-    name: "mute",
-    description: "Mute a player (admin only)",
-    adminOnly: true,
-    firstArgIsPlayer: true,
-    handler: function(playerID, isAdmin, args) {
-        if (args.length < 1) {
-            chatPlayer(playerID, "Usage: /mute <player>");
-            return;
-        }
-        // ... mute logic ...
-        chat("[system] " + args[0] + " was muted.");
-    }
-});
-
-var Plugin = { /* ... */ };
-```
-
----
-
 ## Global functions
 
-These are available in both games and plugins.
+These are available in games.
 
 | Function | Description |
 |----------|-------------|
@@ -493,13 +407,9 @@ view: function(playerID, width, height) {
 }
 ```
 
-**Plugins run in load order.** If two plugins both implement `onChatMessage`, they form a pipeline — each one receives the output of the previous. Returning `null` drops the message for all subsequent plugins too.
-
-**Commands from different sources share one namespace.** If a game and a plugin both register `/score`, the second one wins. Use unique command names.
-
 ---
 
-## Sharing your game or plugin
+## Sharing your game
 
 Host your `.js` file anywhere publicly accessible over HTTPS — a GitHub repo is the simplest option. Anyone running null-space can then load it directly:
 

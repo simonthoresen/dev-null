@@ -9,6 +9,6 @@ build:
 run:
 	go run ./cmd/null-space --data-dir dist
 
-# Remove build outputs from dist/ (keeps apps/, plugins/, logs/)
+# Remove build outputs from dist/ (keeps games/, fonts/, logs/)
 clean:
 	rm -f dist/null-space.exe dist/pinggy-helper.exe

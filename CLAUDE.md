@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A framework for hosting terminal-based multiplayer **games** over SSH. **Only the server operator needs to install anything.** Players connect with a plain `ssh` command — no client install required.
 
-Games and plugins are written in JavaScript (goja) and loaded at runtime from `dist/games/` and `dist/plugins/`. The server binary itself is game/plugin-agnostic.
+Games are written in JavaScript (goja) and loaded at runtime from `dist/games/`. The server binary itself is game-agnostic.
 
 ## Release & Distribution
 
@@ -18,7 +18,7 @@ Games and plugins are written in JavaScript (goja) and loaded at runtime from `d
 
 - **GitHub Actions** (`.github/workflows/release.yml`): builds `null-space.exe` + `pinggy-helper.exe`, packages the full `dist/` folder into `null-space.zip`, and publishes a rolling `latest` release.
 - **`install.ps1`** (repo root): one-liner installer for operators — downloads and extracts the latest release zip, creates desktop shortcuts. Usage: `irm https://github.com/simonthoresen/null-space/raw/main/install.ps1 | iex`
-- **`start.ps1`** (in `dist/`): auto-updates on each launch — checks the GitHub release for a newer version and downloads the full zip (binaries, games, plugins) before starting.
+- **`start.ps1`** (in `dist/`): auto-updates on each launch — checks the GitHub release for a newer version and downloads the full zip (binaries, games, fonts) before starting.
 - **Version tracking**: `dist/.version` stores the commit SHA of the installed release. Not tracked in git.
 
 ## Commands
@@ -37,7 +37,6 @@ ssh -p 23234 localhost   # connect as a client (host plays this way too)
 # Useful as a render test-bed and as a local single-player mode.
 go run ./cmd/null-space --local --data-dir dist
 go run ./cmd/null-space --local --data-dir dist --game example
-go run ./cmd/null-space --local --data-dir dist --game example --plugins foo,bar
 go run ./cmd/null-space --local --data-dir dist --game example --player alice
 ```
 
@@ -141,16 +140,15 @@ Games persist state by passing it as the second argument to `gameOver(results, s
 |---------|------|
 | `server/server.go` | Wish SSH server setup, session lifecycle, tick broadcast, `Server` orchestrator, game lifecycle (splash/gameOver) |
 | `server/chrome.go` | Per-user `chromeModel`: renders lobby (with teams panel), splash, game, game-over screens |
-| `server/state.go` | `CentralState`: players, chat, active game, plugins, teams, game phase, game-over readiness |
+| `server/state.go` | `CentralState`: players, chat, active game, teams, game phase, game-over readiness |
 | `server/state_persist.go` | Load/save game state JSON files in `dist/state/` |
 | `server/commands.go` | `/` command registry, tab completion, permission checks |
 | `server/console.go` | Local server management terminal (not for playing) |
 | `server/runtime.go` | JS game runtime (goja): loads `dist/games/*.js`, implements `common.Game` |
-| `server/plugin.go` | JS plugin runtime (goja): loads `dist/plugins/*.js`, implements `common.Plugin` |
 | `server/local.go` | Local (non-SSH) mode: single-player / render test-bed |
 | `server/upnp.go` | Auto UPnP port mapping on start, cleanup on shutdown |
 | `server/pinggy.go` | Polls Pinggy status file, updates `state.Net.PinggyURL` |
-| `common/interfaces.go` | `Game` and `Plugin` interface contracts, `Command` struct |
+| `common/interfaces.go` | `Game` interface contract, `Command` struct |
 | `common/types.go` | Shared types: `Message`, `Player`, `TickMsg`, `ChatMsg`, etc. |
 | `cmd/null-space/` | Entry point: boot sequence, console setup, signal handling |
 | `cmd/pinggy-helper/` | Standalone helper that runs the Pinggy SSH tunnel |
@@ -180,18 +178,6 @@ type Game interface {
 ### Game Over
 
 Games call `gameOver(results, state)` where `results` is an array of `{ name, result }` in ranked order and `state` is an optional object to persist for the next run. The framework renders the game-over screen — games don't need to provide their own. `name` is the display name (player or team). `result` is a freeform string (e.g. `"4200 pts"`, `"1st"`, `"DNF"`). Both arguments are optional. State is received via `config.savedState` in `init()` on the next load.
-
-### The `Plugin` Interface
-```go
-type Plugin interface {
-    OnChatMessage(msg *Message) *Message  // return nil to drop; runs in load order before chat history
-    OnPlayerJoin(playerID, playerName string)
-    OnPlayerLeave(playerID string)
-    Commands() []Command
-    Skin() *SkinColors  // returns nil if plugin doesn't provide a skin
-    Unload()
-}
-```
 
 ### Commands (`common/interfaces.go`)
 ```go
@@ -223,19 +209,13 @@ type Message struct {
 
 `IsReply: true` is set by `ctx.Reply()` so command output (e.g. `/help` listing) appears as plain text in the caller's chat window with no prefix. Without it, private messages show `[PM from X]`.
 
-### Games and Plugins (JS)
+### Games (JS)
 
-Both are single `.js` files in `dist/games/` or `dist/plugins/`. Loaded at runtime via `/game load <name>` / `/plugin load <name>`. A HTTPS URL can be given instead of a name — the file is downloaded and cached in `dist/games/.cache/` or `dist/plugins/.cache/`. GitHub blob URLs are converted to raw automatically.
+Single `.js` files in `dist/games/`. Loaded at runtime via `/game load <name>`. A HTTPS URL can be given instead of a name — the file is downloaded and cached in `dist/games/.cache/`. GitHub blob URLs are converted to raw automatically.
 
 **Game** — exports a global `Game` object with hooks `onPlayerJoin`, `onPlayerLeave`, `onInput`, `view`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `splashScreen`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport.
 
-**Plugin** — exports a global `Plugin` object with hooks `onChatMessage`, `onPlayerJoin`, `onPlayerLeave`. Multiple active simultaneously; persistent across game switches.
-
 **Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `teams()`, `registerCommand()`, `gameOver(results, state)`, `figlet(text, font?)` (ASCII art via figlet4go; built-in fonts: `"standard"`, `"larry3d"`; extra fonts loaded from `dist/fonts/*.flf` at startup).
-
-The chat pipeline runs all active plugin `onChatMessage` hooks (in load order) before committing a message to history. Return `null` to drop.
-
-**Skin plugins:** A JS plugin can set `Plugin.skin = { menuBg, menuFg, chatBg, chatFg, cmdBg, cmdFg, inputBg, inputFg }` to override framework chrome colors. The first loaded plugin with a non-null skin wins. Colors are CSS hex strings. Any omitted field uses the framework default. Bundled skins: `skin-dracula`, `skin-matrix`, `skin-nord`.
 
 **Full developer documentation:** see `API-REFERENCE.md` at the repo root.
 
@@ -339,7 +319,7 @@ Each attempt uses a short `ConnectTimeout`; falls through on failure.
 - `charm.land/bubbles/v2` — `textinput`, `viewport` components
 - `github.com/charmbracelet/x/term` — terminal size detection
 - `github.com/huin/goupnp` — UPnP IGD
-- `github.com/dop251/goja` — JavaScript runtime for games/plugins
+- `github.com/dop251/goja` — JavaScript runtime for games
 
 ---
 

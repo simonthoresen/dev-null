@@ -33,7 +33,7 @@ func NewLocal(dataDir string) *Server {
 // RunLocal registers a local player (as admin), optionally pre-loads a game
 // and plugins, then runs the full client TUI on stdin/stdout. This is the
 // entry point for both the local single-player mode and the render test-bed.
-func (a *Server) RunLocal(ctx context.Context, playerName, gameName string, pluginNames []string) error {
+func (a *Server) RunLocal(ctx context.Context, playerName, gameName string) error {
 	const playerID = "local"
 
 	player := &common.Player{
@@ -42,18 +42,6 @@ func (a *Server) RunLocal(ctx context.Context, playerName, gameName string, plug
 		IsAdmin: true,
 	}
 	a.state.AddPlayer(player)
-
-	for _, name := range pluginNames {
-		var path string
-		if isURL(name) {
-			path = name
-		} else {
-			path = filepath.Join(a.dataDir, "plugins", name+".js")
-		}
-		if err := a.loadPlugin(name, path); err != nil {
-			return fmt.Errorf("load plugin %s: %w", name, err)
-		}
-	}
 
 	if gameName != "" {
 		var path string

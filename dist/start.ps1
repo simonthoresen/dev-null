@@ -235,7 +235,7 @@ function Update-FromRelease {
 
         Write-BootStepEnd "DONE"
 
-        # Download the full release zip (includes binaries, games, plugins, etc.)
+        # Download the full release zip (includes binaries, games, fonts, etc.)
         $zipAsset = $release.assets | Where-Object { $_.name -eq "null-space.zip" } | Select-Object -First 1
         if (-not $zipAsset) {
             Write-RunLogLine "no null-space.zip in release, skipping update"
@@ -272,7 +272,7 @@ Update-FromRelease
 
 # ── local / single-player mode ───────────────────────────────────────────────
 # No SSH, no tunnel, no port — just run the TUI directly in this terminal.
-# Extra args (--game, --plugins, --player) are passed straight through.
+# Extra args (--game, --player) are passed straight through.
 
 if ($Local) {
     Write-BootStepStart "Setting up network"

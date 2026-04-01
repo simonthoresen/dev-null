@@ -66,36 +66,3 @@ type Game interface {
 	Unload()
 }
 
-// SkinColors defines optional color overrides for the framework chrome
-// (menu bar, chat area, command bar, input box).
-// Any field left empty ("") means "use the framework default for that slot".
-// Colors are CSS hex strings (e.g. "#ff79c6") or standard terminal color names.
-type SkinColors struct {
-	MenuBg  string // menu bar background (top row, always present)
-	MenuFg  string // menu bar foreground
-	ChatBg  string // chat area background
-	ChatFg  string // chat area foreground
-	CmdBg   string // command bar background (idle hint mode)
-	CmdFg   string // command bar foreground (idle hint mode)
-	InputBg string // input box background (while typing)
-	InputFg string // input box foreground (while typing)
-}
-
-// Plugin is a passive extension that runs alongside any game (or in the lobby).
-// Multiple plugins can be active simultaneously and persist across game switches.
-type Plugin interface {
-	// OnChatMessage is called for every outgoing message before it's committed.
-	// Return nil to drop the message, or return a (possibly modified) copy to allow it.
-	OnChatMessage(msg *Message) *Message
-	// OnPlayerJoin is called when a player connects.
-	OnPlayerJoin(playerID, playerName string)
-	// OnPlayerLeave is called when a player disconnects.
-	OnPlayerLeave(playerID string)
-	// Commands returns plugin-registered slash commands.
-	Commands() []Command
-	// Skin returns optional color overrides for the framework chrome.
-	// Return nil if this plugin does not provide a skin.
-	Skin() *SkinColors
-	// Unload is called when the plugin is removed.
-	Unload()
-}

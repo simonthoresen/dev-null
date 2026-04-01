@@ -35,15 +35,13 @@ func main() {
 	var dataDir string
 	var localMode bool
 	var localGame string
-	var localPlugins string
 	var localPlayer string
 	flag.StringVar(&password, "password", "", "admin password (required)")
 	flag.StringVar(&address, "address", ":23234", "listen address")
 	flag.StringVar(&portOverride, "port", "", "SSH listen port (overrides --address port, default 23234)")
-	flag.StringVar(&dataDir, "data-dir", defaultDataDir(), "directory containing games/, plugins/, logs/")
+	flag.StringVar(&dataDir, "data-dir", defaultDataDir(), "directory containing games/, logs/")
 	flag.BoolVar(&localMode, "local", false, "run locally without SSH (single-player / render test)")
 	flag.StringVar(&localGame, "game", "", "game to preload (local mode)")
-	flag.StringVar(&localPlugins, "plugins", "", "comma-separated plugins to preload (local mode)")
 	flag.StringVar(&localPlayer, "player", "player", "player name (local mode)")
 	flag.Parse()
 
@@ -58,11 +56,7 @@ func main() {
 		app := server.NewLocal(dataDir)
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
-		var plugins []string
-		if localPlugins != "" {
-			plugins = strings.Split(localPlugins, ",")
-		}
-		if err := app.RunLocal(ctx, localPlayer, localGame, plugins); err != nil {
+		if err := app.RunLocal(ctx, localPlayer, localGame); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}

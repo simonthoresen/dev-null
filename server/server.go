@@ -30,7 +30,7 @@ import (
 type Server struct {
 	state    *CentralState
 	registry *commandRegistry
-	dataDir  string // root of games/, plugins/, logs/
+	dataDir  string // root of games/, logs/
 	port     string // SSH listen port, e.g. "23234"
 
 	programs   map[string]*tea.Program // key = playerID
@@ -369,10 +369,6 @@ func (a *Server) registerSession(sess ssh.Session) *common.Player {
 		a.state.mu.Unlock()
 	}
 
-	plugins, _ := a.state.GetPlugins()
-	for _, p := range plugins {
-		p.OnPlayerJoin(player.ID, player.Name)
-	}
 	return player
 }
 
@@ -399,10 +395,6 @@ func (a *Server) unregisterSession(playerID string) {
 	a.state.RemovePlayerFromTeams(playerID)
 	a.broadcastMsg(common.TeamUpdatedMsg{})
 
-	plugins, _ := a.state.GetPlugins()
-	for _, p := range plugins {
-		p.OnPlayerLeave(playerID)
-	}
 	a.state.RemovePlayer(playerID)
 
 	a.programsMu.Lock()
@@ -525,17 +517,6 @@ func (a *Server) broadcastMsg(msg tea.Msg) {
 
 func (a *Server) broadcastChat(msg common.Message) {
 	start := time.Now()
-	// run through plugin pipeline before committing
-	current := &msg
-	plugins, _ := a.state.GetPlugins()
-	for _, p := range plugins {
-		current = p.OnChatMessage(current)
-		if current == nil {
-			return // message dropped by a plugin
-		}
-	}
-	msg = *current
-
 	a.state.AddChat(msg)
 
 	select {
@@ -768,52 +749,6 @@ func (a *Server) unloadGame() {
 	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhaseNone})
 	a.broadcastChat(common.Message{Text: "Game unloaded."})
 	a.serverLog("game unloaded")
-}
-
-func (a *Server) loadPlugin(name, path string) error {
-	if isURL(path) {
-		cacheDir := filepath.Join(a.dataDir, "plugins", ".cache")
-		local, err := downloadToCache(path, cacheDir)
-		if err != nil {
-			return fmt.Errorf("download plugin: %w", err)
-		}
-		name = strings.TrimSuffix(filepath.Base(local), ".js")
-		path = local
-	}
-	// don't load the same plugin twice
-	_, names := a.state.GetPlugins()
-	for _, n := range names {
-		if n == name {
-			return fmt.Errorf("plugin '%s' is already loaded", name)
-		}
-	}
-
-	p, err := LoadPlugin(path, a.state, a.serverLog, func(msg common.Message) {
-		a.broadcastChat(msg)
-	})
-	if err != nil {
-		return err
-	}
-
-	a.state.AddPlugin(name, p)
-	for _, cmd := range p.Commands() {
-		a.registry.Register(cmd)
-	}
-	a.serverLog(fmt.Sprintf("plugin loaded: %s", name))
-	return nil
-}
-
-func (a *Server) unloadPlugin(name string) error {
-	p := a.state.RemovePlugin(name)
-	if p == nil {
-		return fmt.Errorf("plugin '%s' is not loaded", name)
-	}
-	for _, cmd := range p.Commands() {
-		a.registry.Unregister(cmd.Name)
-	}
-	p.Unload()
-	a.serverLog(fmt.Sprintf("plugin unloaded: %s", name))
-	return nil
 }
 
 func (a *Server) SetConsoleProgram(p *tea.Program) {
@@ -1068,115 +1003,6 @@ func (a *Server) registerBuiltins() {
 		},
 		Handler: func(ctx common.CommandContext, args []string) {
 			a.registry.Dispatch("/game load "+strings.Join(args, " "), ctx)
-		},
-	})
-
-	a.registry.Register(common.Command{
-		Name:        "plugin",
-		Description: "Plugin management. No args = list available. /plugin load|unload <name>",
-		Complete: func(before []string) []string {
-			switch len(before) {
-			case 0:
-				return []string{"list", "load", "unload"}
-			case 1:
-				switch before[0] {
-				case "load":
-					// offer available plugins not yet loaded
-					_, loaded := a.state.GetPlugins()
-					loadedSet := make(map[string]bool, len(loaded))
-					for _, n := range loaded {
-						loadedSet[n] = true
-					}
-					var out []string
-					for _, name := range listDir(filepath.Join(a.dataDir, "plugins"), ".js") {
-						if !loadedSet[name] {
-							out = append(out, name)
-						}
-					}
-					return out
-				case "unload":
-					_, names := a.state.GetPlugins()
-					return names
-				}
-			}
-			return nil
-		},
-		Handler: func(ctx common.CommandContext, args []string) {
-			if len(args) == 0 {
-				// List available plugins with loaded marker.
-				available := listDir(filepath.Join(a.dataDir, "plugins"), ".js")
-				_, loaded := a.state.GetPlugins()
-				loadedSet := make(map[string]bool, len(loaded))
-				for _, n := range loaded {
-					loadedSet[n] = true
-				}
-				if len(available) == 0 && len(loaded) == 0 {
-					ctx.Reply("No plugins found in plugins/")
-					return
-				}
-				var lines []string
-				for _, name := range available {
-					line := "  " + name
-					if loadedSet[name] {
-						line += "  [loaded]"
-					}
-					lines = append(lines, line)
-				}
-				ctx.Reply("Available plugins:\n" + strings.Join(lines, "\n"))
-				return
-			}
-			switch args[0] {
-			case "load":
-				if !ctx.IsAdmin {
-					ctx.Reply("Permission denied (admin only)")
-					return
-				}
-				if len(args) < 2 {
-					ctx.Reply("Usage: /plugin load <name>")
-					return
-				}
-				name := args[1]
-				var path string
-				if isURL(name) {
-					path = name
-				} else {
-					path = filepath.Join(a.dataDir, "plugins", name+".js")
-				}
-				if err := a.loadPlugin(name, path); err != nil {
-					ctx.Reply(fmt.Sprintf("Failed to load plugin: %v", err))
-					return
-				}
-				// loadPlugin may have derived a new name from a cached URL filename.
-				_, pluginNames := a.state.GetPlugins()
-				loadedName := name
-				if len(pluginNames) > 0 {
-					loadedName = pluginNames[len(pluginNames)-1]
-				}
-				ctx.Reply(fmt.Sprintf("Plugin loaded: %s", loadedName))
-			case "unload":
-				if !ctx.IsAdmin {
-					ctx.Reply("Permission denied (admin only)")
-					return
-				}
-				if len(args) < 2 {
-					ctx.Reply("Usage: /plugin unload <name>")
-					return
-				}
-				if err := a.unloadPlugin(args[1]); err != nil {
-					ctx.Reply(fmt.Sprintf("Failed to unload plugin: %v", err))
-					return
-				}
-				ctx.Reply(fmt.Sprintf("Plugin unloaded: %s", args[1]))
-			case "list":
-				_, names := a.state.GetPlugins()
-				if len(names) == 0 {
-					ctx.Reply("No plugins currently loaded.")
-					return
-				}
-				ctx.Reply("Loaded plugins: " + strings.Join(names, ", "))
-			default:
-				ctx.Reply(fmt.Sprintf("Unknown subcommand '%s'. Use: load, unload, list", args[0]))
-			}
 		},
 	})
 

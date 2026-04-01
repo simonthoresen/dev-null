@@ -53,54 +53,6 @@ var (
 
 const lobbyTeamPanelW = 32
 
-type chromeColors struct {
-	menuBg, menuFg   color.Color
-	chatBg, chatFg   color.Color
-	cmdBg, cmdFg     color.Color
-	inputBg, inputFg color.Color
-}
-
-func resolveColors(skin *common.SkinColors) chromeColors {
-	c := chromeColors{
-		menuBg:  defaultMenuBg,
-		menuFg:  defaultMenuFg,
-		chatBg:  defaultChatBg,
-		chatFg:  defaultChatFg,
-		cmdBg:   defaultCmdBg,
-		cmdFg:   defaultMenuFg,
-		inputBg: defaultMenuBg,
-		inputFg: defaultMenuFg,
-	}
-	if skin == nil {
-		return c
-	}
-	if skin.MenuBg != "" {
-		c.menuBg = lipgloss.Color(skin.MenuBg)
-	}
-	if skin.MenuFg != "" {
-		c.menuFg = lipgloss.Color(skin.MenuFg)
-	}
-	if skin.ChatBg != "" {
-		c.chatBg = lipgloss.Color(skin.ChatBg)
-	}
-	if skin.ChatFg != "" {
-		c.chatFg = lipgloss.Color(skin.ChatFg)
-	}
-	if skin.CmdBg != "" {
-		c.cmdBg = lipgloss.Color(skin.CmdBg)
-	}
-	if skin.CmdFg != "" {
-		c.cmdFg = lipgloss.Color(skin.CmdFg)
-	}
-	if skin.InputBg != "" {
-		c.inputBg = lipgloss.Color(skin.InputBg)
-	}
-	if skin.InputFg != "" {
-		c.inputFg = lipgloss.Color(skin.InputFg)
-	}
-	return c
-}
-
 // setInputStyle applies matching background/foreground to all textinput sub-styles
 // and switches to the real terminal cursor (not the virtual cursor).
 //
@@ -753,37 +705,35 @@ func (m chromeModel) View() tea.View {
 	phase := m.app.state.GamePhase
 	m.app.state.mu.RUnlock()
 
-	col := resolveColors(m.app.state.ActiveSkin())
-	mbStyle := lipgloss.NewStyle().Background(col.menuBg).Foreground(col.menuFg).Bold(true)
-	chStyle := lipgloss.NewStyle().Background(col.chatBg).Foreground(col.chatFg)
-	ciStyle := lipgloss.NewStyle().Background(col.cmdBg).Foreground(col.cmdFg)
+	mbStyle := lipgloss.NewStyle().Background(defaultMenuBg).Foreground(defaultMenuFg).Bold(true)
+	chStyle := lipgloss.NewStyle().Background(defaultChatBg).Foreground(defaultChatFg)
+	ciStyle := lipgloss.NewStyle().Background(defaultCmdBg).Foreground(defaultMenuFg)
 
 	if !m.inActiveGame || phase == common.PhaseNone {
-		// Lobby: input uses skin-resolved colors.
 		if m.mode == modeInput {
-			setInputStyle(&m.input, col.inputBg, col.inputFg)
+			setInputStyle(&m.input, defaultMenuBg, defaultMenuFg)
 		}
 		if m.teamEditing {
 			setInputStyle(&m.teamEditInput, lobbyTeamActiveBg, lobbyTeamFg)
 		}
 	} else if m.mode == modeInput {
-		setInputStyle(&m.input, col.inputBg, col.inputFg)
+		setInputStyle(&m.input, defaultMenuBg, defaultMenuFg)
 	} else {
-		setInputStyle(&m.input, col.cmdBg, col.cmdFg)
+		setInputStyle(&m.input, defaultCmdBg, defaultMenuFg)
 	}
 
 	var content string
 
 	if !m.inActiveGame || phase == common.PhaseNone {
 		// === LOBBY LAYOUT (with team panel) ===
-		content = m.viewLobby(mbStyle, chStyle, ciStyle, col.chatBg)
+		content = m.viewLobby(mbStyle, chStyle, ciStyle, defaultChatBg)
 	} else if phase == common.PhaseSplash {
 		content = m.viewSplash(game, gameName, mbStyle, chStyle, ciStyle)
 	} else if phase == common.PhaseGameOver {
 		content = m.viewGameOver(game, gameName, mbStyle, chStyle, ciStyle)
 	} else {
 		// === PLAYING LAYOUT ===
-		content = m.viewPlaying(game, gameName, mbStyle, chStyle, ciStyle, col.chatBg)
+		content = m.viewPlaying(game, gameName, mbStyle, chStyle, ciStyle, defaultChatBg)
 	}
 
 	// Apply overlay layers on top of the base content.
@@ -847,7 +797,7 @@ func (m chromeModel) viewLobby(mbStyle, chStyle, ciStyle lipgloss.Style, chatBg 
 	chatActive := m.lobbyFocus == lobbyFocusChat
 
 	// Per-panel styles based on focus.
-	// Chat panel uses skin-resolved colors; team panel keeps its own blue scheme.
+	// Chat panel uses default colors; team panel keeps its own blue scheme.
 	var chatBarStyle, teamBarStyle lipgloss.Style
 	var chatBodyStyle, teamBodyStyle lipgloss.Style
 	var chatCmdStyle, teamCmdStyle lipgloss.Style

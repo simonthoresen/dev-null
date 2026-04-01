@@ -46,9 +46,6 @@ type CentralState struct {
 	// Teams configured in the lobby before a game starts.
 	Teams []common.Team
 
-	Plugins     []common.Plugin
-	PluginNames []string // parallel to Plugins; name = filename stem
-
 	Players     map[string]*common.Player
 	ChatHistory []common.Message
 
@@ -75,21 +72,6 @@ func (s *CentralState) AddChat(msg common.Message) {
 	if len(s.ChatHistory) > maxChatHistory {
 		s.ChatHistory = s.ChatHistory[len(s.ChatHistory)-maxChatHistory:]
 	}
-}
-
-// ActiveSkin returns the SkinColors from the first loaded plugin that defines one,
-// or nil if no active plugin provides a skin.
-func (s *CentralState) ActiveSkin() *common.SkinColors {
-	s.mu.RLock()
-	plugins := make([]common.Plugin, len(s.Plugins))
-	copy(plugins, s.Plugins)
-	s.mu.RUnlock()
-	for _, p := range plugins {
-		if skin := p.Skin(); skin != nil {
-			return skin
-		}
-	}
-	return nil
 }
 
 func (s *CentralState) GetChatHistory() []common.Message {
@@ -161,40 +143,6 @@ func (s *CentralState) PlayerCount() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.Players)
-}
-
-// AddPlugin appends a plugin. Caller must ensure name is unique.
-func (s *CentralState) AddPlugin(name string, p common.Plugin) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.Plugins = append(s.Plugins, p)
-	s.PluginNames = append(s.PluginNames, name)
-}
-
-// RemovePlugin removes the named plugin and returns it (nil if not found).
-func (s *CentralState) RemovePlugin(name string) common.Plugin {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i, n := range s.PluginNames {
-		if strings.EqualFold(n, name) {
-			p := s.Plugins[i]
-			s.Plugins = append(s.Plugins[:i], s.Plugins[i+1:]...)
-			s.PluginNames = append(s.PluginNames[:i], s.PluginNames[i+1:]...)
-			return p
-		}
-	}
-	return nil
-}
-
-// GetPlugins returns copies of the current plugin slice and name slice.
-func (s *CentralState) GetPlugins() ([]common.Plugin, []string) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	ps := make([]common.Plugin, len(s.Plugins))
-	ns := make([]string, len(s.PluginNames))
-	copy(ps, s.Plugins)
-	copy(ns, s.PluginNames)
-	return ps, ns
 }
 
 // --- Game phase helpers ---
