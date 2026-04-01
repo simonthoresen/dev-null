@@ -312,7 +312,9 @@ func (ti *NCTextInput) Render(width int, focused bool, _ lipgloss.Style) string 
 	s.Cursor.Blink = true
 	ti.Model.SetStyles(s)
 	ti.Model.SetVirtualCursor(false)
-	ti.Model.SetWidth(width)
+	// SetWidth sets the text area width; subtract prompt width so total fits.
+	promptW := ansi.StringWidth(ti.Model.Prompt)
+	ti.Model.SetWidth(max(1, width-promptW))
 
 	if focused {
 		ti.Model.Focus()

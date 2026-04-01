@@ -355,7 +355,7 @@ func (m *consoleModel) View() tea.View {
 }
 
 func (m *consoleModel) resize() {
-	m.inputCtrl.Model.SetWidth(max(1, m.width-2))
+	// Width is managed by NCPanel.Render via NCTextInput.SetWidth.
 }
 
 func (m *consoleModel) appendLog(line string) {
