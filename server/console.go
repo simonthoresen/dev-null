@@ -56,7 +56,6 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	tiControl := &NCTextInput{Model: &input}
 
 	panel := &NCPanel{
-		Title: "Server Log",
 		Controls: []NCControl{
 			logView,
 			tiControl,

@@ -472,7 +472,7 @@ func (o *overlayState) renderNCBar(width int, menus []common.MenuDef, t *Theme) 
 	barStyle    := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.DesktopFgC())
 	activeStyle := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
 	// Shortcut char accent: highlight fg on normal bg (stands out from regular text).
-	barAccent    := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.HighlightFgC())
+	barAccent    := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.HighlightFgC()).Underline(true)
 	activeAccent := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.DesktopFgC()).Bold(true).Underline(true)
 
 	var sb strings.Builder
@@ -553,7 +553,7 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 	var lines []string
 	lines = append(lines, top)
 
-	menuAccent  := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.HighlightBgC())
+	menuAccent  := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.HighlightBgC()).Underline(true)
 	activeAccent := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.MenuBgC()).Bold(true).Underline(true)
 
 	for i, it := range items {

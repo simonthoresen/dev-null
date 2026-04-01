@@ -148,17 +148,21 @@ func (p *NCPanel) Render(x, y, width, height int, t *Theme) string {
 	lv := boxStyle.Render(t.OV())
 	rv := boxStyle.Render(t.OV())
 
-	// Title row.
-	titleText := " " + p.Title + " "
-	titleRendered := titleStyle.Render(titleText)
-	titleFill := p.innerW - ansi.StringWidth(titleText)
-	if titleFill < 0 {
-		titleFill = 0
-	}
-	topRow := boxStyle.Render(t.OTL()+t.IH()) + titleRendered + boxStyle.Render(strings.Repeat(t.OH(), titleFill)+t.OTR())
-
 	var rows []string
-	rows = append(rows, topRow)
+	if p.Title != "" {
+		// Title row: ┌─ Title ──────────┐
+		titleText := " " + p.Title + " "
+		titleRendered := titleStyle.Render(titleText)
+		titleFill := p.innerW - 1 - ansi.StringWidth(titleText) // -1 for the IH after TL
+		if titleFill < 0 {
+			titleFill = 0
+		}
+		topRow := boxStyle.Render(t.OTL()+t.IH()) + titleRendered + boxStyle.Render(strings.Repeat(t.OH(), titleFill)+t.OTR())
+		rows = append(rows, topRow)
+	} else {
+		// No title: plain top border ┌──────────┐
+		rows = append(rows, boxStyle.Render(t.OTL()+strings.Repeat(t.OH(), p.innerW)+t.OTR()))
+	}
 
 	// Calculate available height for flex controls.
 	// Overhead: top border(1) + bottom border(1) + separator between each pair of controls
