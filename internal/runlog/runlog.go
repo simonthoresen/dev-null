@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func ConfigureFromEnv(component string) (func() error, error) {
@@ -18,11 +19,13 @@ func ConfigureFromEnv(component string) (func() error, error) {
 	)
 
 	if logFilePath != "" {
+		logFilePath = stampedPath(logFilePath)
+
 		if err := os.MkdirAll(filepath.Dir(logFilePath), 0o755); err != nil {
 			return nil, err
 		}
 
-		file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		file, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
 		if err != nil {
 			return nil, err
 		}
@@ -44,6 +47,17 @@ func ConfigureFromEnv(component string) (func() error, error) {
 		}
 		return closer.Close()
 	}, nil
+}
+
+// stampedPath inserts a timestamp into the log file path so each run gets its
+// own file. "dist/logs/server.log" → "dist/logs/server-20060102-150405.log".
+func stampedPath(path string) string {
+	stamp := time.Now().Format("20060102-150405")
+	ext := filepath.Ext(path)
+	if ext != "" {
+		return strings.TrimSuffix(path, ext) + "-" + stamp + ext
+	}
+	return path + "-" + stamp
 }
 
 func parseLevel(value string) slog.Level {
