@@ -369,6 +369,7 @@ func (w *NCWindow) cycleFocusDir(dir int) {
 	if len(order) == 0 {
 		return
 	}
+	oldIdx := w.FocusIdx
 	// Find current position in tab order.
 	cur := -1
 	for i, idx := range order {
@@ -380,13 +381,47 @@ func (w *NCWindow) cycleFocusDir(dir int) {
 	if cur < 0 {
 		// Current focus not in order — jump to first.
 		w.FocusIdx = order[0]
+	} else {
+		next := (cur + dir + len(order)) % len(order)
+		w.FocusIdx = order[next]
+	}
+	if oldIdx != w.FocusIdx {
+		w.blurTextInput(oldIdx)
+		w.activateTextInput(w.FocusIdx)
+	}
+}
+
+// activateTextInput calls Focus() on a textinput.Model if the child at idx is
+// an NCTextInput or NCCommandInput.
+func (w *NCWindow) activateTextInput(idx int) {
+	if idx < 0 || idx >= len(w.Children) {
 		return
 	}
-	next := (cur + dir + len(order)) % len(order)
-	w.FocusIdx = order[next]
+	switch ti := w.Children[idx].Control.(type) {
+	case *NCTextInput:
+		ti.Model.Focus()
+	case *NCCommandInput:
+		ti.Model.Focus()
+	}
+}
+
+// blurTextInput calls Blur() on a textinput.Model if the child at idx is
+// an NCTextInput or NCCommandInput.
+func (w *NCWindow) blurTextInput(idx int) {
+	if idx < 0 || idx >= len(w.Children) {
+		return
+	}
+	switch ti := w.Children[idx].Control.(type) {
+	case *NCTextInput:
+		ti.Model.Blur()
+	case *NCCommandInput:
+		ti.Model.Blur()
+	}
 }
 
 // FocusFirst sets focus to the focusable control with the lowest TabIndex.
+// If the control is a text input, its underlying model is also Focus()'d
+// so the cursor blinks.
 func (w *NCWindow) FocusFirst() {
 	order := w.focusOrder()
 	if len(order) == 0 {
@@ -394,6 +429,7 @@ func (w *NCWindow) FocusFirst() {
 		return
 	}
 	w.FocusIdx = order[0]
+	w.activateTextInput(w.FocusIdx)
 }
 
 // CursorPosition returns the absolute cursor position if a text input has focus.
