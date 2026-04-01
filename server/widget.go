@@ -576,7 +576,8 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 
 	top    := menuStyle.Render(t.OTL() + strings.Repeat(t.OH(), innerW) + t.OTR())
 	bottom := menuStyle.Render(t.OBL() + strings.Repeat(t.OH(), innerW) + t.OBR())
-	sepRow := menuStyle.Render(t.XL() + strings.Repeat(t.IH(), innerW) + t.XR())
+	// Menu separators don't connect to the outer border (unlike panel dividers).
+	sepRow := menuStyle.Render(t.OV() + strings.Repeat(t.IH(), innerW) + t.OV())
 
 	var lines []string
 	lines = append(lines, top)
