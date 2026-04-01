@@ -166,12 +166,16 @@ func (a *Server) SetupPublicIP() string {
 // SetPort stores the SSH listen port so invite scripts can reference it.
 func (a *Server) SetPort(port string) { a.port = port }
 
-// OpenChatLog opens a timestamped chat log file in the logs directory.
+// OpenChatLog derives the chat log path from NULL_SPACE_LOG_FILE by inserting
+// "-chat" before the extension. E.g. "logs/20260401-152702.log" → "logs/20260401-152702-chat.log".
+// If no log file is configured, no chat log is created.
 func (a *Server) OpenChatLog() {
-	logsDir := filepath.Join(a.dataDir, "logs")
-	_ = os.MkdirAll(logsDir, 0o755)
-	ts := time.Now().Format("20060102-150405")
-	path := filepath.Join(logsDir, ts+"-chat.log")
+	serverLog := os.Getenv("NULL_SPACE_LOG_FILE")
+	if serverLog == "" {
+		return
+	}
+	ext := filepath.Ext(serverLog)
+	path := strings.TrimSuffix(serverLog, ext) + "-chat" + ext
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		slog.Warn("failed to open chat log", "path", path, "error", err)
