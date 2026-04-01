@@ -10,7 +10,6 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"null-space/common"
 )
@@ -261,22 +260,9 @@ func (m *consoleModel) consoleMenus() []common.MenuDef {
 			Label: "&Help",
 			Items: []common.MenuItemDef{
 				{Label: "&About...", Handler: func(_ string) {
-					raw := Figlet("null-space", "slant")
-					// Strip ANSI codes — the dialog applies its own styling.
-					clean := ansi.Strip(raw)
-					// Trim trailing whitespace from each line and blank trailing lines.
-					var lines []string
-					for _, l := range strings.Split(clean, "\n") {
-						lines = append(lines, strings.TrimRight(l, " \t"))
-					}
-					for len(lines) > 0 && lines[len(lines)-1] == "" {
-						lines = lines[:len(lines)-1]
-					}
-					logo := strings.Join(lines, "\n")
-					m.appendLog("Figlet output:\n" + logo)
 					m.overlay.pushDialog(common.DialogRequest{
 						Title:   "About",
-						Body:    logo,
+						Body:    aboutLogo(),
 						Buttons: []string{"OK"},
 					})
 				}},

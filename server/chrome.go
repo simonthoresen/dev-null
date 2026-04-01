@@ -1302,18 +1302,9 @@ func (m *chromeModel) allMenus() []common.MenuDef {
 		Label: "&Help",
 		Items: []common.MenuItemDef{
 			{Label: "&About...", Handler: func(_ string) {
-				raw := Figlet("null-space", "slant")
-				clean := ansi.Strip(raw)
-				var lines []string
-				for _, l := range strings.Split(clean, "\n") {
-					lines = append(lines, strings.TrimRight(l, " \t"))
-				}
-				for len(lines) > 0 && lines[len(lines)-1] == "" {
-					lines = lines[:len(lines)-1]
-				}
 				m.overlay.pushDialog(common.DialogRequest{
 					Title:   "About",
-					Body:    strings.Join(lines, "\n"),
+					Body:    aboutLogo(),
 					Buttons: []string{"OK"},
 				})
 			}},

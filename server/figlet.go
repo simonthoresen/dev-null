@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mbndr/figlet4go"
 )
@@ -22,6 +23,30 @@ func loadFigletFonts(dataDir string) {
 		return
 	}
 	slog.Info("Loaded figlet fonts", "dir", dir)
+}
+
+// aboutLogo returns the null-space ASCII art logo for the About dialog.
+// Uses figlet if available, otherwise falls back to a hardcoded logo.
+func aboutLogo() string {
+	logo := Figlet("null-space", "")
+	if logo != "" {
+		// Strip ANSI codes and trim trailing whitespace.
+		var lines []string
+		for _, l := range strings.Split(logo, "\n") {
+			lines = append(lines, strings.TrimRight(l, " \t\r"))
+		}
+		for len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		if len(lines) > 0 {
+			return strings.Join(lines, "\n")
+		}
+	}
+	return `             __ __
+   ___  __ __/ // /  ___ ___  ___ ________
+  / _ \/ // / // /_ (_-</ _ \/ _ '/ __/ -_)
+ /_//_/\_,_/____/ /___/ .__/\_,_/\__/\__/
+                     /_/`
 }
 
 // Figlet renders text as ASCII art using the named font.
