@@ -365,6 +365,9 @@ func (m *consoleModel) showRemoveDialog(title, subdir, ext string, items []strin
 }
 
 func (m *consoleModel) View() tea.View {
+	EnterRenderPath()
+	defer LeaveRenderPath()
+
 	var view tea.View
 	if m.width == 0 || m.height == 0 {
 		view.SetContent("Loading server console...")

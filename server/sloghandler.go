@@ -4,9 +4,27 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"runtime"
-	"strings"
+	"sync/atomic"
 )
+
+// inRenderPath is an atomic counter incremented when entering View/Render
+// and decremented on exit. When > 0, the console slog handler suppresses
+// messages to avoid the feedback loop: View → slog → console → Update → View.
+//
+// This is safe across goroutines: each BubbleTea program runs View on its
+// own goroutine. Multiple programs rendering concurrently all increment the
+// counter, and any slog call sees counter > 0 and skips the console channel.
+// False positives (a non-render goroutine seeing counter > 0 because another
+// goroutine is rendering) are harmless — the message still goes to the file
+// log, it's just not duplicated to the console display.
+var inRenderPath atomic.Int32
+
+// EnterRenderPath marks the current execution as inside a View/Render cycle.
+// Call with defer LeaveRenderPath() at the top of View and Render methods.
+func EnterRenderPath() { inRenderPath.Add(1) }
+
+// LeaveRenderPath unmarks the render cycle.
+func LeaveRenderPath() { inRenderPath.Add(-1) }
 
 // consoleSlogHandler is a slog.Handler that routes log records to the
 // console's slogCh channel, formatted with timestamp and level prefix.
@@ -34,7 +52,7 @@ func (h *consoleSlogHandler) Handle(ctx context.Context, r slog.Record) error {
 
 	// Don't route to the console channel if we're inside a View/Render call.
 	// Sending to the channel triggers Update → View → more slog calls → loop.
-	if isRenderPath() {
+	if inRenderPath.Load() > 0 {
 		return err
 	}
 
@@ -58,28 +76,6 @@ func (h *consoleSlogHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	return err
-}
-
-// isRenderPath checks the call stack for View or Render methods.
-// If found, we're inside the render cycle and must not send to the console
-// channel (which would trigger Update → View → slog → feedback loop).
-func isRenderPath() bool {
-	var pcs [16]uintptr
-	n := runtime.Callers(3, pcs[:]) // skip Callers, isRenderPath, Handle
-	frames := runtime.CallersFrames(pcs[:n])
-	for {
-		frame, more := frames.Next()
-		// Check for BubbleTea View() or NC widget Render() methods.
-		fn := frame.Function
-		if strings.HasSuffix(fn, ".View") ||
-			strings.HasSuffix(fn, ".Render") {
-			return true
-		}
-		if !more {
-			break
-		}
-	}
-	return false
 }
 
 func (h *consoleSlogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {

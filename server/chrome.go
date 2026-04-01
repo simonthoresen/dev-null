@@ -730,6 +730,9 @@ func (m chromeModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd
 }
 
 func (m chromeModel) View() tea.View {
+	EnterRenderPath()
+	defer LeaveRenderPath()
+
 	var view tea.View
 	if m.width == 0 || m.height == 0 {
 		view.SetContent("Loading null-space...")

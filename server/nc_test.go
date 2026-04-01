@@ -838,9 +838,10 @@ func TestSlogBlockedInRenderPath(t *testing.T) {
 		rec2 := slog.NewRecord(time.Now(), slog.LevelInfo, "render log", 0)
 		_ = handler.Handle(ctx, rec2)
 	}
-	// Call via a method whose name ends with ".Render" in the stack.
-	stub := &renderStub{fn: renderHelper}
-	stub.Render()
+	// Simulate being inside a View/Render cycle.
+	EnterRenderPath()
+	renderHelper()
+	LeaveRenderPath()
 
 	close(ch)
 	var messages []string
@@ -855,11 +856,6 @@ func TestSlogBlockedInRenderPath(t *testing.T) {
 		t.Error("render-path message should have been blocked")
 	}
 }
-
-type renderStub struct{ fn func() }
-
-//go:noinline
-func (r *renderStub) Render() { r.fn() }
 
 // discardHandler is a slog.Handler that discards all records (for testing).
 type discardHandler struct{}
