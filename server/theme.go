@@ -68,6 +68,7 @@ type Theme struct {
 	CrossR string `json:"crossR"` // inner-H meets outer-V on right  (default "┤")
 	CrossT string `json:"crossT"` // inner-V meets outer-H on top    (default "┬")
 	CrossB string `json:"crossB"` // inner-V meets outer-H on bottom (default "┴")
+	CrossX string `json:"crossX"` // inner-H meets inner-V           (default "┼")
 
 	// Action bar separator
 	BarSep string `json:"barSep"` // separator between menu titles (default "│")
@@ -130,6 +131,7 @@ func (t *Theme) XL() string { return ts(t.CrossL, "├") }
 func (t *Theme) XR() string { return ts(t.CrossR, "┤") }
 func (t *Theme) XT() string { return ts(t.CrossT, "┬") }
 func (t *Theme) XB() string { return ts(t.CrossB, "┴") }
+func (t *Theme) XX() string { return ts(t.CrossX, "┼") }
 
 // Action bar separator.
 func (t *Theme) Sep() string { return ts(t.BarSep, "│") }
