@@ -139,6 +139,14 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlay.pushDialog(msg.dialog)
 		return m, nil
 
+	case tea.MouseClickMsg:
+		if msg.Button == tea.MouseLeft {
+			if m.overlay.handleClick(msg.X, msg.Y, 0, m.width, m.height, m.consoleMenus(), "") {
+				return m, nil
+			}
+		}
+		return m, nil
+
 	case tea.KeyPressMsg:
 		// Let the overlay handle F10/menu/dialog keys first.
 		if m.overlay.handleKey(msg.String(), m.consoleMenus(), "") {
@@ -304,6 +312,7 @@ func (m *consoleModel) View() tea.View {
 
 	view.SetContent(content)
 	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 
 	if cursor := m.input.Cursor(); cursor != nil {
 		cursor.Position.Y = m.height - 2

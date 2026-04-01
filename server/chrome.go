@@ -297,6 +297,13 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseClickMsg:
+		// NC overlay gets first crack at mouse clicks (menus, dialogs).
+		if msg.Button == tea.MouseLeft {
+			ncBarRow := 1 // NC bar is at row 1 (after framework menu bar at row 0)
+			if m.overlay.handleClick(msg.X, msg.Y, ncBarRow, m.width, m.height, m.allMenus(), m.playerID) {
+				return m, nil
+			}
+		}
 		if !m.inActiveGame && msg.Button == tea.MouseLeft {
 			teamW := lobbyTeamPanelW
 			if teamW > m.width-10 {

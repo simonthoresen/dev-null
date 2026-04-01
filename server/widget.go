@@ -260,6 +260,176 @@ func (o *overlayState) handleDialogKey(key string) bool {
 	return true
 }
 
+// ─── Mouse handling ───────────────────────────────────────────────────────────
+
+// handleClick processes a left mouse click at screen position (x, y).
+// ncBarRow is the screen row of the action bar. screenW/screenH are for dialog centering.
+// Returns true if the click was consumed by the overlay.
+func (o *overlayState) handleClick(x, y, ncBarRow, screenW, screenH int, menus []common.MenuDef, playerID string) bool {
+	// Priority 1: dialog (topmost overlay)
+	if o.hasDialog() {
+		return o.handleDialogClick(x, y, screenW, screenH)
+	}
+
+	// Priority 2: open dropdown
+	if o.openMenu >= 0 && o.openMenu < len(menus) {
+		if o.handleDropdownClick(x, y, ncBarRow, menus, playerID) {
+			return true
+		}
+		// Click outside dropdown — close it
+		o.openMenu = -1
+		o.menuFocused = false
+		// Fall through to check if click was on the bar itself
+	}
+
+	// Priority 3: action bar row
+	if y == ncBarRow && len(menus) > 0 {
+		pos := ncBarMenuPositions(menus)
+		for i, m := range menus {
+			clean, _ := stripAmpersand(m.Label)
+			startX := pos[i]
+			endX := startX + len(clean) + 2 // " label "
+			if x >= startX && x < endX {
+				o.menuFocused = true
+				o.menuCursor = i
+				o.openMenu = i
+				o.dropCursor = firstSelectable(menus[i].Items)
+				return true
+			}
+		}
+		// Click on bar but not on a menu title — just activate the bar
+		o.menuFocused = true
+		return true
+	}
+
+	return false
+}
+
+func (o *overlayState) handleDropdownClick(x, y, ncBarRow int, menus []common.MenuDef, playerID string) bool {
+	items := menus[o.openMenu].Items
+	if len(items) == 0 {
+		return false
+	}
+
+	// Dropdown position
+	pos := ncBarMenuPositions(menus)
+	ddCol := 0
+	if o.openMenu < len(pos) {
+		ddCol = pos[o.openMenu]
+	}
+	ddRow := ncBarRow + 1 // dropdown starts one row below bar
+
+	// Calculate dropdown dimensions
+	maxLW := 0
+	for _, it := range items {
+		if !isSeparator(it) {
+			clean, _ := stripAmpersand(it.Label)
+			if len(clean) > maxLW {
+				maxLW = len(clean)
+			}
+		}
+	}
+	innerW := maxLW + 2
+	if innerW < 14 {
+		innerW = 14
+	}
+	boxW := innerW + 2 // borders
+
+	// Check if click is inside the dropdown box
+	relX := x - ddCol
+	relY := y - ddRow
+	if relX < 0 || relX >= boxW || relY < 0 {
+		return false
+	}
+
+	// Count rendered lines: top border + items (separators count as 1 line each) + bottom border
+	lineIdx := 0
+	for i, it := range items {
+		lineIdx++ // each item/separator is one line (after top border)
+		if relY == lineIdx && !isSeparator(it) && !it.Disabled {
+			if it.Handler != nil {
+				o.dropCursor = i
+				o.openMenu = -1
+				o.menuFocused = false
+				it.Handler(playerID)
+			}
+			return true
+		}
+	}
+	return relY <= lineIdx+1 // consumed if inside box area
+}
+
+func (o *overlayState) handleDialogClick(x, y, screenW, screenH int) bool {
+	d := o.topDialog()
+	if d == nil {
+		return false
+	}
+	btns := d.Buttons
+	if len(btns) == 0 {
+		btns = []string{"OK"}
+	}
+
+	// Recalculate dialog dimensions (mirrors renderDialog logic)
+	bodyLines := strings.Split(d.Body, "\n")
+	maxBodyW := 0
+	for _, l := range bodyLines {
+		if len(l) > maxBodyW {
+			maxBodyW = len(l)
+		}
+	}
+	btnW := 0
+	for _, b := range btns {
+		btnW += len(b) + 4 // "[ b ]"
+	}
+	btnW += (len(btns) - 1) * 2
+
+	innerW := maxBodyW + 2
+	if len(d.Title)+2 > innerW {
+		innerW = len(d.Title) + 2
+	}
+	if btnW+2 > innerW {
+		innerW = btnW + 2
+	}
+	if innerW < 22 {
+		innerW = 22
+	}
+
+	totalW := innerW + 2 + 1 // box + shadow
+	totalH := 3 + len(bodyLines) + 3 + 1 // top + title + sep + body + sep + buttons + bottom + shadow
+	col := (screenW - totalW) / 2
+	row := (screenH - totalH) / 2
+	if row < 2 {
+		row = 2
+	}
+
+	// Check if click is on the button row
+	// Button row is: top(1) + title(1) + sep(1) + body(len) + sep(1) = 4 + len(bodyLines)
+	btnRow := row + 4 + len(bodyLines)
+	if y == btnRow {
+		// Calculate button positions within the row
+		lpad := (innerW - btnW) / 2
+		bx := col + 1 + lpad // col + left border + left padding
+		for i, b := range btns {
+			bw := len(b) + 4 // "[ b ]"
+			if x >= bx && x < bx+bw {
+				label := btns[i]
+				cb := d.OnClose
+				o.popDialog()
+				if cb != nil {
+					cb(label)
+				}
+				return true
+			}
+			bx += bw + 2 // button width + gap
+		}
+	}
+
+	// Any click inside the dialog area consumes the event (don't pass through)
+	relX := x - col
+	relY := y - row
+	return relX >= 0 && relX < totalW && relY >= 0 && relY < totalH
+}
+
 // ─── Selectable-item helpers ───────────────────────────────────────────────────
 
 func isSeparator(item common.MenuItemDef) bool {
