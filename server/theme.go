@@ -11,71 +11,22 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Theme defines the NC-style chrome palette as 4 depth layers, each with a
-// background and foreground color. Theme authors choose whether layers share
-// colors or are distinct.
-//
-//   Layer 0 — Desktop:  action bar, the "background" behind everything
-//   Layer 1 — Menu:     dropdown menus pulled from the action bar
-//   Layer 2 — Dialog:   modal dialog boxes
-//   Layer 3 — Popup:    nested popups inside dialogs (confirmations, selectors)
-//
-// Additional colors: disabled text, drop shadow, and a highlight (selection)
-// pair used for focused items, title bars, and active buttons.
-type Theme struct {
-	Name string `json:"name"`
+// ─── Palette ──────────────────────────────────────────────────────────────────
 
-	// Layer 0 — Desktop / action bar
-	DesktopBg string `json:"desktopBg"`
-	DesktopFg string `json:"desktopFg"`
-
-	// Layer 1 — Menu (dropdown panels)
-	MenuBg string `json:"menuBg"`
-	MenuFg string `json:"menuFg"`
-
-	// Layer 2 — Dialog (modal boxes)
-	DialogBg string `json:"dialogBg"`
-	DialogFg string `json:"dialogFg"`
-
-	// Layer 3 — Popup (nested over dialogs)
-	PopupBg string `json:"popupBg"`
-	PopupFg string `json:"popupFg"`
-
-	// Highlight — selected/focused items, title bars, active buttons
-	HighlightBg string `json:"highlightBg"`
-	HighlightFg string `json:"highlightFg"`
-
-	// Input fields (text inputs, editable areas)
-	InputBg string `json:"inputBg"`
-	InputFg string `json:"inputFg"`
-
-	// Disabled items
-	DisabledFg string `json:"disabledFg"`
-
-	// Drop shadow
-	ShadowBg string `json:"shadowBg"`
-
-	// Outer border (the box frame)
-	OuterTL string `json:"outerTL"` // top-left corner     (default "┌")
-	OuterTR string `json:"outerTR"` // top-right corner    (default "┐")
-	OuterBL string `json:"outerBL"` // bottom-left corner  (default "└")
-	OuterBR string `json:"outerBR"` // bottom-right corner (default "┘")
-	OuterH  string `json:"outerH"`  // horizontal bar      (default "─")
-	OuterV  string `json:"outerV"`  // vertical bar        (default "│")
-
-	// Inner dividers (separators inside the box)
-	InnerH string `json:"innerH"` // horizontal divider  (default "─")
-	InnerV string `json:"innerV"` // vertical divider    (default "│")
-
-	// Intersections (where inner dividers meet the outer frame)
-	CrossL string `json:"crossL"` // inner-H meets outer-V on left   (default "├")
-	CrossR string `json:"crossR"` // inner-H meets outer-V on right  (default "┤")
-	CrossT string `json:"crossT"` // inner-V meets outer-H on top    (default "┬")
-	CrossB string `json:"crossB"` // inner-V meets outer-H on bottom (default "┴")
-	CrossX string `json:"crossX"` // inner-H meets inner-V           (default "┼")
-
-	// Action bar separator
-	BarSep string `json:"barSep"` // separator between menu titles (default "│")
+// Palette defines a complete color set for one visual layer.
+// NC used 3 palettes (primary/secondary/tertiary) that alternated by depth,
+// plus a fixed warning palette for error dialogs.
+type Palette struct {
+	Bg          string `json:"bg"`          // body background
+	Fg          string `json:"fg"`          // body foreground (normal text)
+	Accent      string `json:"accent"`      // shortcut letters, column headers
+	HighlightBg string `json:"highlightBg"` // selected item, active title, buttons
+	HighlightFg string `json:"highlightFg"` // selected item foreground
+	ActiveBg    string `json:"activeBg"`    // focused button, active accent
+	ActiveFg    string `json:"activeFg"`    // focused button foreground
+	InputBg     string `json:"inputBg"`     // text input field background
+	InputFg     string `json:"inputFg"`     // text input field foreground
+	DisabledFg  string `json:"disabledFg"`  // disabled/grayed items
 }
 
 // tc converts a hex string to a color.Color, returning fallback if empty.
@@ -86,33 +37,102 @@ func tc(hex, fallback string) color.Color {
 	return lipgloss.Color(hex)
 }
 
-// Layer 0 — Desktop
-func (t *Theme) DesktopBgC() color.Color { return tc(t.DesktopBg, "#000080") }
-func (t *Theme) DesktopFgC() color.Color { return tc(t.DesktopFg, "#AAAAAA") }
+// Resolved color accessors.
+func (p *Palette) BgC() color.Color          { return tc(p.Bg, "#000080") }
+func (p *Palette) FgC() color.Color          { return tc(p.Fg, "#00AAAA") }
+func (p *Palette) AccentC() color.Color      { return tc(p.Accent, "#FFFF55") }
+func (p *Palette) HighlightBgC() color.Color { return tc(p.HighlightBg, "#00AAAA") }
+func (p *Palette) HighlightFgC() color.Color { return tc(p.HighlightFg, "#000000") }
+func (p *Palette) ActiveBgC() color.Color    { return tc(p.ActiveBg, "#FFFF55") }
+func (p *Palette) ActiveFgC() color.Color    { return tc(p.ActiveFg, "#000000") }
+func (p *Palette) InputBgC() color.Color     { return tc(p.InputBg, "#000000") }
+func (p *Palette) InputFgC() color.Color     { return tc(p.InputFg, "#55FFFF") }
+func (p *Palette) DisabledFgC() color.Color  { return tc(p.DisabledFg, "#555555") }
 
-// Layer 1 — Menu
-func (t *Theme) MenuBgC() color.Color { return tc(t.MenuBg, "#AAAAAA") }
-func (t *Theme) MenuFgC() color.Color { return tc(t.MenuFg, "#000000") }
+// Lipgloss style helpers.
+func (p *Palette) BaseStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Background(p.BgC()).Foreground(p.FgC())
+}
+func (p *Palette) AccentStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Background(p.BgC()).Foreground(p.AccentC()).Underline(true)
+}
+func (p *Palette) HighlightStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Background(p.HighlightBgC()).Foreground(p.HighlightFgC()).Bold(true)
+}
+func (p *Palette) ActiveStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Background(p.ActiveBgC()).Foreground(p.ActiveFgC()).Bold(true)
+}
+func (p *Palette) DisabledStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Background(p.BgC()).Foreground(p.DisabledFgC())
+}
+func (p *Palette) InputStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Background(p.InputBgC()).Foreground(p.InputFgC())
+}
 
-// Layer 2 — Dialog
-func (t *Theme) DialogBgC() color.Color { return tc(t.DialogBg, "#AAAAAA") }
-func (t *Theme) DialogFgC() color.Color { return tc(t.DialogFg, "#000000") }
+// ─── Theme ────────────────────────────────────────────────────────────────────
 
-// Layer 3 — Popup
-func (t *Theme) PopupBgC() color.Color { return tc(t.PopupBg, "#AAAAAA") }
-func (t *Theme) PopupFgC() color.Color { return tc(t.PopupFg, "#000000") }
+// Theme defines the complete visual theme with 4 palettes that alternate by
+// depth, plus global border characters and shadow color.
+//
+// Depth assignment:
+//
+//	0 (desktop/panels) → Primary
+//	1 (menus, first dialog) → Secondary
+//	2 (dialog over dialog) → Tertiary
+//	3 → Secondary again, 4 → Tertiary, ...
+//	Warning dialogs → Warning (always, regardless of depth)
+type Theme struct {
+	Name string `json:"name"`
 
-// Highlight
-func (t *Theme) HighlightBgC() color.Color { return tc(t.HighlightBg, "#000080") }
-func (t *Theme) HighlightFgC() color.Color { return tc(t.HighlightFg, "#FFFFFF") }
+	Primary   Palette `json:"primary"`
+	Secondary Palette `json:"secondary"`
+	Tertiary  Palette `json:"tertiary"`
+	Warning   Palette `json:"warning"`
 
-// Input fields
-func (t *Theme) InputBgC() color.Color { return tc(t.InputBg, "#000000") }
-func (t *Theme) InputFgC() color.Color { return tc(t.InputFg, "#55FFFF") }
+	// Drop shadow
+	ShadowBg string `json:"shadowBg"`
 
-// Extras
-func (t *Theme) DisabledFgC() color.Color { return tc(t.DisabledFg, "#888888") }
-func (t *Theme) ShadowBgC() color.Color   { return tc(t.ShadowBg, "#333333") }
+	// Outer border (the box/window frame)
+	OuterTL string `json:"outerTL"`
+	OuterTR string `json:"outerTR"`
+	OuterBL string `json:"outerBL"`
+	OuterBR string `json:"outerBR"`
+	OuterH  string `json:"outerH"`
+	OuterV  string `json:"outerV"`
+
+	// Inner dividers (separators inside windows/panels)
+	InnerH string `json:"innerH"`
+	InnerV string `json:"innerV"`
+
+	// Intersections (where inner dividers meet the outer frame)
+	CrossL string `json:"crossL"`
+	CrossR string `json:"crossR"`
+	CrossT string `json:"crossT"`
+	CrossB string `json:"crossB"`
+	CrossX string `json:"crossX"`
+
+	// Action bar separator
+	BarSep string `json:"barSep"`
+}
+
+// PaletteAt returns the palette for the given depth level.
+// Depth 0 = Primary, odd = Secondary, even > 0 = Tertiary.
+func (t *Theme) PaletteAt(depth int) *Palette {
+	switch {
+	case depth <= 0:
+		return &t.Primary
+	case depth%2 == 1:
+		return &t.Secondary
+	default:
+		return &t.Tertiary
+	}
+}
+
+// WarningPalette returns the warning palette.
+func (t *Theme) WarningPalette() *Palette { return &t.Warning }
+
+// Global color accessors.
+func (t *Theme) ShadowBgC() color.Color { return tc(t.ShadowBg, "#333333") }
 
 // ts returns s if non-empty, otherwise fallback.
 func ts(s, fallback string) string {

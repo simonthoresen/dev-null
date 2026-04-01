@@ -381,7 +381,6 @@ func (s *NCSeparator) Render(width int, _ bool, _ lipgloss.Style) string {
 // It renders themed borders, a title bar, and manages focus and cursor.
 type NCPanel struct {
 	Title    string
-	Desktop  bool // if true, use desktop-layer colors (blue); otherwise dialog-layer (gray)
 	Controls []NCControl
 	FocusIdx int // index into Controls; -1 = no focus
 
@@ -394,20 +393,15 @@ type NCPanel struct {
 
 // Render draws the panel at the given screen position (x, y) within the
 // given width and height. Returns the rendered string (newline-joined rows).
-func (p *NCPanel) Render(x, y, width, height int, t *Theme) string {
+func (p *NCPanel) Render(x, y, width, height int, pal *Palette, t *Theme) string {
 	p.screenX = x
 	p.screenY = y
 	p.width = width
 	p.height = height
 	p.innerW = max(1, width-2)
 
-	var boxStyle lipgloss.Style
-	if p.Desktop {
-		boxStyle = lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.DesktopFgC())
-	} else {
-		boxStyle = lipgloss.NewStyle().Background(t.DialogBgC()).Foreground(t.DialogFgC())
-	}
-	titleStyle := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
+	boxStyle := pal.BaseStyle()
+	titleStyle := pal.HighlightStyle()
 	lv := boxStyle.Render(t.OV())
 	rv := boxStyle.Render(t.OV())
 
@@ -462,8 +456,8 @@ func (p *NCPanel) Render(x, y, width, height int, t *Theme) string {
 		// Use input-layer colors for text input controls.
 		style := boxStyle
 		if ti, isInput := c.(*NCTextInput); isInput {
-			ti.bg = t.InputBgC()
-			ti.fg = t.InputFgC()
+			ti.bg = pal.InputBgC()
+			ti.fg = pal.InputFgC()
 			style = lipgloss.NewStyle().Background(ti.bg).Foreground(ti.fg)
 		}
 		content := c.Render(p.innerW, focused, style)

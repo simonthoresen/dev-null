@@ -492,12 +492,11 @@ func prevSelectable(items []common.MenuItemDef, cur int) int {
 // ─── Menu bar rendering ────────────────────────────────────────────────────────
 
 // renderNCBar renders the NC-style action bar row (full terminal width).
-func (o *overlayState) renderNCBar(width int, menus []common.MenuDef, t *Theme) string {
-	barStyle    := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.DesktopFgC())
-	activeStyle := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
-	// Shortcut char accent: highlight fg on normal bg (stands out from regular text).
-	barAccent    := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.HighlightFgC()).Underline(true)
-	activeAccent := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.DesktopFgC()).Bold(true).Underline(true)
+func (o *overlayState) renderNCBar(width int, menus []common.MenuDef, p *Palette, t *Theme) string {
+	barStyle     := p.BaseStyle()
+	activeStyle  := p.HighlightStyle()
+	barAccent    := p.AccentStyle()
+	activeAccent := lipgloss.NewStyle().Background(p.HighlightBgC()).Foreground(p.AccentC()).Bold(true).Underline(true)
 
 	var sb strings.Builder
 	for i, m := range menus {
@@ -542,7 +541,7 @@ func ncBarMenuPositions(menus []common.MenuDef) []int {
 
 // renderDropdown returns (overlayString, col, row) for PlaceOverlay.
 // ncBarRow is the screen row (0-based) of the NC action bar.
-func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *Theme) (string, int, int) {
+func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, p *Palette, t *Theme) (string, int, int) {
 	if o.openMenu < 0 || o.openMenu >= len(menus) {
 		return "", 0, 0
 	}
@@ -582,9 +581,9 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 		innerW = 14
 	}
 
-	menuStyle     := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.MenuFgC())
-	activeStyle   := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
-	disabledStyle := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.DisabledFgC())
+	menuStyle     := p.BaseStyle()
+	activeStyle   := p.HighlightStyle()
+	disabledStyle := p.DisabledStyle()
 	shadowStyle   := lipgloss.NewStyle().Background(t.ShadowBgC())
 
 	top    := menuStyle.Render(t.OTL() + strings.Repeat(t.OH(), innerW) + t.OTR())
@@ -595,8 +594,8 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 	var lines []string
 	lines = append(lines, top)
 
-	menuAccent  := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.HighlightBgC()).Underline(true)
-	activeAccent := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.MenuBgC()).Bold(true).Underline(true)
+	menuAccent  := p.AccentStyle()
+	activeAccent := lipgloss.NewStyle().Background(p.HighlightBgC()).Foreground(p.AccentC()).Bold(true).Underline(true)
 
 	for i, it := range items {
 		if isSeparator(it) {
@@ -659,7 +658,7 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 
 // renderDialog returns (overlayString, col, row) for PlaceOverlay, centered in
 // the screen.
-func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int, int) {
+func (o *overlayState) renderDialog(screenW, screenH int, p *Palette, t *Theme) (string, int, int) {
 	d := o.topDialog()
 	if d == nil {
 		return "", 0, 0
@@ -695,8 +694,8 @@ func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int
 		innerW = 22
 	}
 
-	boxStyle    := lipgloss.NewStyle().Background(t.DialogBgC()).Foreground(t.DialogFgC())
-	titleStyle  := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
+	boxStyle    := p.BaseStyle()
+	titleStyle  := p.HighlightStyle()
 	shadowStyle := lipgloss.NewStyle().Background(t.ShadowBgC())
 
 	hbar := func(l, f, r string) string {
@@ -726,7 +725,7 @@ func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int
 	lines = append(lines, hbar(t.XL(), t.IH(), t.XR()))
 
 	// Button row.
-	btnActiveSt := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
+	btnActiveSt := p.ActiveStyle()
 	var btnParts []string
 	for i, b := range btns {
 		label := "[ " + b + " ]"

@@ -53,7 +53,6 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	inputCtrl := &NCTextInput{Model: input}
 
 	panel := &NCPanel{
-		Desktop:  true,
 		Controls: []NCControl{
 			logView,
 			inputCtrl,
@@ -295,14 +294,15 @@ func (m *consoleModel) View() tea.View {
 	}
 
 	t := m.theme
-	statusStyle := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.DesktopFgC()).Bold(true)
+	primary := t.PaletteAt(0)   // desktop
+	secondary := t.PaletteAt(1) // menus, status bar
 
-	// NC action bar (row 0)
-	ncBar := m.overlay.renderNCBar(m.width, m.consoleMenus(), t)
+	// NC action bar (row 0) — uses secondary palette (like NC menu bar)
+	ncBar := m.overlay.renderNCBar(m.width, m.consoleMenus(), secondary, t)
 
-	// NC panel with log + input (rows 1 through height-2)
+	// NC panel with log + input (rows 1 through height-2) — primary palette
 	panelH := m.height - 2 // subtract NC bar and status bar
-	panelContent := m.panel.Render(0, 1, m.width, panelH, t)
+	panelContent := m.panel.Render(0, 1, m.width, panelH, primary, t)
 
 	// Status bar (bottom row)
 	m.app.state.mu.RLock()
@@ -322,19 +322,20 @@ func (m *consoleModel) View() tea.View {
 		}
 	}
 	statusText := fmt.Sprintf("game: %s | players: %d | uptime %s | %s", gameLabel, m.app.state.PlayerCount(), m.app.uptime(), time.Now().Format("15:04:05"))
-	statusBar := statusStyle.Width(m.width).Render(truncateStyled(statusText, m.width))
+	statusBar := secondary.BaseStyle().Width(m.width).Render(truncateStyled(statusText, m.width))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, ncBar, panelContent, statusBar)
 
 	// Overlay layers (dropdown menus, dialogs)
 	menus := m.consoleMenus()
 	if m.overlay.openMenu >= 0 {
-		if ddStr, ddCol, ddRow := m.overlay.renderDropdown(menus, 0, t); ddStr != "" {
+		if ddStr, ddCol, ddRow := m.overlay.renderDropdown(menus, 0, secondary, t); ddStr != "" {
 			content = PlaceOverlay(ddCol, ddRow, ddStr, content)
 		}
 	}
 	if m.overlay.hasDialog() {
-		if dlgStr, dlgCol, dlgRow := m.overlay.renderDialog(m.width, m.height, t); dlgStr != "" {
+		// Dialog uses tertiary palette (depth 2).
+		if dlgStr, dlgCol, dlgRow := m.overlay.renderDialog(m.width, m.height, t.PaletteAt(2), t); dlgStr != "" {
 			content = PlaceOverlay(dlgCol, dlgRow, dlgStr, content)
 		}
 	}

@@ -1,17 +1,36 @@
 {
     "name": "dark",
-    "desktopBg":   "#1E1E2E",
-    "desktopFg":   "#CDD6F4",
-    "menuBg":      "#313244",
-    "menuFg":      "#CDD6F4",
-    "dialogBg":    "#45475A",
-    "dialogFg":    "#CDD6F4",
-    "popupBg":     "#585B70",
-    "popupFg":     "#CDD6F4",
-    "highlightBg": "#89B4FA",
-    "highlightFg": "#1E1E2E",
-    "inputBg":     "#11111B",
-    "inputFg":     "#A6E3A1",
-    "disabledFg":  "#6C7086",
-    "shadowBg":    "#11111B"
+    "primary": {
+        "bg": "#1E1E2E", "fg": "#CDD6F4",
+        "accent": "#F9E2AF",
+        "highlightBg": "#89B4FA", "highlightFg": "#1E1E2E",
+        "activeBg": "#F9E2AF", "activeFg": "#1E1E2E",
+        "inputBg": "#11111B", "inputFg": "#A6E3A1",
+        "disabledFg": "#6C7086"
+    },
+    "secondary": {
+        "bg": "#313244", "fg": "#CDD6F4",
+        "accent": "#F9E2AF",
+        "highlightBg": "#89B4FA", "highlightFg": "#1E1E2E",
+        "activeBg": "#F9E2AF", "activeFg": "#1E1E2E",
+        "inputBg": "#11111B", "inputFg": "#A6E3A1",
+        "disabledFg": "#6C7086"
+    },
+    "tertiary": {
+        "bg": "#45475A", "fg": "#CDD6F4",
+        "accent": "#F9E2AF",
+        "highlightBg": "#89B4FA", "highlightFg": "#1E1E2E",
+        "activeBg": "#F9E2AF", "activeFg": "#1E1E2E",
+        "inputBg": "#11111B", "inputFg": "#A6E3A1",
+        "disabledFg": "#6C7086"
+    },
+    "warning": {
+        "bg": "#45475A", "fg": "#F38BA8",
+        "accent": "#F9E2AF",
+        "highlightBg": "#F38BA8", "highlightFg": "#1E1E2E",
+        "activeBg": "#F9E2AF", "activeFg": "#1E1E2E",
+        "inputBg": "#11111B", "inputFg": "#A6E3A1",
+        "disabledFg": "#6C7086"
+    },
+    "shadowBg": "#11111B"
 }

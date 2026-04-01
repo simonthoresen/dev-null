@@ -1,15 +1,36 @@
 {
     "name": "norton",
-    "desktopBg":   "#000080",
-    "desktopFg":   "#AAAAAA",
-    "menuBg":      "#AAAAAA",
-    "menuFg":      "#000000",
-    "dialogBg":    "#AAAAAA",
-    "dialogFg":    "#000000",
-    "popupBg":     "#AAAAAA",
-    "popupFg":     "#000000",
-    "highlightBg": "#000080",
-    "highlightFg": "#FFFFFF",
-    "disabledFg":  "#888888",
-    "shadowBg":    "#333333"
+    "primary": {
+        "bg": "#000080", "fg": "#00AAAA",
+        "accent": "#FFFF55",
+        "highlightBg": "#00AAAA", "highlightFg": "#000000",
+        "activeBg": "#FFFF55", "activeFg": "#000000",
+        "inputBg": "#000000", "inputFg": "#55FFFF",
+        "disabledFg": "#555555"
+    },
+    "secondary": {
+        "bg": "#008080", "fg": "#000000",
+        "accent": "#FFFF55",
+        "highlightBg": "#000000", "highlightFg": "#00AAAA",
+        "activeBg": "#FFFF55", "activeFg": "#000000",
+        "inputBg": "#000000", "inputFg": "#55FFFF",
+        "disabledFg": "#555555"
+    },
+    "tertiary": {
+        "bg": "#AAAAAA", "fg": "#000000",
+        "accent": "#FFFF55",
+        "highlightBg": "#000000", "highlightFg": "#FFFFFF",
+        "activeBg": "#FFFF55", "activeFg": "#000000",
+        "inputBg": "#000000", "inputFg": "#55FFFF",
+        "disabledFg": "#555555"
+    },
+    "warning": {
+        "bg": "#AA0000", "fg": "#FFFFFF",
+        "accent": "#FFFF55",
+        "highlightBg": "#FFFFFF", "highlightFg": "#AA0000",
+        "activeBg": "#FFFF55", "activeFg": "#000000",
+        "inputBg": "#000000", "inputFg": "#55FFFF",
+        "disabledFg": "#555555"
+    },
+    "shadowBg": "#333333"
 }
