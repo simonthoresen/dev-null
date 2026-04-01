@@ -489,6 +489,26 @@ func prevSelectable(items []common.MenuItemDef, cur int) int {
 	return cur
 }
 
+// ─── Drop shadow ──────────────────────────────────────────────────────────────
+
+// addDropShadow wraps a box (slice of rendered lines) with a drop shadow:
+// right edge shadow on rows 1+ (skips top-right corner), bottom shadow on
+// cols 1+ (skips bottom-left corner). Returns the new lines.
+func addDropShadow(lines []string, boxW int, shadowStyle lipgloss.Style) []string {
+	shadow1 := shadowStyle.Render("▐")
+	var result []string
+	for i, l := range lines {
+		if i == 0 {
+			result = append(result, l) // row 0: no right shadow
+		} else {
+			result = append(result, l+shadow1) // rows 1+: right shadow
+		}
+	}
+	// Bottom shadow row: skip col 0 (bottom-left corner), shadow rest.
+	result = append(result, " "+shadowStyle.Render(strings.Repeat("▀", boxW)))
+	return result
+}
+
 // ─── Menu bar rendering ────────────────────────────────────────────────────────
 
 // renderNCBar renders the NC-style action bar row (full terminal width).
@@ -632,18 +652,7 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, p *P
 	}
 	lines = append(lines, bottom)
 
-	// Drop shadow: right strip on lines 1+, bottom row below box.
-	shadow1 := shadowStyle.Render(" ")
-	boxW := innerW + 2
-	var withShadow []string
-	for i, l := range lines {
-		if i == 0 {
-			withShadow = append(withShadow, l+" ") // no shadow on top-right corner
-		} else {
-			withShadow = append(withShadow, l+shadow1)
-		}
-	}
-	withShadow = append(withShadow, " "+shadowStyle.Width(boxW).Render(""))
+	withShadow := addDropShadow(lines, innerW+2, shadowStyle)
 
 	pos := ncBarMenuPositions(menus)
 	anchorCol := 0
@@ -758,21 +767,10 @@ func (o *overlayState) renderDialog(screenW, screenH int, p *Palette, t *Theme) 
 
 	lines = append(lines, hbar(t.OBL(), t.OH(), t.OBR()))
 
-	// Drop shadow.
-	shadow1 := shadowStyle.Render(" ")
-	boxW := innerW + 2
-	var withShadow []string
-	for i, l := range lines {
-		if i == 0 {
-			withShadow = append(withShadow, l+" ")
-		} else {
-			withShadow = append(withShadow, l+shadow1)
-		}
-	}
-	withShadow = append(withShadow, " "+shadowStyle.Width(boxW).Render(""))
+	withShadow := addDropShadow(lines, innerW+2, shadowStyle)
 
 	content := strings.Join(withShadow, "\n")
-	totalW := boxW + 1
+	totalW := innerW + 2 + 1 // box + shadow
 	totalH := len(withShadow)
 
 	col := (screenW - totalW) / 2
