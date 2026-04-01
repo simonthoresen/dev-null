@@ -34,11 +34,7 @@ if (-not $Local -and $positionals.Count -ge 1 -and $positionals[0]) {
 }
 
 if (-not $Local -and -not $Password) {
-    $Password = Read-Host "Enter admin password"
-    if (-not $Password) {
-        Write-Host "Password is required." -ForegroundColor Red
-        exit 1
-    }
+    $Password = Read-Host "Enter admin password (leave empty for none)"
 }
 
 $root = $PSScriptRoot

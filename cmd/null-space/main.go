@@ -37,7 +37,7 @@ func main() {
 	var localGame string
 	var localPlayer string
 	var lanMode bool
-	flag.StringVar(&password, "password", "", "admin password (required)")
+	flag.StringVar(&password, "password", "", "admin password (optional, can be set at runtime via /password)")
 	flag.StringVar(&address, "address", ":23234", "listen address")
 	flag.StringVar(&portOverride, "port", "", "SSH listen port (overrides --address port, default 23234)")
 	flag.StringVar(&dataDir, "data-dir", defaultDataDir(), "directory containing games/, logs/")
