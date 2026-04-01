@@ -237,9 +237,9 @@ func (m *consoleModel) consoleMenus() []common.MenuDef {
 				{Label: "&Plugins...", Handler: func(_ string) { m.showListDialog("Plugins", "plugins", ".js") }},
 				{Label: "&Games...", Handler: func(_ string) { m.showListDialog("Games", "games", ".js") }},
 				{Label: "---"},
-				{Label: "S&hutdown", Hotkey: "ctrl+c", Handler: func(_ string) {
+				{Label: "E&xit", Hotkey: "ctrl+c", Handler: func(_ string) {
 					m.overlay.pushDialog(common.DialogRequest{
-						Title:   "Shutdown",
+						Title:   "Exit",
 						Body:    "Are you sure you want to shut down the server?",
 						Buttons: []string{"Yes", "No"},
 						OnClose: func(btn string) {
