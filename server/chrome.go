@@ -781,14 +781,21 @@ func (m chromeModel) View() tea.View {
 
 	// Apply overlay layers on top of the base content.
 	menus := m.allMenus()
+	ss := m.theme.ShadowStyle()
 	if m.overlay.openMenu >= 0 {
 		if ddStr, ddCol, ddRow := m.overlay.renderDropdown(menus, 1, m.theme.PaletteAt(1), m.theme); ddStr != "" {
+			ddLines := strings.Split(ddStr, "\n")
 			content = PlaceOverlay(ddCol, ddRow, ddStr, content)
+			sh := shadowFor(ddCol, ddRow, lipgloss.Width(ddLines[0]), len(ddLines))
+			content = ApplyShadow(sh.col, sh.row, sh.width, sh.height, content, ss)
 		}
 	}
 	if m.overlay.hasDialog() {
 		if dlgStr, dlgCol, dlgRow := m.overlay.renderDialog(m.width, m.height, m.theme.PaletteAt(2), m.theme); dlgStr != "" {
+			dlgLines := strings.Split(dlgStr, "\n")
 			content = PlaceOverlay(dlgCol, dlgRow, dlgStr, content)
+			sh := shadowFor(dlgCol, dlgRow, lipgloss.Width(dlgLines[0]), len(dlgLines))
+			content = ApplyShadow(sh.col, sh.row, sh.width, sh.height, content, ss)
 		}
 	}
 

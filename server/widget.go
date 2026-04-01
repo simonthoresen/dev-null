@@ -491,22 +491,23 @@ func prevSelectable(items []common.MenuItemDef, cur int) int {
 
 // ─── Drop shadow ──────────────────────────────────────────────────────────────
 
-// addDropShadow wraps a box (slice of rendered lines) with a drop shadow:
-// right edge shadow on rows 1+ (skips top-right corner), bottom shadow on
-// cols 1+ (skips bottom-left corner). Returns the new lines.
-func addDropShadow(lines []string, boxW int, shadowStyle lipgloss.Style) []string {
-	shadow1 := shadowStyle.Render("▐")
-	var result []string
-	for i, l := range lines {
-		if i == 0 {
-			result = append(result, l) // row 0: no right shadow
-		} else {
-			result = append(result, l+shadow1) // rows 1+: right shadow
-		}
+// shadowRegion describes the drop shadow area relative to a box at (col, row).
+// The shadow is 1 cell right and 1 cell down from the box, excluding the
+// top-right and bottom-left corners.
+type shadowRegion struct {
+	col, row      int // absolute screen position of shadow top-left
+	width, height int // shadow region size
+}
+
+// shadowFor returns the shadow region for a box placed at (col, row) with
+// the given width and height.
+func shadowFor(col, row, boxW, boxH int) shadowRegion {
+	return shadowRegion{
+		col:    col + 1,
+		row:    row + 1,
+		width:  boxW,
+		height: boxH,
 	}
-	// Bottom shadow row: skip col 0 (bottom-left corner), shadow rest.
-	result = append(result, " "+shadowStyle.Render(strings.Repeat("▀", boxW)))
-	return result
 }
 
 // ─── Menu bar rendering ────────────────────────────────────────────────────────
@@ -604,7 +605,6 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, p *P
 	menuStyle     := p.BaseStyle()
 	activeStyle   := p.HighlightStyle()
 	disabledStyle := p.DisabledStyle()
-	shadowStyle   := lipgloss.NewStyle().Background(t.ShadowBgC())
 
 	top    := menuStyle.Render(t.OTL() + strings.Repeat(t.OH(), innerW) + t.OTR())
 	bottom := menuStyle.Render(t.OBL() + strings.Repeat(t.OH(), innerW) + t.OBR())
@@ -652,15 +652,13 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, p *P
 	}
 	lines = append(lines, bottom)
 
-	withShadow := addDropShadow(lines, innerW+2, shadowStyle)
-
 	pos := ncBarMenuPositions(menus)
 	anchorCol := 0
 	if o.openMenu < len(pos) {
 		anchorCol = pos[o.openMenu]
 	}
 
-	return strings.Join(withShadow, "\n"), anchorCol, ncBarRow + 1
+	return strings.Join(lines, "\n"), anchorCol, ncBarRow + 1
 }
 
 // ─── Dialog rendering ──────────────────────────────────────────────────────────
@@ -705,7 +703,6 @@ func (o *overlayState) renderDialog(screenW, screenH int, p *Palette, t *Theme) 
 
 	boxStyle    := p.BaseStyle()
 	titleStyle  := p.HighlightStyle()
-	shadowStyle := lipgloss.NewStyle().Background(t.ShadowBgC())
 
 	hbar := func(l, f, r string) string {
 		return boxStyle.Render(l + strings.Repeat(f, innerW) + r)
@@ -767,11 +764,9 @@ func (o *overlayState) renderDialog(screenW, screenH int, p *Palette, t *Theme) 
 
 	lines = append(lines, hbar(t.OBL(), t.OH(), t.OBR()))
 
-	withShadow := addDropShadow(lines, innerW+2, shadowStyle)
-
-	content := strings.Join(withShadow, "\n")
-	totalW := innerW + 2 + 1 // box + shadow
-	totalH := len(withShadow)
+	content := strings.Join(lines, "\n")
+	totalW := innerW + 2
+	totalH := len(lines)
 
 	col := (screenW - totalW) / 2
 	if col < 0 {

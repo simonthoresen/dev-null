@@ -89,8 +89,9 @@ type Theme struct {
 	Tertiary  Palette `json:"tertiary"`
 	Warning   Palette `json:"warning"`
 
-	// Drop shadow
+	// Drop shadow (bg = shadow area, fg = half-block foreground for depth effect)
 	ShadowBg string `json:"shadowBg"`
+	ShadowFg string `json:"shadowFg"`
 
 	// Outer border (the box/window frame)
 	OuterTL string `json:"outerTL"`
@@ -132,7 +133,13 @@ func (t *Theme) PaletteAt(depth int) *Palette {
 func (t *Theme) WarningPalette() *Palette { return &t.Warning }
 
 // Global color accessors.
-func (t *Theme) ShadowBgC() color.Color { return tc(t.ShadowBg, "#333333") }
+func (t *Theme) ShadowBgC() color.Color { return tc(t.ShadowBg, "#000000") }
+func (t *Theme) ShadowFgC() color.Color { return tc(t.ShadowFg, "#555555") }
+
+// ShadowStyle returns the style for drop shadow rendering.
+func (t *Theme) ShadowStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Background(t.ShadowBgC()).Foreground(t.ShadowFgC())
+}
 
 // ts returns s if non-empty, otherwise fallback.
 func ts(s, fallback string) string {

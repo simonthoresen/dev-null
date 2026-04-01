@@ -326,17 +326,23 @@ func (m *consoleModel) View() tea.View {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, ncBar, panelContent, statusBar)
 
-	// Overlay layers (dropdown menus, dialogs)
+	// Overlay layers (dropdown menus, dialogs) with drop shadows.
 	menus := m.consoleMenus()
+	ss := t.ShadowStyle()
 	if m.overlay.openMenu >= 0 {
 		if ddStr, ddCol, ddRow := m.overlay.renderDropdown(menus, 0, secondary, t); ddStr != "" {
+			ddLines := strings.Split(ddStr, "\n")
 			content = PlaceOverlay(ddCol, ddRow, ddStr, content)
+			sh := shadowFor(ddCol, ddRow, lipgloss.Width(ddLines[0]), len(ddLines))
+			content = ApplyShadow(sh.col, sh.row, sh.width, sh.height, content, ss)
 		}
 	}
 	if m.overlay.hasDialog() {
-		// Dialog uses tertiary palette (depth 2).
 		if dlgStr, dlgCol, dlgRow := m.overlay.renderDialog(m.width, m.height, t.PaletteAt(2), t); dlgStr != "" {
+			dlgLines := strings.Split(dlgStr, "\n")
 			content = PlaceOverlay(dlgCol, dlgRow, dlgStr, content)
+			sh := shadowFor(dlgCol, dlgRow, lipgloss.Width(dlgLines[0]), len(dlgLines))
+			content = ApplyShadow(sh.col, sh.row, sh.width, sh.height, content, ss)
 		}
 	}
 
