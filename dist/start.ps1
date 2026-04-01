@@ -101,8 +101,8 @@ New-Item -ItemType File -Path $script:runLog -Force | Out-Null
 function Write-RunLogLine {
     param([string]$Message)
     if (-not $script:runLog) { return }
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
-    Add-Content -Path $script:runLog -Value ("{0} [script] {1}" -f $timestamp, $Message)
+    $timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss.fffzzz")
+    Add-Content -Path $script:runLog -Value ("time={0} level=INFO msg=`"{1}`" component=script pid={2}" -f $timestamp, $Message, $PID)
 }
 
 Write-RunLogLine "starting null-space start script"
