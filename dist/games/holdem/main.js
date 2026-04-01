@@ -1,7 +1,6 @@
 // main.js — Texas Hold'em for null-space (NC-panel UI, team-based)
 // Each team shares one hand. First team member to act controls the decision.
 
-include("ncui");
 include("poker");
 include("ui");
 
@@ -567,14 +566,19 @@ var Game = {
     },
 
     view: function(playerID, width, height) {
+        // Fallback for raw view — not normally called when viewNC is defined.
+        tick();
+        return '';
+    },
+
+    viewNC: function(playerID, width, height) {
         tick();
         var seatID = playerSeat(playerID);
         if (!seatID) {
-            // Spectator: show first team's perspective
             if (state.seatOrder.length > 0) seatID = state.seatOrder[0];
-            else return ncFillScreen([], width, height).join('\n');
+            else return { type: 'label', text: 'Waiting...', align: 'center' };
         }
-        return renderGameView(seatID, width, height);
+        return buildViewNC(seatID, width, height);
     },
 
     statusBar: function(playerID) {

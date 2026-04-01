@@ -78,6 +78,7 @@ type jsRuntime struct {
 	onPlayerLeave goja.Callable
 	onInput       goja.Callable
 	viewFn        goja.Callable
+	viewNCFn      goja.Callable
 	statusBarFn   goja.Callable
 	commandBarFn  goja.Callable
 
@@ -462,6 +463,7 @@ func (r *jsRuntime) extractGameObject() error {
 	r.onPlayerLeave = extractCallable(gameObj, "onPlayerLeave")
 	r.onInput = extractCallable(gameObj, "onInput")
 	r.viewFn = extractCallable(gameObj, "view")
+	r.viewNCFn = extractCallable(gameObj, "viewNC")
 	r.statusBarFn = extractCallable(gameObj, "statusBar")
 	r.commandBarFn = extractCallable(gameObj, "commandBar")
 
@@ -554,6 +556,95 @@ func (r *jsRuntime) View(playerID string, width, height int) string {
 		return ""
 	}
 	return val.String()
+}
+
+func (r *jsRuntime) ViewNC(playerID string, width, height int) *common.WidgetNode {
+	if r.viewNCFn == nil {
+		return nil // framework will fall back to wrapping View() in a gameview node
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	defer r.recoverJS("ViewNC")
+	defer traceJS(r.vm, "ViewNC")()
+	cancel := watchdogJS(r.vm, "ViewNC")
+	defer cancel()
+	val, err := r.viewNCFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
+	if err != nil {
+		slog.Error("JS ViewNC error", "error", err)
+		return nil
+	}
+	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
+		return nil
+	}
+	return gojaToWidgetNode(r.vm, val)
+}
+
+// gojaToWidgetNode recursively converts a goja JS object into a WidgetNode tree.
+func gojaToWidgetNode(vm *goja.Runtime, val goja.Value) *common.WidgetNode {
+	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
+		return nil
+	}
+	obj := val.ToObject(vm)
+	if obj == nil {
+		return nil
+	}
+
+	node := &common.WidgetNode{}
+
+	if v := obj.Get("type"); v != nil && !goja.IsUndefined(v) {
+		node.Type = v.String()
+	}
+	if v := obj.Get("title"); v != nil && !goja.IsUndefined(v) {
+		node.Title = v.String()
+	}
+	if v := obj.Get("text"); v != nil && !goja.IsUndefined(v) {
+		node.Text = v.String()
+	}
+	if v := obj.Get("align"); v != nil && !goja.IsUndefined(v) {
+		node.Align = v.String()
+	}
+	if v := obj.Get("weight"); v != nil && !goja.IsUndefined(v) {
+		node.Weight = v.ToFloat()
+	}
+	if v := obj.Get("width"); v != nil && !goja.IsUndefined(v) {
+		node.Width = int(v.ToInteger())
+	}
+	if v := obj.Get("height"); v != nil && !goja.IsUndefined(v) {
+		node.Height = int(v.ToInteger())
+	}
+
+	// Children array
+	if v := obj.Get("children"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+		arr := v.ToObject(vm)
+		for _, key := range arr.Keys() {
+			child := gojaToWidgetNode(vm, arr.Get(key))
+			if child != nil {
+				node.Children = append(node.Children, child)
+			}
+		}
+	}
+
+	// Rows for table (array of arrays of strings)
+	if v := obj.Get("rows"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+		rowsArr := v.ToObject(vm)
+		for _, rk := range rowsArr.Keys() {
+			rowVal := rowsArr.Get(rk)
+			if rowVal == nil || goja.IsUndefined(rowVal) {
+				continue
+			}
+			rowObj := rowVal.ToObject(vm)
+			var cells []string
+			for _, ck := range rowObj.Keys() {
+				cell := rowObj.Get(ck)
+				if cell != nil && !goja.IsUndefined(cell) {
+					cells = append(cells, cell.String())
+				}
+			}
+			node.Rows = append(node.Rows, cells)
+		}
+	}
+
+	return node
 }
 
 func (r *jsRuntime) StatusBar(playerID string) string {

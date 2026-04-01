@@ -87,6 +87,22 @@ var Game = {
         return "";
     },
 
+    // Returns a declarative NC widget tree for the game viewport.
+    // If defined, the framework renders real themed NC panels/labels instead of
+    // using the raw view() string. Games can embed {type: "gameview"} nodes to
+    // include the raw view() output within an NC layout. If viewNC returns null
+    // or is not defined, the framework falls back to view(). See "NC Widget Tree" below.
+    viewNC: function(playerID, width, height) {
+        return {
+            type: 'hsplit',
+            children: [
+                { type: 'gameview', weight: 1 },           // raw view() here
+                { type: 'panel', title: 'Info', width: 20, // NC panel on the right
+                  children: [{ type: 'label', text: 'Score: 42' }] }
+            ]
+        };
+    },
+
     // Returns the text for the game status bar (1 row, below the menu bar).
     // Keep content shorter than width.
     statusBar: function(playerID) {
@@ -452,3 +468,60 @@ Host your `.js` file anywhere publicly accessible over HTTPS — a GitHub repo i
 ```
 
 GitHub blob URLs are automatically converted to raw download URLs. The file is cached locally in `.cache/` so it survives restarts; re-running the load command fetches the latest version.
+
+---
+
+## NC Widget Tree (`viewNC`)
+
+If your game defines `viewNC(playerID, width, height)`, it should return a tree of widget nodes. The framework renders these as real themed NC-style panels with proper borders, respecting the player's current theme. This is optional — games that only define `view()` work unchanged.
+
+### Node types
+
+| Type | Description | Key properties |
+|------|-------------|----------------|
+| `gameview` | Renders the raw `view()` output in this region | (none — calls `view(playerID, w, h)` with the computed sub-area size) |
+| `panel` | Bordered NC panel with optional title | `title`, `children` |
+| `label` | Single line of text | `text`, `align` (`"left"`, `"center"`, `"right"`) |
+| `hsplit` | Horizontal split — children placed side by side | `children` |
+| `vsplit` | Vertical split — children stacked top to bottom | `children` |
+| `divider` | Horizontal divider line | (none) |
+| `table` | Aligned columns | `rows` (array of arrays of strings) |
+
+### Sizing
+
+Every node can have:
+- `weight` (float) — flex weight for distributing space in a split (default: 1)
+- `width` (int) — fixed width in chars (overrides weight, for hsplit children)
+- `height` (int) — fixed height in rows (overrides weight, for vsplit children)
+
+### Example: hybrid layout
+
+```js
+viewNC: function(playerID, width, height) {
+    return {
+        type: 'hsplit',
+        children: [
+            {
+                type: 'vsplit', weight: 1,
+                children: [
+                    { type: 'gameview', weight: 1 },              // raw view() in the main area
+                    { type: 'panel', title: 'Stats', height: 5,   // NC panel at bottom
+                      children: [
+                          { type: 'label', text: 'HP: ' + hp + '/' + maxHp },
+                          { type: 'label', text: 'Score: ' + score }
+                      ] }
+                ]
+            },
+            {
+                type: 'panel', title: 'Players', width: 25,       // NC panel on the right
+                children: [{
+                    type: 'table',
+                    rows: playerRows
+                }]
+            }
+        ]
+    };
+}
+```
+
+This renders the raw game view in the top-left, a stats panel below it, and a players panel on the right — all using the framework's themed NC borders. Existing games that don't define `viewNC` are unaffected.

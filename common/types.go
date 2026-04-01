@@ -50,6 +50,21 @@ type TeamRange struct {
 	Max int
 }
 
+// WidgetNode is a declarative UI node returned by Game.ViewNC().
+// Games build a tree of these to describe their viewport layout using
+// real NC-style controls rendered by the framework.
+type WidgetNode struct {
+	Type     string        // "gameview", "panel", "label", "hsplit", "vsplit", "divider", "table"
+	Title    string        // panel title (for "panel")
+	Text     string        // content text (for "label")
+	Align    string        // "left" (default), "center", "right" (for "label")
+	Weight   float64       // flex weight in split layouts (0 = use fixed size)
+	Width    int           // fixed width (for split children, 0 = use weight)
+	Height   int           // fixed height (for split children, 0 = use weight)
+	Rows     [][]string    // table rows (for "table")
+	Children []*WidgetNode // child nodes (for split/panel containers)
+}
+
 // Tea messages
 
 type TickMsg struct{ N int }            // broadcast to all programs every 100ms; N is tick counter

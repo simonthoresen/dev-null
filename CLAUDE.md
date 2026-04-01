@@ -171,6 +171,7 @@ type Game interface {
     OnPlayerLeave(playerID string)
     OnInput(playerID, key string)
     View(playerID string, width, height int) string
+    ViewNC(playerID string, width, height int) *WidgetNode // declarative NC layout (nil = use View)
     StatusBar(playerID string) string      // game status bar (2nd row, below menu bar)
     CommandBar(playerID string) string     // command bar (above framework status bar)
     Commands() []Command
@@ -217,7 +218,7 @@ type Message struct {
 
 Games live in `dist/games/` as either single `.js` files or folders containing `main.js` (for multi-file games using `include()`). Loaded at runtime via `/game load <name>`. A HTTPS URL can be given instead of a name — `.js` files are cached in `dist/games/.cache/`, `.zip` files are extracted to `dist/games/<name>/`. GitHub blob URLs are converted to raw automatically.
 
-**Game** — exports a global `Game` object with hooks `onPlayerJoin`, `onPlayerLeave`, `onInput`, `view`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `splashScreen`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport.
+**Game** — exports a global `Game` object with hooks `onPlayerJoin`, `onPlayerLeave`, `onInput`, `view`, `viewNC`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `splashScreen`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport. `viewNC` returns a declarative widget tree for NC-panel layouts; if defined, `view()` is only called for `{type: "gameview"}` nodes within the tree.
 
 **Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `teams()`, `registerCommand()`, `gameOver(results, state)`, `figlet(text, font?)` (ASCII art via figlet4go; built-in fonts: `"standard"`, `"larry3d"`; extra fonts loaded from `dist/fonts/*.flf` at startup), `include(name)` (evaluate another `.js` file from the same directory — for multi-file games).
 

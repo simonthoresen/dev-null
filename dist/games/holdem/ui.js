@@ -1,42 +1,32 @@
-// ui.js — NC-panel based rendering for Texas Hold'em
-// Uses ncui.js for box-drawing panel primitives.
+// ui.js — NC widget tree rendering for Texas Hold'em
+// Returns declarative widget trees that the framework renders using real NC controls.
 
-// ─── Layout Constants ──────────────────────────────────────────────────
-var PLAYERS_PANEL_W = 30;
-var HAND_PANEL_H = 7;
+// ─── Main View (returns widget tree for viewNC) ────────────────────────
 
-// ─── Main View ─────────────────────────────────────────────────────────
-
-function renderGameView(teamID, width, height) {
+function buildViewNC(teamID, width, height) {
     var seat = state.seats[teamID];
 
-    // Calculate panel widths
-    var playersW = Math.min(PLAYERS_PANEL_W, Math.floor(width * 0.35));
-    var mainW = width - playersW;
-    var mainH = height;
+    var playersW = Math.min(30, Math.floor(width * 0.35));
 
-    // Left side: table panel (top) + hand panel (bottom)
-    var handH = HAND_PANEL_H;
-    var tableH = mainH - handH;
-    if (tableH < 6) { tableH = mainH; handH = 0; }
-
-    var tablePanel = renderTablePanel(teamID, mainW, tableH);
-    var handPanel = handH > 0 ? renderHandPanel(teamID, mainW, handH) : [];
-    var leftLines = tablePanel.concat(handPanel);
-
-    // Right side: players panel
-    var playersPanel = renderPlayersPanel(teamID, playersW, mainH);
-
-    // Merge side by side
-    var merged = ncHConcat(leftLines, playersPanel);
-    return ncFillScreen(merged, width, height).join('\n');
+    return {
+        type: 'hsplit',
+        children: [
+            {
+                type: 'vsplit', weight: 1,
+                children: [
+                    buildTablePanel(teamID),
+                    buildHandPanel(teamID)
+                ]
+            },
+            buildPlayersPanel(teamID, playersW)
+        ]
+    };
 }
 
 // ─── Table Panel (community cards + pot) ───────────────────────────────
 
-function renderTablePanel(teamID, width, height) {
-    var innerW = width - 2;
-    var lines = [];
+function buildTablePanel(teamID) {
+    var children = [];
 
     // Phase
     var phaseStr = '';
@@ -48,8 +38,8 @@ function renderTablePanel(teamID, width, height) {
     else if (state.phase === 'showdown') phaseStr = YEL + BOLD + 'Showdown!' + RST;
     else if (state.phase === 'between') phaseStr = DIM + (state.lastWinMsg || 'Next hand...') + RST;
 
-    lines.push(ncCenter(phaseStr, innerW));
-    lines.push('');
+    children.push({ type: 'label', text: phaseStr, align: 'center', height: 1 });
+    children.push({ type: 'label', text: '', height: 1 });
 
     // Community cards
     var commStr = '';
@@ -65,104 +55,78 @@ function renderTablePanel(teamID, width, height) {
             }
         }
     }
-    lines.push(ncCenter(commStr, innerW));
-    lines.push('');
+    children.push({ type: 'label', text: commStr, align: 'center', height: 1 });
+    children.push({ type: 'label', text: '', height: 1 });
 
     // Pot
     if (state.phase !== 'waiting') {
-        var potStr = FGGOLD + BOLD + 'Pot: ' + state.pot + RST;
-        lines.push(ncCenter(potStr, innerW));
-    } else {
-        lines.push('');
+        children.push({ type: 'label', text: FGGOLD + BOLD + 'Pot: ' + state.pot + RST, align: 'center', height: 1 });
     }
 
     // Last action
     if (state.lastAction) {
-        lines.push('');
-        lines.push(ncCenter(DIM + state.lastAction + RST, innerW));
-    }
-
-    // Action timer for current team
-    var actionTeam = state.actionOn >= 0 ? state.seatOrder[state.actionOn] : null;
-    if (actionTeam === teamID && state.phase !== 'waiting' && state.phase !== 'showdown' && state.phase !== 'between') {
-        var seat = state.seats[teamID];
-        if (seat && !seat.folded && !seat.allIn) {
-            lines.push('');
-            var pct = state.actionTimer / ACTION_TIMEOUT;
-            var barW = Math.min(20, innerW - 6);
-            var timerColor = pct > 0.5 ? GRN : pct > 0.2 ? YEL : RED;
-            var secs = Math.ceil(state.actionTimer / 10);
-            var bar = timerColor + ncProgressBar(barW, pct) + RST + ' ' + timerColor + secs + 's' + RST;
-            lines.push(ncCenter(bar, innerW));
-        }
+        children.push({ type: 'label', text: DIM + state.lastAction + RST, align: 'center', height: 1 });
     }
 
     // Showdown results
     if (state.phase === 'showdown' && state.showdownResults) {
-        lines.push('');
+        children.push({ type: 'label', text: '', height: 1 });
         for (var ri = 0; ri < state.showdownResults.length; ri++) {
             var sr = state.showdownResults[ri];
             var srLine = sr.name + ': ' + cardBox(sr.cards[0]) + cardBox(sr.cards[1]);
             srLine += ' ' + GRN + sr.hand.name + RST;
-            lines.push(ncCenter(srLine, innerW));
+            children.push({ type: 'label', text: srLine, align: 'center', height: 1 });
         }
     }
 
     var title = 'Hand #' + state.handNum + '  Blinds ' + SMALL_BLIND + '/' + BIG_BLIND;
-    if (state.phase === 'waiting') title = 'Texas Hold\'em';
+    if (state.phase === 'waiting') title = "Texas Hold'em";
 
-    return ncPanelWithHeader(width, height, ncCenter(title, innerW), lines);
+    return {
+        type: 'panel', title: title, weight: 1,
+        children: children
+    };
 }
 
 // ─── Hand Panel (your team's cards) ────────────────────────────────────
 
-function renderHandPanel(teamID, width, height) {
+function buildHandPanel(teamID) {
     var seat = state.seats[teamID];
-    var innerW = width - 2;
-    var lines = [];
+    var children = [];
 
     if (!seat) {
-        lines.push(ncCenter(DIM + 'Spectating' + RST, innerW));
+        children.push({ type: 'label', text: DIM + 'Spectating' + RST, align: 'center' });
     } else if (seat.bustedOut) {
-        lines.push(ncCenter(DIM + 'Eliminated' + RST, innerW));
+        children.push({ type: 'label', text: DIM + 'Eliminated' + RST, align: 'center' });
     } else if (seat.hand.length === 2) {
-        // Show cards
-        var cardsStr = '  ' + cardBox(seat.hand[0]) + '  ' + cardBox(seat.hand[1]) + '  ';
-        lines.push(ncCenter(cardsStr, innerW));
+        children.push({ type: 'label', text: '  ' + cardBox(seat.hand[0]) + '  ' + cardBox(seat.hand[1]) + '  ', align: 'center' });
 
-        // Show hand evaluation if community cards are out
         if (state.community.length >= 3) {
             var allCards = seat.hand.concat(state.community);
             var eval_ = evaluateHand(allCards);
-            lines.push(ncCenter(GRN + eval_.name + RST, innerW));
+            children.push({ type: 'label', text: GRN + eval_.name + RST, align: 'center' });
         }
 
-        // Show chips and current bet
         var chipLine = FGGOLD + '$' + seat.chips + RST;
         if (seat.bet > 0) chipLine += '  ' + RED + 'Bet: ' + seat.bet + RST;
         if (seat.allIn) chipLine += '  ' + YEL + BOLD + 'ALL-IN' + RST;
-        lines.push(ncCenter(chipLine, innerW));
+        children.push({ type: 'label', text: chipLine, align: 'center' });
     } else if (seat.folded) {
-        lines.push(ncCenter(DIM + 'Folded' + RST, innerW));
+        children.push({ type: 'label', text: DIM + 'Folded' + RST, align: 'center' });
     } else {
-        lines.push(ncCenter(DIM + 'Waiting for deal...' + RST, innerW));
+        children.push({ type: 'label', text: DIM + 'Waiting for deal...' + RST, align: 'center' });
     }
 
-    // Team member info
-    var teamData = getTeamForSeat(teamID);
-    if (teamData && teamData.players.length > 1) {
-        var memberStr = DIM + 'Team: ' + teamData.name + ' (' + teamData.players.length + ' players)' + RST;
-        lines.push(ncCenter(memberStr, innerW));
-    }
-
-    return ncPanel(width, height, lines, { title: 'Your Hand', double: false });
+    return {
+        type: 'panel', title: 'Your Hand', height: 7,
+        children: children
+    };
 }
 
 // ─── Players Panel (all seats) ─────────────────────────────────────────
 
-function renderPlayersPanel(teamID, width, height) {
-    var innerW = width - 2;
-    var lines = [];
+function buildPlayersPanel(teamID, panelWidth) {
+    var rows = [];
 
     for (var si = 0; si < state.seatOrder.length; si++) {
         var sid = state.seatOrder[si];
@@ -179,14 +143,12 @@ function renderPlayersPanel(teamID, width, height) {
         if (isAction && state.phase !== 'waiting' && state.phase !== 'showdown' && state.phase !== 'between') {
             nameStr += WHT + BOLD + '\u25b6 ' + RST;
         }
-
         var displayName = seat.name;
         if (seat.isAI) displayName += DIM + ' bot' + RST;
         nameStr += (isMe ? CYN + BOLD : WHT) + displayName + RST;
 
-        if (seat.bustedOut) {
-            nameStr = DIM + '\u2620 ' + seat.name + RST;
-        } else if (seat.folded && state.phase !== 'waiting' && state.phase !== 'between') {
+        if (seat.bustedOut) nameStr = DIM + '\u2620 ' + seat.name + RST;
+        else if (seat.folded && state.phase !== 'waiting' && state.phase !== 'between') {
             nameStr = DIM + seat.name + ' (fold)' + RST;
         }
 
@@ -195,7 +157,7 @@ function renderPlayersPanel(teamID, width, height) {
         if (seat.bet > 0) chipStr += ' ' + RED + '+' + seat.bet + RST;
         if (seat.allIn) chipStr += ' ' + YEL + 'AI' + RST;
 
-        // Cards (for showdown or own team)
+        // Cards
         var cardLine = '';
         if (state.phase === 'showdown' && !seat.folded && seat.hand.length === 2) {
             cardLine = cardBox(seat.hand[0]) + cardBox(seat.hand[1]);
@@ -205,21 +167,16 @@ function renderPlayersPanel(teamID, width, height) {
             cardLine = cardBackBox() + cardBackBox();
         }
 
-        lines.push(ncFit(nameStr, innerW));
-        var detailLine = chipStr;
-        if (cardLine) detailLine += '  ' + cardLine;
-        lines.push(ncFit(' ' + detailLine, innerW));
-
-        // Divider between players (except after last)
-        if (si < state.seatOrder.length - 1) {
-            lines.push(ncRepeat(NC.IH, innerW));
-        }
+        rows.push([nameStr, chipStr, cardLine]);
     }
 
-    return ncPanelWithHeader(width, height,
-        ncCenter(activePlayers().length + ' players', innerW),
-        lines,
-        { title: 'Players' });
+    return {
+        type: 'panel', title: 'Players', width: panelWidth,
+        children: [{
+            type: 'table',
+            rows: rows
+        }]
+    };
 }
 
 // ─── Status Bar ────────────────────────────────────────────────────────
@@ -269,22 +226,4 @@ function renderCommandBar(teamID) {
         waitName = state.seats[state.seatOrder[state.actionOn]].name;
     }
     return 'Waiting for ' + waitName + '  [Enter] Chat';
-}
-
-// ─── Helper ────────────────────────────────────────────────────────────
-
-function getTeamForSeat(teamID) {
-    var t = teams();
-    for (var i = 0; i < t.length; i++) {
-        if (t[i].name === teamID || teamID === t[i].name) {
-            return t[i];
-        }
-    }
-    // Look by matching any player in the team
-    for (var i = 0; i < t.length; i++) {
-        for (var j = 0; j < t[i].players.length; j++) {
-            if (t[i].players[j].id === teamID) return t[i];
-        }
-    }
-    return null;
 }

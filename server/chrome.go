@@ -1010,7 +1010,16 @@ func (m chromeModel) viewPlaying(game common.Game, gameName string, mbStyle, chS
 		}
 	}
 
-	gameView := fitBlock(game.View(m.playerID, m.width, gameH), m.width, gameH)
+	var gameView string
+	if ncTree := game.ViewNC(m.playerID, m.width, gameH); ncTree != nil {
+		// Game provides a declarative NC widget tree — render it.
+		gameView = renderWidgetTree(ncTree, m.width, gameH, m.theme, func(w, h int) string {
+			return game.View(m.playerID, w, h)
+		})
+	} else {
+		// Fallback: wrap View() output directly (default gameview behavior).
+		gameView = fitBlock(game.View(m.playerID, m.width, gameH), m.width, gameH)
+	}
 	chatView := renderChatLines(m.chatLines, m.width, chatH, m.chatScrollOffset, chStyle, chatBg)
 
 	var cmdBar string

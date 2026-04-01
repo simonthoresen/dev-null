@@ -62,6 +62,11 @@ type Game interface {
 	OnPlayerLeave(playerID string)
 	OnInput(playerID, key string)
 	View(playerID string, width, height int) string
+	// ViewNC returns a declarative widget tree for the game viewport.
+	// If it returns nil, the framework falls back to wrapping View() in a
+	// default gameview node. Games can mix NC panels with raw View() output
+	// by including {type: "gameview"} nodes in their tree.
+	ViewNC(playerID string, width, height int) *WidgetNode
 	StatusBar(playerID string) string  // game-controlled status bar (second row, below menu bar)
 	CommandBar(playerID string) string // game-controlled command bar (above framework status bar)
 	Commands() []Command
