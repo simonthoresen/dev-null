@@ -8,6 +8,7 @@ $Force = $false
 $Local = $false
 $Lan = $false
 $NoUpdate = $false
+$LogLevel = ""
 $Port = "23234"
 
 $positionals = @()
@@ -19,6 +20,9 @@ for ($i = 0; $i -lt $CliArgs.Count; $i++) {
         '^--?(no-?network|offline|singleplayer|single-player)$' { $Local = $true; continue }
         '^--?lan$'           { $Lan = $true; continue }
         '^--?(no-?update|skip-?update)$' { $NoUpdate = $true; continue }
+        '^--?log-?level$'    { $i++; if ($i -lt $CliArgs.Count) { $LogLevel = $CliArgs[$i] }; continue }
+        '^--?log-?level=(.+)$' { $LogLevel = $Matches[1]; continue }
+        '^--?debug$'         { $LogLevel = "debug"; continue }
         '^--?port$'          { $i++; if ($i -lt $CliArgs.Count) { $Port = $CliArgs[$i] }; continue }
         '^--?port=(.+)$'     { $Port = $Matches[1]; continue }
         default              { $positionals += $arg }
@@ -113,7 +117,8 @@ $previousLogLevel     = $env:NULL_SPACE_LOG_LEVEL
 $previousTermWidth    = $env:NULL_SPACE_TERM_WIDTH
 $env:NULL_SPACE_LOG_FILE    = $script:runLog
 $env:NULL_SPACE_TERM_WIDTH  = Get-TermWidth
-if (-not $env:NULL_SPACE_LOG_LEVEL) { $env:NULL_SPACE_LOG_LEVEL = "info" }
+if ($LogLevel) { $env:NULL_SPACE_LOG_LEVEL = $LogLevel }
+elseif (-not $env:NULL_SPACE_LOG_LEVEL) { $env:NULL_SPACE_LOG_LEVEL = "info" }
 
 # ── cleanup helpers ──────────────────────────────────────────────────────────
 
