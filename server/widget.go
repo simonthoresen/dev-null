@@ -281,9 +281,9 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 	disabledStyle := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.DisabledFgC())
 	shadowStyle   := lipgloss.NewStyle().Background(t.ShadowBgC())
 
-	top    := menuStyle.Render(t.TL() + strings.Repeat(t.H(), innerW) + t.TR())
-	bottom := menuStyle.Render(t.BL() + strings.Repeat(t.H(), innerW) + t.BR())
-	sepRow := menuStyle.Render(t.TeeL() + strings.Repeat(t.H(), innerW) + t.TeeR())
+	top    := menuStyle.Render(t.OTL() + strings.Repeat(t.OH(), innerW) + t.OTR())
+	bottom := menuStyle.Render(t.OBL() + strings.Repeat(t.OH(), innerW) + t.OBR())
+	sepRow := menuStyle.Render(t.XL() + strings.Repeat(t.IH(), innerW) + t.XR())
 
 	var lines []string
 	lines = append(lines, top)
@@ -303,7 +303,7 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 		default:
 			inner = menuStyle.Width(innerW).Render(padded)
 		}
-		lines = append(lines, menuStyle.Render(t.V())+inner+menuStyle.Render(t.V()))
+		lines = append(lines, menuStyle.Render(t.OV())+inner+menuStyle.Render(t.OV()))
 	}
 	lines = append(lines, bottom)
 
@@ -375,17 +375,17 @@ func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int
 	hbar := func(l, f, r string) string {
 		return boxStyle.Render(l + strings.Repeat(f, innerW) + r)
 	}
-	lb := boxStyle.Render(t.V())
-	rb := boxStyle.Render(t.V())
+	lb := boxStyle.Render(t.OV())
+	rb := boxStyle.Render(t.OV())
 
 	var lines []string
-	lines = append(lines, hbar(t.TL(), t.H(), t.TR()))
+	lines = append(lines, hbar(t.OTL(), t.OH(), t.OTR()))
 
 	// Title: full-width blue bar.
 	titlePad := " " + d.Title + strings.Repeat(" ", innerW-1-len(d.Title))
 	lines = append(lines, lb+titleStyle.Width(innerW).Render(titlePad)+rb)
 
-	lines = append(lines, hbar(t.TeeL(), t.H(), t.TeeR()))
+	lines = append(lines, hbar(t.XL(), t.IH(), t.XR()))
 
 	// Body rows.
 	for _, bl := range bodyLines {
@@ -396,7 +396,7 @@ func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int
 		}
 	}
 
-	lines = append(lines, hbar(t.TeeL(), t.H(), t.TeeR()))
+	lines = append(lines, hbar(t.XL(), t.IH(), t.XR()))
 
 	// Button row.
 	btnActiveSt := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
@@ -430,7 +430,7 @@ func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int
 	btnRow := boxStyle.Render(strings.Repeat(" ", lpad)) + btnContent + boxStyle.Render(strings.Repeat(" ", rpad))
 	lines = append(lines, lb+btnRow+rb)
 
-	lines = append(lines, hbar(t.BL(), t.H(), t.BR()))
+	lines = append(lines, hbar(t.OBL(), t.OH(), t.OBR()))
 
 	// Drop shadow.
 	shadow1 := shadowStyle.Render(" ")

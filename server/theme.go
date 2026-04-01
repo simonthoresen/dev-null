@@ -51,16 +51,26 @@ type Theme struct {
 	// Drop shadow
 	ShadowBg string `json:"shadowBg"`
 
-	// Border characters (single-char strings; empty = use defaults)
-	BorderTL  string `json:"borderTL"`  // top-left corner     (default "┌")
-	BorderTR  string `json:"borderTR"`  // top-right corner    (default "┐")
-	BorderBL  string `json:"borderBL"`  // bottom-left corner  (default "└")
-	BorderBR  string `json:"borderBR"`  // bottom-right corner (default "┘")
-	BorderH   string `json:"borderH"`   // horizontal bar      (default "─")
-	BorderV   string `json:"borderV"`   // vertical bar        (default "│")
-	BorderTL2 string `json:"borderTeeL"` // left tee            (default "├")
-	BorderTR2 string `json:"borderTeeR"` // right tee           (default "┤")
-	BarSep    string `json:"barSep"`    // action bar separator (default "│")
+	// Outer border (the box frame)
+	OuterTL string `json:"outerTL"` // top-left corner     (default "┌")
+	OuterTR string `json:"outerTR"` // top-right corner    (default "┐")
+	OuterBL string `json:"outerBL"` // bottom-left corner  (default "└")
+	OuterBR string `json:"outerBR"` // bottom-right corner (default "┘")
+	OuterH  string `json:"outerH"`  // horizontal bar      (default "─")
+	OuterV  string `json:"outerV"`  // vertical bar        (default "│")
+
+	// Inner dividers (separators inside the box)
+	InnerH string `json:"innerH"` // horizontal divider  (default "─")
+	InnerV string `json:"innerV"` // vertical divider    (default "│")
+
+	// Intersections (where inner dividers meet the outer frame)
+	CrossL string `json:"crossL"` // inner-H meets outer-V on left   (default "├")
+	CrossR string `json:"crossR"` // inner-H meets outer-V on right  (default "┤")
+	CrossT string `json:"crossT"` // inner-V meets outer-H on top    (default "┬")
+	CrossB string `json:"crossB"` // inner-V meets outer-H on bottom (default "┴")
+
+	// Action bar separator
+	BarSep string `json:"barSep"` // separator between menu titles (default "│")
 }
 
 // tc converts a hex string to a color.Color, returning fallback if empty.
@@ -103,16 +113,26 @@ func ts(s, fallback string) string {
 	return s
 }
 
-// Border character accessors.
-func (t *Theme) TL() string   { return ts(t.BorderTL, "┌") }
-func (t *Theme) TR() string   { return ts(t.BorderTR, "┐") }
-func (t *Theme) BL() string   { return ts(t.BorderBL, "└") }
-func (t *Theme) BR() string   { return ts(t.BorderBR, "┘") }
-func (t *Theme) H() string    { return ts(t.BorderH, "─") }
-func (t *Theme) V() string    { return ts(t.BorderV, "│") }
-func (t *Theme) TeeL() string { return ts(t.BorderTL2, "├") }
-func (t *Theme) TeeR() string { return ts(t.BorderTR2, "┤") }
-func (t *Theme) Sep() string  { return ts(t.BarSep, "│") }
+// Outer border accessors.
+func (t *Theme) OTL() string { return ts(t.OuterTL, "┌") }
+func (t *Theme) OTR() string { return ts(t.OuterTR, "┐") }
+func (t *Theme) OBL() string { return ts(t.OuterBL, "└") }
+func (t *Theme) OBR() string { return ts(t.OuterBR, "┘") }
+func (t *Theme) OH() string  { return ts(t.OuterH, "─") }
+func (t *Theme) OV() string  { return ts(t.OuterV, "│") }
+
+// Inner divider accessors.
+func (t *Theme) IH() string { return ts(t.InnerH, "─") }
+func (t *Theme) IV() string { return ts(t.InnerV, "│") }
+
+// Intersection accessors (inner meets outer).
+func (t *Theme) XL() string { return ts(t.CrossL, "├") }
+func (t *Theme) XR() string { return ts(t.CrossR, "┤") }
+func (t *Theme) XT() string { return ts(t.CrossT, "┬") }
+func (t *Theme) XB() string { return ts(t.CrossB, "┴") }
+
+// Action bar separator.
+func (t *Theme) Sep() string { return ts(t.BarSep, "│") }
 
 // LoadTheme reads a theme JSON file and returns the parsed Theme.
 func LoadTheme(path string) (*Theme, error) {
