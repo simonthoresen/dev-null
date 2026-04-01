@@ -30,6 +30,31 @@ Once the server is running, type into the server console:
 /game load https://github.com/someone/repo/blob/main/mygame.js
 ```
 
+## Auto-run commands on startup
+
+### Server: `~/.null-space-server.txt`
+
+Create this file to run commands automatically when the server console starts. One command per line; lines starting with `#` are comments.
+
+```
+# My server setup
+/theme dark
+/plugin load greeter
+/game load invaders
+```
+
+### Client: `~/.null-space.txt`
+
+Create this file to run commands automatically when you join a server. Same format as above.
+
+```
+# My client setup
+/theme dark
+/plugin load greeter
+```
+
+The join script reads this file and sends it to the server via the `NULL_SPACE_INIT` SSH environment variable.
+
 ## Write your own game
 
 See [API-REFERENCE.md](API-REFERENCE.md) for the full JavaScript API.

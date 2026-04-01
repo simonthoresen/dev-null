@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log/slog"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -109,6 +110,7 @@ func (o *overlayState) isActive() bool {
 // handleKey routes a key press through the overlay state machine.
 // Returns true if the key was consumed and normal chrome should not process it.
 func (o *overlayState) handleKey(key string, menus []common.MenuDef, playerID string) bool {
+	slog.Debug("overlay.handleKey", "key", key, "openMenu", o.openMenu, "menuFocused", o.menuFocused, "hasDialog", o.hasDialog(), "dropCursor", o.dropCursor)
 	// Global hotkeys: check all menu items for matching hotkey bindings.
 	for _, m := range menus {
 		for _, it := range m.Items {

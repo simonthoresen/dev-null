@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -57,6 +58,9 @@ type consoleModel struct {
 	// NC overlay (menus, dialogs)
 	overlay overlayState
 
+	// Init commands from ~/.null-space-server.txt (dispatched on first tick)
+	initCommands []string
+
 	// Per-console plugins
 	plugins     []*jsPlugin
 	pluginNames []string
@@ -105,6 +109,18 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	inputCtrl.OnSubmit = m.submitInput
 	inputCtrl.OnTab = m.tabComplete
 
+	// Load init commands from ~/.null-space-server.txt if it exists.
+	if home, err := os.UserHomeDir(); err == nil {
+		if data, err := os.ReadFile(filepath.Join(home, ".null-space-server.txt")); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" && !strings.HasPrefix(line, "#") {
+					m.initCommands = append(m.initCommands, line)
+				}
+			}
+		}
+	}
+
 	return m
 }
 
@@ -122,7 +138,14 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case common.TickMsg:
-		// re-render for spinner and clock update
+		// Dispatch init commands from ~/.null-space-server.txt on the first tick
+		// (after the console UI is fully running).
+		if len(m.initCommands) > 0 {
+			for _, cmd := range m.initCommands {
+				m.submitInput(cmd)
+			}
+			m.initCommands = nil
+		}
 		return m, nil
 
 	case slogLineMsg:
