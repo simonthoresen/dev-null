@@ -187,6 +187,7 @@ func newChromeModel(app *Server, playerID string) chromeModel {
 	teamInput.Prompt = ""
 	teamInput.CharLimit = 20
 	teamInput.SetWidth(20)
+	teamInput.SetVirtualCursor(false)
 
 	m := chromeModel{
 		app:           app,
@@ -306,6 +307,56 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case showDialogMsg:
 		m.overlay.pushDialog(msg.dialog)
 		return m, nil
+
+	case tea.MouseClickMsg:
+		if !m.inActiveGame && msg.Button == tea.MouseLeft {
+			teamW := lobbyTeamPanelW
+			if teamW > m.width-10 {
+				teamW = m.width - 10
+			}
+			chatW := m.width - teamW
+			if msg.X >= chatW {
+				// Click in team panel — handle team selection or player name insertion.
+				contentY := msg.Y - 1
+				panelX := msg.X - chatW
+				var clickedPlayer string
+				if contentY >= 0 {
+					clickedPlayer = m.handleTeamPanelClick(panelX, contentY)
+				}
+				if clickedPlayer != "" {
+					// Player name clicked — insert into chat input.
+					m.lobbyFocus = lobbyFocusChat
+					m.mode = modeInput
+					m.input.Focus()
+					if m.input.Value() == "" {
+						m.input.SetValue("/msg " + clickedPlayer + " ")
+						m.input.CursorEnd()
+					} else {
+						// Insert at cursor position.
+						val := m.input.Value()
+						pos := m.input.Position()
+						m.input.SetValue(val[:pos] + clickedPlayer + val[pos:])
+						m.input.SetCursor(pos + len(clickedPlayer))
+					}
+					return m, nil
+				}
+				// Non-player row clicked — switch focus to teams.
+				if m.lobbyFocus == lobbyFocusChat {
+					m.lobbyFocus = lobbyFocusTeams
+					m.input.Blur()
+				}
+				return m, nil
+			} else if m.lobbyFocus == lobbyFocusTeams {
+				m.lobbyFocus = lobbyFocusChat
+				m.mode = modeInput
+				cmd := m.input.Focus()
+				return m, cmd
+			}
+		}
+		return m, nil
+
+	case tea.MouseWheelMsg:
+		return m.handleMouseWheel(msg)
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -583,6 +634,111 @@ func (m chromeModel) handleTeamEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 	}
 }
 
+// handleTeamPanelClick maps a click position (relative to content area)
+// to an action: clicking Unassigned unassigns, clicking a team joins it
+// (or renames/recolors if owner), clicking a player returns their name,
+// clicking [+] creates a new team.
+// Returns the name of a clicked player (empty string if a non-player row was clicked).
+func (m *chromeModel) handleTeamPanelClick(panelX, contentY int) string {
+	teams := m.app.state.GetTeams()
+	unassigned := m.app.state.UnassignedPlayers()
+
+	// Row 0: "Unassigned" header
+	row := 0
+	if contentY == row {
+		if m.app.state.PlayerTeamIndex(m.playerID) >= 0 {
+			m.app.state.MovePlayerToTeam(m.playerID, -1)
+			m.app.broadcastMsg(common.TeamUpdatedMsg{})
+		}
+		return ""
+	}
+	row++ // skip header
+
+	// Unassigned player rows.
+	for _, pid := range unassigned {
+		if contentY == row {
+			if p := m.app.state.GetPlayer(pid); p != nil {
+				return p.Name
+			}
+			return pid
+		}
+		row++
+	}
+
+	// Each team: blank line, team header, player rows.
+	// Team header layout: " ██ TeamName" → X 0=space, 1-2=color swatch, 3=space, 4+=name
+	for i, team := range teams {
+		if contentY == row {
+			// Clicked on blank separator — ignore.
+			return ""
+		}
+		row++ // advance past blank to team header
+		if contentY == row {
+			myIdx := m.app.state.PlayerTeamIndex(m.playerID)
+			isFirst := m.app.state.IsFirstInTeam(m.playerID)
+			if myIdx == i && isFirst {
+				// Owner clicked own team header.
+				if panelX >= 1 && panelX <= 2 {
+					// Clicked on color swatch — cycle color.
+					m.app.state.NextTeamColor(i, 1)
+					m.app.broadcastMsg(common.TeamUpdatedMsg{})
+				} else {
+					// Clicked on team name — enter rename mode.
+					m.teamEditing = true
+					m.teamEditInput.SetValue(team.Name)
+					m.teamEditInput.Focus()
+					m.teamEditInput.CursorEnd()
+				}
+			} else if myIdx != i {
+				m.app.state.MovePlayerToTeam(m.playerID, i)
+				m.app.broadcastMsg(common.TeamUpdatedMsg{})
+			}
+			return ""
+		}
+		row++ // advance past header
+		for _, pid := range team.Players {
+			if contentY == row {
+				if p := m.app.state.GetPlayer(pid); p != nil {
+					return p.Name
+				}
+				return pid
+			}
+			row++
+		}
+	}
+
+	// After all teams: blank + [+ Create Team] button.
+	row++ // blank line
+	if contentY == row && !m.app.state.IsSoleMemberOfTeam(m.playerID) {
+		m.app.state.MovePlayerToTeam(m.playerID, len(teams))
+		m.app.broadcastMsg(common.TeamUpdatedMsg{})
+	}
+	return ""
+}
+
+// handleMouseWheel scrolls the chat panel on wheel events.
+func (m chromeModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	scrollAmount := 3
+	chatH := max(1, m.chatH)
+	switch msg.Button {
+	case tea.MouseWheelUp:
+		m.chatScrollOffset += scrollAmount
+		maxOffset := len(m.chatLines) - chatH
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if m.chatScrollOffset > maxOffset {
+			m.chatScrollOffset = maxOffset
+		}
+	case tea.MouseWheelDown:
+		m.chatScrollOffset -= scrollAmount
+		if m.chatScrollOffset < 0 {
+			m.chatScrollOffset = 0
+		}
+	}
+	return m, nil
+}
+
 func (m chromeModel) View() tea.View {
 	var view tea.View
 	if m.width == 0 || m.height == 0 {
@@ -645,6 +801,7 @@ func (m chromeModel) View() tea.View {
 
 	view.SetContent(content)
 	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 	if m.mode == modeInput {
 		if cursor := m.input.Cursor(); cursor != nil {
 			cursor.Position.Y = m.height - 2 // row above framework status bar
@@ -906,7 +1063,7 @@ func (m chromeModel) renderTeamPanel(width, height int, baseStyle lipgloss.Style
 		block := colorSwatch(lipgloss.Color(team.Color), bg)
 		nameText := fmt.Sprintf(" %s %s", block, team.Name)
 		if m.teamEditing && i == myTeamIdx {
-			nameText = fmt.Sprintf(" %s %s", block, m.teamEditInput.View())
+			nameText = fmt.Sprintf(" %s %s", block, m.teamEditInput.Value())
 		}
 		teamStyle := baseStyle
 		if focused && i == myTeamIdx {
@@ -922,6 +1079,13 @@ func (m chromeModel) renderTeamPanel(width, height int, baseStyle lipgloss.Style
 			}
 			lines = append(lines, baseStyle.Width(width).Render(truncateStyled("    "+name, width)))
 		}
+	}
+
+	// [+ Create Team] button — shown unless player is already sole member of a team.
+	if !m.app.state.IsSoleMemberOfTeam(m.playerID) {
+		lines = append(lines, blankLine)
+		btnStyle := baseStyle.Faint(true)
+		lines = append(lines, btnStyle.Width(width).Render(truncateStyled(" [+ Create Team]", width)))
 	}
 
 	// Pad to fill height. Use lipgloss-styled blanks (not raw ANSI) to
