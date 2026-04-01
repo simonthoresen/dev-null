@@ -24,10 +24,7 @@ type consoleModel struct {
 	logView   *NCTextView
 	panel     *NCPanel
 
-	inputHistory []string
-	historyIdx   int
-	historyDraft string
-
+	// Tab completion state (used by tabComplete callback).
 	tabPrefix     string
 	tabCandidates []string
 	tabIndex      int
@@ -52,7 +49,7 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	input.SetWidth(78)
 	input.Focus()
 
-	logView := &NCTextView{BottomAlign: true}
+	logView := &NCTextView{BottomAlign: true, Scrollable: true}
 	inputCtrl := &NCTextInput{Model: input}
 
 	panel := &NCPanel{
@@ -65,18 +62,20 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	panel.FocusFirst()
 
 	m := &consoleModel{
-		app:        app,
-		cancel:     cancel,
-		inputCtrl:  inputCtrl,
-		logView:    logView,
-		panel:      panel,
-		theme:      DefaultTheme(),
-		overlay:    overlayState{openMenu: -1},
-		historyIdx: -1,
+		app:       app,
+		cancel:    cancel,
+		inputCtrl: inputCtrl,
+		logView:   logView,
+		panel:     panel,
+		theme:     DefaultTheme(),
+		overlay:   overlayState{openMenu: -1},
 	}
-	// Point the NCTextInput at the consoleModel's copy will not work since
-	// textinput.Model is a value type. Instead, we keep the pointer in
-	// NCTextInput and always access the model through inputCtrl.Model.
+
+	// Wire callbacks — the NCTextInput handles Enter/Esc/Up/Down/Tab internally.
+	inputCtrl.OnSubmit = m.submitInput
+	inputCtrl.OnEsc = func() {} // just clear (handled internally)
+	inputCtrl.OnTab = m.tabComplete
+
 	return m
 }
 
@@ -165,64 +164,14 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.overlay.handleKey(msg.String(), m.consoleMenus(), "") {
 			return m, nil
 		}
+		// Everything else goes to the focused panel control.
+		m.panel.HandleUpdate(msg)
+		return m, nil
 
-		switch msg.String() {
-		case "enter":
-			m.tabCandidates = nil
-			m.historyIdx = -1
-			m.historyDraft = ""
-			m.submitInput()
-			return m, nil
-		case "esc":
-			m.tabCandidates = nil
-			m.historyIdx = -1
-			m.historyDraft = ""
-			m.input().SetValue("")
-			return m, nil
-		case "up":
-			if len(m.inputHistory) == 0 {
-				return m, nil
-			}
-			if m.historyIdx == -1 {
-				m.historyDraft = m.input().Value()
-				m.historyIdx = len(m.inputHistory) - 1
-			} else if m.historyIdx > 0 {
-				m.historyIdx--
-			}
-			m.input().SetValue(m.inputHistory[m.historyIdx])
-			m.input().CursorEnd()
-			return m, nil
-		case "down":
-			if m.historyIdx == -1 {
-				return m, nil
-			}
-			if m.historyIdx < len(m.inputHistory)-1 {
-				m.historyIdx++
-				m.input().SetValue(m.inputHistory[m.historyIdx])
-			} else {
-				m.historyIdx = -1
-				m.input().SetValue(m.historyDraft)
-			}
-			m.input().CursorEnd()
-			return m, nil
-		case "tab":
-			if strings.HasPrefix(m.input().Value(), "/") {
-				if m.tabCandidates == nil {
-					m.tabPrefix, m.tabCandidates = m.app.registry.TabCandidates(m.input().Value(), m.app.state.PlayerNames())
-					m.tabIndex = 0
-				}
-				if len(m.tabCandidates) > 0 {
-					m.input().SetValue(m.tabPrefix + m.tabCandidates[m.tabIndex])
-					m.input().CursorEnd()
-					m.tabIndex = (m.tabIndex + 1) % len(m.tabCandidates)
-				}
-			}
-			return m, nil
-		default:
-			m.tabCandidates = nil
-			m.panel.HandleUpdate(msg)
-			return m, nil
-		}
+	case tea.MouseWheelMsg:
+		// Route scroll events to the panel (NCTextView handles them).
+		m.panel.HandleUpdate(msg)
+		return m, nil
 	}
 
 	// Forward other messages to focused control (cursor blink etc.)
@@ -395,7 +344,7 @@ func (m *consoleModel) View() tea.View {
 	view.MouseMode = tea.MouseModeCellMotion
 
 	if cx, cy, visible := m.panel.CursorPosition(); visible {
-		if cursor := m.input().Cursor(); cursor != nil {
+		if cursor := m.inputCtrl.Model.Cursor(); cursor != nil {
 			cursor.Position.X = cx
 			cursor.Position.Y = cy
 			view.Cursor = cursor
@@ -404,9 +353,6 @@ func (m *consoleModel) View() tea.View {
 
 	return view
 }
-
-// input returns the shared textinput model (canonical copy owned by NCTextInput).
-func (m *consoleModel) input() *textinput.Model { return m.inputCtrl.Model }
 
 func (m *consoleModel) resize() {
 	m.inputCtrl.Model.SetWidth(max(1, m.width-2))
@@ -421,21 +367,32 @@ func (m *consoleModel) appendLog(line string) {
 	}
 }
 
-func (m *consoleModel) submitInput() {
-	text := strings.TrimSpace(m.input().Value())
-	m.input().SetValue("")
-	if text == "" {
-		return
+// tabComplete handles tab completion for the input control.
+func (m *consoleModel) tabComplete(current string) (string, bool) {
+	if !strings.HasPrefix(current, "/") {
+		return "", false
 	}
+	if m.tabCandidates == nil {
+		m.tabPrefix, m.tabCandidates = m.app.registry.TabCandidates(current, m.app.state.PlayerNames())
+		m.tabIndex = 0
+	}
+	if len(m.tabCandidates) == 0 {
+		return "", false
+	}
+	result := m.tabPrefix + m.tabCandidates[m.tabIndex]
+	m.tabIndex = (m.tabIndex + 1) % len(m.tabCandidates)
+	return result, true
+}
+
+// submitInput is called by NCTextInput.OnSubmit when Enter is pressed.
+// text is already trimmed and non-empty; input is already cleared; history is already added.
+func (m *consoleModel) submitInput(text string) {
+	// Reset tab completion on submit.
+	m.tabCandidates = nil
+
 	// Echo the command to the log so the user sees what was typed.
 	m.appendLog("> " + text)
 
-	if len(m.inputHistory) == 0 || m.inputHistory[len(m.inputHistory)-1] != text {
-		m.inputHistory = append(m.inputHistory, text)
-		if len(m.inputHistory) > 50 {
-			m.inputHistory = m.inputHistory[1:]
-		}
-	}
 	if !strings.HasPrefix(text, "/") {
 		m.appendLog("Type /help for available commands.")
 		return

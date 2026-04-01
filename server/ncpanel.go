@@ -15,99 +15,291 @@ import (
 // NCControl is a widget that can be placed inside an NCPanel.
 type NCControl interface {
 	// Render returns the styled content for this control.
-	// width is the inner content width (excluding panel borders).
-	// focused indicates whether this control has keyboard focus.
-	// base is the panel's resolved background/foreground style.
 	Render(width int, focused bool, base lipgloss.Style) string
-
-	// Update handles a tea.Msg for this control (key events, etc.).
-	// Only called when the control has focus.
+	// Update handles a tea.Msg (key events, etc.). Only called when focused.
 	Update(msg tea.Msg)
-
 	// Height returns how many rows this control occupies.
-	// available is the remaining height for flex controls (like NCTextView).
-	// Fixed-height controls ignore it and return their fixed size.
 	Height(available int) int
-
-	// Focusable returns true if this control can receive keyboard focus.
 	Focusable() bool
-
-	// Flex returns true if this control expands to fill available space.
 	Flex() bool
+}
+
+// ─── Scrollbar helper ─────────────────────────────────────────────────────────
+
+// renderScrollbar returns a 1-char-wide scrollbar track for the given viewport.
+// total = total content lines, visible = visible lines, offset = scroll offset
+// from end (0 = bottom). Returns an array of single-char strings, one per row.
+func renderScrollbar(total, visible, offset int, style lipgloss.Style) []string {
+	if visible <= 0 {
+		return nil
+	}
+	track := make([]string, visible)
+	if total <= visible {
+		// No scrolling needed — render empty track.
+		for i := range track {
+			track[i] = style.Render(" ")
+		}
+		return track
+	}
+
+	// Thumb position and size.
+	thumbSize := max(1, visible*visible/total)
+	// offset=0 means bottom; scrollable range = total - visible
+	scrollRange := total - visible
+	topOffset := scrollRange - offset // lines scrolled from top
+	if topOffset < 0 {
+		topOffset = 0
+	}
+	thumbPos := 0
+	if scrollRange > 0 {
+		thumbPos = topOffset * (visible - thumbSize) / scrollRange
+	}
+
+	for i := range track {
+		if i >= thumbPos && i < thumbPos+thumbSize {
+			track[i] = style.Render("█")
+		} else {
+			track[i] = style.Render("░")
+		}
+	}
+	return track
 }
 
 // ─── NCTextView ───────────────────────────────────────────────────────────────
 
-// NCTextView is a read-only multi-line text area. It is a flex control that
-// fills available vertical space. Lines are bottom-aligned (most recent at
-// the bottom, empty space at the top).
+// NCTextView is a read-only, scrollable, multi-line text area.
+// It is a flex control that fills available vertical space.
+// When Scrollable is true, it responds to PgUp/PgDn/mouse wheel
+// and shows a scrollbar on the right edge.
 type NCTextView struct {
-	Lines       []string
-	BottomAlign bool
-	height      int // set by panel layout
+	Lines        []string
+	BottomAlign  bool // when true and content < height, content sticks to bottom
+	Scrollable   bool // enable PgUp/PgDn/wheel scrolling
+	ScrollOffset int  // lines scrolled up from bottom (0 = bottom)
+	height       int  // set by panel layout
 }
 
-func (v *NCTextView) Update(_ tea.Msg)     {}
-func (v *NCTextView) Focusable() bool     { return false }
+func (v *NCTextView) Focusable() bool     { return v.Scrollable }
 func (v *NCTextView) Flex() bool           { return true }
 func (v *NCTextView) Height(avail int) int { v.height = avail; return avail }
 
+func (v *NCTextView) Update(msg tea.Msg) {
+	if !v.Scrollable {
+		return
+	}
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "pgup":
+			v.ScrollOffset += v.height
+			v.clampScroll()
+		case "pgdown":
+			v.ScrollOffset -= v.height
+			v.clampScroll()
+		}
+	case tea.MouseWheelMsg:
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			v.ScrollOffset += 3
+			v.clampScroll()
+		case tea.MouseWheelDown:
+			v.ScrollOffset -= 3
+			v.clampScroll()
+		}
+	}
+}
+
+func (v *NCTextView) clampScroll() {
+	maxOffset := len(v.Lines) - v.height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if v.ScrollOffset > maxOffset {
+		v.ScrollOffset = maxOffset
+	}
+	if v.ScrollOffset < 0 {
+		v.ScrollOffset = 0
+	}
+}
+
 func (v *NCTextView) Render(width int, focused bool, base lipgloss.Style) string {
 	style := base
-	h := v.height
-	if h < 1 {
-		h = 1
+	h := max(1, v.height)
+
+	// Auto-scroll to bottom when new content arrives and user hasn't scrolled up.
+	v.clampScroll()
+
+	// Determine which lines to show.
+	n := len(v.Lines)
+	contentW := width
+	showScrollbar := v.Scrollable && n > h
+	if showScrollbar {
+		contentW = width - 1 // reserve 1 char for scrollbar
+	}
+	if contentW < 1 {
+		contentW = 1
 	}
 
-	n := len(v.Lines)
-	var rows []string
-	if v.BottomAlign && n < h {
-		// Pad with empty lines at the top.
-		for i := 0; i < h-n; i++ {
-			rows = append(rows, style.Width(width).Render(""))
-		}
-		for _, line := range v.Lines {
-			rows = append(rows, style.Width(width).Render(truncateStyled(line, width)))
+	var visibleLines []string
+	if n == 0 {
+		// Empty — fill with blanks.
+		for i := 0; i < h; i++ {
+			visibleLines = append(visibleLines, "")
 		}
 	} else {
-		// Show the last h lines.
-		start := 0
-		if n > h {
-			start = n - h
+		// End = last line index to show (exclusive).
+		end := n - v.ScrollOffset
+		if end < 0 {
+			end = 0
 		}
-		for _, line := range v.Lines[start:] {
-			rows = append(rows, style.Width(width).Render(truncateStyled(line, width)))
+		start := end - h
+		if start < 0 {
+			start = 0
 		}
-		// Pad to fill height.
-		for len(rows) < h {
-			rows = append(rows, style.Width(width).Render(""))
+		visibleLines = v.Lines[start:end]
+	}
+
+	// Bottom-align: pad top with empty lines if content < height.
+	var rows []string
+	if v.BottomAlign && len(visibleLines) < h {
+		for i := 0; i < h-len(visibleLines); i++ {
+			rows = append(rows, style.Width(contentW).Render(""))
 		}
 	}
+	for _, line := range visibleLines {
+		rows = append(rows, style.Width(contentW).Render(truncateStyled(line, contentW)))
+	}
+	// Pad to fill height.
+	for len(rows) < h {
+		rows = append(rows, style.Width(contentW).Render(""))
+	}
+
+	// Add scrollbar if needed.
+	if showScrollbar {
+		sb := renderScrollbar(n, h, v.ScrollOffset, style)
+		for i := range rows {
+			if i < len(sb) {
+				rows[i] = rows[i] + sb[i]
+			}
+		}
+	}
+
 	return strings.Join(rows, "\n")
 }
 
 // ─── NCTextInput ──────────────────────────────────────────────────────────────
 
-// NCTextInput wraps a textinput.Model as a 1-row focusable control.
-// Bg/Fg are set by the panel during rendering to the input-layer colors.
+// NCTextInput is a single-line editable text input control.
+// It owns the textinput.Model and handles Enter, history, and tab completion
+// via callbacks. The owning screen sets these callbacks to wire behavior.
 type NCTextInput struct {
-	Model  *textinput.Model
-	bg, fg color.Color // resolved by panel
+	Model *textinput.Model
+	bg    color.Color // set by panel during render
+	fg    color.Color // set by panel during render
+
+	// Callbacks (set by the owning screen).
+	OnSubmit func(text string)                       // called on Enter with trimmed text; input is auto-cleared
+	OnTab    func(current string) (result string, ok bool) // called on Tab; returns replacement text
+	OnEsc    func()                                  // called on Esc
+
+	// History state (managed internally when OnHistory is set).
+	History      []string // append-only; managed by the owning screen
+	MaxHistory   int      // max entries (0 = 50)
+	historyIdx   int      // -1 = not browsing
+	historyDraft string   // saved input before browsing started
+}
+
+func (ti *NCTextInput) Focusable() bool { return true }
+func (ti *NCTextInput) Flex() bool      { return false }
+func (ti *NCTextInput) Height(_ int) int { return 1 }
+
+// Value returns the current text.
+func (ti *NCTextInput) Value() string { return ti.Model.Value() }
+
+// SetValue sets the current text.
+func (ti *NCTextInput) SetValue(s string) { ti.Model.SetValue(s) }
+
+// AddHistory appends text to the history buffer.
+func (ti *NCTextInput) AddHistory(text string) {
+	maxH := ti.MaxHistory
+	if maxH <= 0 {
+		maxH = 50
+	}
+	if len(ti.History) == 0 || ti.History[len(ti.History)-1] != text {
+		ti.History = append(ti.History, text)
+		if len(ti.History) > maxH {
+			ti.History = ti.History[1:]
+		}
+	}
 }
 
 func (ti *NCTextInput) Update(msg tea.Msg) {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "enter":
+			text := strings.TrimSpace(ti.Model.Value())
+			ti.Model.SetValue("")
+			ti.historyIdx = -1
+			ti.historyDraft = ""
+			if text != "" && ti.OnSubmit != nil {
+				ti.AddHistory(text)
+				ti.OnSubmit(text)
+			}
+			return
+		case "esc":
+			ti.Model.SetValue("")
+			ti.historyIdx = -1
+			ti.historyDraft = ""
+			if ti.OnEsc != nil {
+				ti.OnEsc()
+			}
+			return
+		case "up":
+			if len(ti.History) == 0 {
+				return
+			}
+			if ti.historyIdx == -1 {
+				ti.historyDraft = ti.Model.Value()
+				ti.historyIdx = len(ti.History) - 1
+			} else if ti.historyIdx > 0 {
+				ti.historyIdx--
+			}
+			ti.Model.SetValue(ti.History[ti.historyIdx])
+			ti.Model.CursorEnd()
+			return
+		case "down":
+			if ti.historyIdx == -1 {
+				return
+			}
+			if ti.historyIdx < len(ti.History)-1 {
+				ti.historyIdx++
+				ti.Model.SetValue(ti.History[ti.historyIdx])
+			} else {
+				ti.historyIdx = -1
+				ti.Model.SetValue(ti.historyDraft)
+			}
+			ti.Model.CursorEnd()
+			return
+		case "tab":
+			if ti.OnTab != nil {
+				if result, ok := ti.OnTab(ti.Model.Value()); ok {
+					ti.Model.SetValue(result)
+					ti.Model.CursorEnd()
+				}
+			}
+			return
+		}
+	}
+	// Forward all other messages to the underlying textinput.
 	updated, _ := ti.Model.Update(msg)
 	*ti.Model = updated
 }
-func (ti *NCTextInput) Focusable() bool     { return true }
-func (ti *NCTextInput) Flex() bool           { return false }
-func (ti *NCTextInput) Height(_ int) int     { return 1 }
 
 func (ti *NCTextInput) Render(width int, focused bool, _ lipgloss.Style) string {
 	bg := ti.bg
 	fg := ti.fg
 
-	// Apply input colors to all textinput sub-styles.
 	inputStyle := lipgloss.NewStyle().Background(bg).Foreground(fg)
 	s := ti.Model.Styles()
 	s.Focused.Prompt = inputStyle
@@ -142,14 +334,12 @@ func (ti *NCTextInput) Render(width int, focused bool, _ lipgloss.Style) string 
 // NCSeparator renders an inner horizontal divider line.
 type NCSeparator struct{}
 
-func (s *NCSeparator) Update(_ tea.Msg)     {}
-func (s *NCSeparator) Focusable() bool     { return false }
-func (s *NCSeparator) Flex() bool           { return false }
-func (s *NCSeparator) Height(_ int) int     { return 1 }
+func (s *NCSeparator) Update(_ tea.Msg) {}
+func (s *NCSeparator) Focusable() bool  { return false }
+func (s *NCSeparator) Flex() bool       { return false }
+func (s *NCSeparator) Height(_ int) int { return 1 }
 
 func (s *NCSeparator) Render(width int, _ bool, _ lipgloss.Style) string {
-	// The panel renders the full divider row (with XL/XR junctions),
-	// so the separator itself is just the inner horizontal line.
 	return strings.Repeat("─", width)
 }
 
@@ -177,10 +367,7 @@ func (p *NCPanel) Render(x, y, width, height int, t *Theme) string {
 	p.screenY = y
 	p.width = width
 	p.height = height
-	p.innerW = width - 2
-	if p.innerW < 1 {
-		p.innerW = 1
-	}
+	p.innerW = max(1, width-2)
 
 	var boxStyle lipgloss.Style
 	if p.Desktop {
@@ -194,29 +381,20 @@ func (p *NCPanel) Render(x, y, width, height int, t *Theme) string {
 
 	var rows []string
 	if p.Title != "" {
-		// Title row: ┌─ Title ──────────┐
 		titleText := " " + p.Title + " "
 		titleRendered := titleStyle.Render(titleText)
-		titleFill := p.innerW - 1 - ansi.StringWidth(titleText) // -1 for the IH after TL
-		if titleFill < 0 {
-			titleFill = 0
-		}
+		titleFill := max(0, p.innerW-1-ansi.StringWidth(titleText))
 		topRow := boxStyle.Render(t.OTL()+t.IH()) + titleRendered + boxStyle.Render(strings.Repeat(t.OH(), titleFill)+t.OTR())
 		rows = append(rows, topRow)
 	} else {
-		// No title: plain top border ┌──────────┐
 		rows = append(rows, boxStyle.Render(t.OTL()+strings.Repeat(t.OH(), p.innerW)+t.OTR()))
 	}
 
 	// Calculate available height for flex controls.
-	// Overhead: top border(1) + bottom border(1) + separator between each pair of controls
 	overhead := 2 // top + bottom border
-	separators := 0
 	if len(p.Controls) > 1 {
-		separators = len(p.Controls) - 1
+		overhead += len(p.Controls) - 1 // separators
 	}
-	overhead += separators
-
 	fixedH := 0
 	flexCount := 0
 	for _, c := range p.Controls {
@@ -226,10 +404,7 @@ func (p *NCPanel) Render(x, y, width, height int, t *Theme) string {
 			fixedH += c.Height(0)
 		}
 	}
-	flexAvail := height - overhead - fixedH
-	if flexAvail < 1 {
-		flexAvail = 1
-	}
+	flexAvail := max(1, height-overhead-fixedH)
 	perFlex := flexAvail
 	if flexCount > 1 {
 		perFlex = flexAvail / flexCount
@@ -237,11 +412,10 @@ func (p *NCPanel) Render(x, y, width, height int, t *Theme) string {
 
 	// Render controls.
 	p.controlY = make([]int, len(p.Controls))
-	currentY := y + 1 // +1 for title row
+	currentY := y + 1 // +1 for title/top border row
 
 	for i, c := range p.Controls {
 		if i > 0 {
-			// Separator between controls.
 			sep := boxStyle.Render(t.XL() + strings.Repeat(t.IH(), p.innerW) + t.XR())
 			rows = append(rows, sep)
 			currentY++
@@ -250,10 +424,10 @@ func (p *NCPanel) Render(x, y, width, height int, t *Theme) string {
 		p.controlY[i] = currentY
 
 		avail := perFlex
-		ch := c.Height(avail)
+		_ = c.Height(avail)
 		focused := i == p.FocusIdx
 
-		// Set input-layer colors on text input controls.
+		// Use input-layer colors for text input controls.
 		style := boxStyle
 		if ti, isInput := c.(*NCTextInput); isInput {
 			ti.bg = t.InputBgC()
@@ -265,13 +439,12 @@ func (p *NCPanel) Render(x, y, width, height int, t *Theme) string {
 			rows = append(rows, lv+line+rv)
 			currentY++
 		}
-		_ = ch // height already accounted for in the rendered lines
 	}
 
 	// Bottom border.
 	rows = append(rows, boxStyle.Render(t.OBL()+strings.Repeat(t.OH(), p.innerW)+t.OBR()))
 
-	// Pad to fill requested height (in case controls don't fill it all).
+	// Pad to fill requested height.
 	for len(rows) < height {
 		rows = append(rows[:len(rows)-1],
 			lv+boxStyle.Width(p.innerW).Render("")+rv,
@@ -305,9 +478,7 @@ func (p *NCPanel) CursorPosition() (cx, cy int, visible bool) {
 	if cursor == nil {
 		return 0, 0, false
 	}
-	// X: panel border(1) + cursor position within the input.
 	cx = p.screenX + 1 + cursor.Position.X
-	// Y: control's starting row.
 	cy = p.controlY[p.FocusIdx]
 	return cx, cy, true
 }
@@ -339,16 +510,13 @@ func (p *NCPanel) FocusFirst() {
 }
 
 // HandleClick processes a mouse click at absolute screen position (mx, my).
-// Returns true if the click was inside the panel.
 func (p *NCPanel) HandleClick(mx, my int) bool {
-	// Check bounds.
 	if mx < p.screenX || mx >= p.screenX+p.width {
 		return false
 	}
 	if my < p.screenY || my >= p.screenY+p.height {
 		return false
 	}
-	// Find which control was clicked and focus it.
 	for i, c := range p.Controls {
 		if !c.Focusable() {
 			continue
@@ -360,5 +528,5 @@ func (p *NCPanel) HandleClick(mx, my int) bool {
 			return true
 		}
 	}
-	return true // consumed even if no focusable control hit
+	return true
 }
