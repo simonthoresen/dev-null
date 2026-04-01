@@ -301,15 +301,15 @@ func (ti *NCTextInput) Render(width int, focused bool, base lipgloss.Style) stri
 	fg := ti.fg
 
 	// Layout: [text·····dots·····]
-	// No prompt — just brackets and field content with dots filling unused space.
+	// Brackets use parent (base) colors. Field area uses input colors.
+	// Both focused and unfocused fields have input bg — only cursor differs.
 	fieldW := max(1, width-2) // -2 for "[" and "]"
 
-	bracketStyle := base
+	bracketStyle := base // brackets match parent window
 	inputStyle := lipgloss.NewStyle().Background(bg).Foreground(fg)
 	dotStyle := lipgloss.NewStyle().Background(bg).Foreground(fg).Faint(true)
 
-	// Configure the underlying textinput — suppress its own rendering features;
-	// we render everything manually for precise control.
+	// Configure the underlying textinput.
 	ti.Model.Prompt = ""
 	ti.Model.Placeholder = ""
 	ti.Model.SetWidth(fieldW + 1) // +1 so cursor can sit after last char
@@ -324,43 +324,30 @@ func (ti *NCTextInput) Render(width int, focused bool, base lipgloss.Style) stri
 
 	if focused {
 		ti.Model.Focus()
-	} else {
-		ti.Model.Blur()
-	}
 
-	val := ti.Model.Value()
-	textW := ansi.StringWidth(val)
-	dotsW := fieldW - textW
-	if dotsW < 0 {
-		dotsW = 0
-	}
-	dots := dotStyle.Render(strings.Repeat("·", dotsW))
-
-	if focused {
-		// Render the textinput's View() for cursor support, then append dots.
+		// Render the textinput's View() for cursor support, then fill dots.
 		view := ti.Model.View()
 		viewW := ansi.StringWidth(view)
-		// The view includes the text + cursor. Fill remaining with dots.
-		remaining := fieldW - viewW
-		if remaining < 0 {
-			remaining = 0
-		}
+		remaining := max(0, fieldW-viewW)
 		fill := dotStyle.Render(strings.Repeat("·", remaining))
 		return bracketStyle.Render("[") + view + fill + bracketStyle.Render("]")
 	}
 
-	// Unfocused: show text + dots, all in panel bg.
-	unfocusedDot := base.Faint(true)
+	// Unfocused: input bg, text + dots, no cursor.
+	ti.Model.Blur()
+	val := ti.Model.Value()
+	textW := ansi.StringWidth(val)
+	dotsW := max(0, fieldW-textW)
+
 	if val == "" {
-		return unfocusedDot.Render("[" + strings.Repeat("·", fieldW) + "]")
+		// All dots on input bg.
+		return bracketStyle.Render("[") +
+			dotStyle.Render(strings.Repeat("·", fieldW)) +
+			bracketStyle.Render("]")
 	}
-	text := base.Render(truncateStyled(val, fieldW))
-	_ = dots
-	dotsAfter := ""
-	if textW < fieldW {
-		dotsAfter = unfocusedDot.Render(strings.Repeat("·", fieldW-textW))
-	}
-	return unfocusedDot.Render("[") + text + dotsAfter + unfocusedDot.Render("]")
+	text := inputStyle.Render(truncateStyled(val, fieldW))
+	dots := dotStyle.Render(strings.Repeat("·", dotsW))
+	return bracketStyle.Render("[") + text + dots + bracketStyle.Render("]")
 }
 
 // ─── NCSeparator ──────────────────────────────────────────────────────────────
