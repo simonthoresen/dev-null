@@ -131,6 +131,9 @@ type chromeModel struct {
 	// Cached menu tree — rebuilt only on invalidation.
 	menuCache     []common.MenuDef
 	menuCacheGame common.Game // game pointer when cache was built (nil = no game)
+
+	// Cached NC widget tree renders — survives across frames per player.
+	ncCache *ncRenderCache
 }
 
 func newChromeModel(app *Server, playerID string) chromeModel {
@@ -159,6 +162,7 @@ func newChromeModel(app *Server, playerID string) chromeModel {
 		historyIdx:    -1,
 		theme:         DefaultTheme(),
 		overlay:       overlayState{openMenu: -1},
+		ncCache:       newNCRenderCache(),
 	}
 	m.syncChat()
 	// Always start in lobby/input mode. GameLoadedMsg will transition
@@ -1026,7 +1030,7 @@ func (m chromeModel) viewPlaying(menus []common.MenuDef, game common.Game, gameN
 		// Game provides a declarative NC widget tree — render it.
 		gameView = renderWidgetTree(ncTree, m.width, gameH, m.theme, func(w, h int) string {
 			return game.View(m.playerID, w, h)
-		})
+		}, m.ncCache)
 	} else {
 		// Fallback: wrap View() output directly (default gameview behavior).
 		gameView = fitBlock(game.View(m.playerID, m.width, gameH), m.width, gameH)
@@ -1454,6 +1458,7 @@ func (m *chromeModel) handleThemeCommand(input string) {
 		return
 	}
 	m.theme = t
+	m.ncCache.reset()
 	m.pluginReply(fmt.Sprintf("Theme changed to: %s", t.Name))
 }
 

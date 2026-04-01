@@ -1,5 +1,11 @@
 package common
 
+import (
+	"encoding/binary"
+	"hash/fnv"
+	"math"
+)
+
 // Player is a connected SSH client.
 type Player struct {
 	ID         string
@@ -63,6 +69,57 @@ type WidgetNode struct {
 	Height   int           // fixed height (for split children, 0 = use weight)
 	Rows     [][]string    // table rows (for "table")
 	Children []*WidgetNode // child nodes (for split/panel containers)
+}
+
+// Hash returns a content hash of this node and all descendants.
+// gameview nodes return 0 (always cache-miss) because their content
+// comes from JS View() which can change unpredictably.
+func (n *WidgetNode) Hash() uint64 {
+	if n == nil {
+		return 0
+	}
+	// gameview nodes (and unknown types that fall back to gameview) are always dirty.
+	if n.Type == "gameview" || n.Type == "" {
+		return 0
+	}
+
+	h := fnv.New64a()
+	h.Write([]byte(n.Type))
+	h.Write([]byte{0})
+	h.Write([]byte(n.Title))
+	h.Write([]byte{0})
+	h.Write([]byte(n.Text))
+	h.Write([]byte{0})
+	h.Write([]byte(n.Align))
+	h.Write([]byte{0})
+	var buf [8]byte
+	binary.LittleEndian.PutUint64(buf[:], math.Float64bits(n.Weight))
+	h.Write(buf[:])
+	binary.LittleEndian.PutUint32(buf[:4], uint32(n.Width))
+	h.Write(buf[:4])
+	binary.LittleEndian.PutUint32(buf[:4], uint32(n.Height))
+	h.Write(buf[:4])
+	// Table rows.
+	for _, row := range n.Rows {
+		for _, cell := range row {
+			h.Write([]byte(cell))
+			h.Write([]byte{0})
+		}
+		h.Write([]byte{1}) // row separator
+	}
+	// Children: mix in each child's hash. A child hash of 0 (gameview)
+	// makes the parent hash non-deterministic via the position encoding,
+	// but we handle that at the cache lookup level — any subtree containing
+	// a gameview will propagate 0 upward.
+	for _, child := range n.Children {
+		ch := child.Hash()
+		if ch == 0 {
+			return 0 // gameview descendant → entire subtree is uncacheable
+		}
+		binary.LittleEndian.PutUint64(buf[:], ch)
+		h.Write(buf[:])
+	}
+	return h.Sum64()
 }
 
 // Tea messages

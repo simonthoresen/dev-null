@@ -8,10 +8,58 @@ import (
 	"null-space/common"
 )
 
+// ─── Render cache ─────────────────────────────────────────────────────
+
+// ncRenderCacheKey identifies a cached subtree render.
+type ncRenderCacheKey struct {
+	hash          uint64
+	width, height int
+}
+
+// ncRenderCache caches rendered []string output for WidgetNode subtrees
+// whose Hash() is non-zero (i.e. subtrees with no gameview descendants).
+// The cache is per-player and lives on chromeModel, so it persists across
+// frames but is scoped to one connection.
+type ncRenderCache struct {
+	entries map[ncRenderCacheKey][]string
+}
+
+func newNCRenderCache() *ncRenderCache {
+	return &ncRenderCache{entries: make(map[ncRenderCacheKey][]string)}
+}
+
+// get returns a cached render if available.
+func (c *ncRenderCache) get(hash uint64, width, height int) ([]string, bool) {
+	if c == nil || hash == 0 {
+		return nil, false
+	}
+	lines, ok := c.entries[ncRenderCacheKey{hash, width, height}]
+	return lines, ok
+}
+
+// put stores a rendered subtree. Only called for hash != 0.
+func (c *ncRenderCache) put(hash uint64, width, height int, lines []string) {
+	if c == nil || hash == 0 {
+		return
+	}
+	c.entries[ncRenderCacheKey{hash, width, height}] = lines
+}
+
+// reset clears all cached entries (e.g. on theme change).
+func (c *ncRenderCache) reset() {
+	if c == nil {
+		return
+	}
+	clear(c.entries)
+}
+
+// ─── Tree rendering ───────────────────────────────────────────────────
+
 // renderWidgetTree renders a WidgetNode tree into a string of exactly width×height.
 // viewFn is called when a "gameview" node is encountered — it renders the raw game view.
-func renderWidgetTree(node *common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string) string {
-	lines := renderNode(node, width, height, theme, viewFn)
+// cache may be nil (no caching).
+func renderWidgetTree(node *common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string, cache *ncRenderCache) string {
+	lines := renderNode(node, width, height, theme, viewFn, cache)
 	// Ensure exactly height lines, each exactly width visible chars
 	for len(lines) < height {
 		lines = append(lines, strings.Repeat(" ", width))
@@ -26,30 +74,40 @@ func renderWidgetTree(node *common.WidgetNode, width, height int, theme *Theme, 
 }
 
 // renderNode dispatches rendering based on node type.
-func renderNode(node *common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string) []string {
+// If the node's hash is non-zero and a cached result exists, it is returned directly.
+func renderNode(node *common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string, cache *ncRenderCache) []string {
 	if node == nil || width <= 0 || height <= 0 {
 		return emptyLines(width, height)
 	}
 
+	hash := node.Hash()
+	if lines, ok := cache.get(hash, width, height); ok {
+		return lines
+	}
+
+	var lines []string
 	switch node.Type {
 	case "gameview":
-		return renderGameViewNode(width, height, viewFn)
+		lines = renderGameViewNode(width, height, viewFn)
 	case "panel":
-		return renderPanelNode(node, width, height, theme, viewFn)
+		lines = renderPanelNode(node, width, height, theme, viewFn, cache)
 	case "label":
-		return renderLabelNode(node, width, height)
+		lines = renderLabelNode(node, width, height)
 	case "hsplit":
-		return renderHSplitNode(node, width, height, theme, viewFn)
+		lines = renderHSplitNode(node, width, height, theme, viewFn, cache)
 	case "vsplit":
-		return renderVSplitNode(node, width, height, theme, viewFn)
+		lines = renderVSplitNode(node, width, height, theme, viewFn, cache)
 	case "divider":
-		return renderDividerNode(width, height, theme)
+		lines = renderDividerNode(width, height, theme)
 	case "table":
-		return renderTableNode(node, width, height)
+		lines = renderTableNode(node, width, height)
 	default:
 		// Unknown type: treat as gameview fallback
-		return renderGameViewNode(width, height, viewFn)
+		lines = renderGameViewNode(width, height, viewFn)
 	}
+
+	cache.put(hash, width, height, lines)
+	return lines
 }
 
 // ─── Node Renderers ────────────────────────────────────────────────────
@@ -69,7 +127,7 @@ func renderGameViewNode(width, height int, viewFn func(w, h int) string) []strin
 	return lines
 }
 
-func renderPanelNode(node *common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string) []string {
+func renderPanelNode(node *common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string, cache *ncRenderCache) []string {
 	if width < 4 || height < 3 {
 		return emptyLines(width, height)
 	}
@@ -98,7 +156,7 @@ func renderPanelNode(node *common.WidgetNode, width, height int, theme *Theme, v
 	// Render children vertically within the panel interior
 	var contentLines []string
 	if len(node.Children) > 0 {
-		contentLines = renderChildrenVertical(node.Children, innerW, innerH, theme, viewFn)
+		contentLines = renderChildrenVertical(node.Children, innerW, innerH, theme, viewFn, cache)
 	}
 
 	// Pad/clip to innerH
@@ -147,7 +205,7 @@ func renderLabelNode(node *common.WidgetNode, width, height int) []string {
 	return result
 }
 
-func renderHSplitNode(node *common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string) []string {
+func renderHSplitNode(node *common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string, cache *ncRenderCache) []string {
 	if len(node.Children) == 0 {
 		return emptyLines(width, height)
 	}
@@ -159,7 +217,7 @@ func renderHSplitNode(node *common.WidgetNode, width, height int, theme *Theme, 
 	var childColumns [][]string
 	for i, child := range node.Children {
 		cw := childWidths[i]
-		cols := renderNode(child, cw, height, theme, viewFn)
+		cols := renderNode(child, cw, height, theme, viewFn, cache)
 		childColumns = append(childColumns, cols)
 	}
 
@@ -180,7 +238,7 @@ func renderHSplitNode(node *common.WidgetNode, width, height int, theme *Theme, 
 	return result
 }
 
-func renderVSplitNode(node *common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string) []string {
+func renderVSplitNode(node *common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string, cache *ncRenderCache) []string {
 	if len(node.Children) == 0 {
 		return emptyLines(width, height)
 	}
@@ -192,7 +250,7 @@ func renderVSplitNode(node *common.WidgetNode, width, height int, theme *Theme, 
 	var result []string
 	for i, child := range node.Children {
 		ch := childHeights[i]
-		lines := renderNode(child, width, ch, theme, viewFn)
+		lines := renderNode(child, width, ch, theme, viewFn, cache)
 		result = append(result, lines...)
 	}
 
@@ -337,11 +395,11 @@ func allocateSizes(children []*common.WidgetNode, total int, horizontal bool) []
 }
 
 // renderChildrenVertical stacks children vertically, auto-distributing height.
-func renderChildrenVertical(children []*common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string) []string {
+func renderChildrenVertical(children []*common.WidgetNode, width, height int, theme *Theme, viewFn func(w, h int) string, cache *ncRenderCache) []string {
 	heights := allocateSizes(children, height, false)
 	var result []string
 	for i, child := range children {
-		lines := renderNode(child, width, heights[i], theme, viewFn)
+		lines := renderNode(child, width, heights[i], theme, viewFn, cache)
 		result = append(result, lines...)
 	}
 	return result
