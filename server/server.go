@@ -413,8 +413,13 @@ func (a *Server) registerSession(sess ssh.Session) *common.Player {
 	if oldID, ok := a.state.GameDisconnected[player.Name]; ok {
 		a.state.replaceGamePlayerIDLocked(oldID, player.ID)
 		delete(a.state.GameDisconnected, player.Name)
+		game := a.state.ActiveGame
 		a.state.mu.Unlock()
 		a.serverLog(fmt.Sprintf("player %s rejoined game (was %s, now %s)", player.Name, oldID, player.ID))
+		// Refresh the teams cache so JS sees the updated player ID.
+		if jrt, ok := game.(*jsRuntime); ok {
+			jrt.SetTeamsCache(a.buildTeamsCache())
+		}
 	} else {
 		a.state.mu.Unlock()
 	}
@@ -684,10 +689,12 @@ func (a *Server) loadGame(path string) error {
 
 	name := strings.TrimSuffix(filepath.Base(path), ".js")
 
-	rt, err := LoadGame(path, a.state, a.serverLog, func(msg common.Message) {
-		a.broadcastChat(msg)
-	})
+	// Create a buffered channel for JS→server chat; drained by a goroutine below.
+	gameChatCh := make(chan common.Message, 64)
+
+	rt, err := LoadGame(path, a.serverLog, gameChatCh)
 	if err != nil {
+		close(gameChatCh)
 		return err
 	}
 	if jrt, ok := rt.(*jsRuntime); ok {
@@ -699,9 +706,11 @@ func (a *Server) loadGame(path string) error {
 	tr := rt.TeamRange()
 	teamCount := len(teams)
 	if tr.Min > 0 && teamCount < tr.Min {
+		close(gameChatCh)
 		return fmt.Errorf("game requires at least %d teams (have %d)", tr.Min, teamCount)
 	}
 	if tr.Max > 0 && teamCount > tr.Max {
+		close(gameChatCh)
 		return fmt.Errorf("game supports at most %d teams (have %d)", tr.Max, teamCount)
 	}
 
@@ -714,7 +723,19 @@ func (a *Server) loadGame(path string) error {
 	a.state.GamePhase = common.PhaseSplash
 	a.state.mu.Unlock()
 
-	// Call init — players() and teams() now return game participants.
+	// Populate the teams cache so JS teams() returns correct data.
+	if jrt, ok := rt.(*jsRuntime); ok {
+		jrt.SetTeamsCache(a.buildTeamsCache())
+	}
+
+	// Drain JS chat messages on a background goroutine.
+	go func() {
+		for msg := range gameChatCh {
+			a.broadcastChat(msg)
+		}
+	}()
+
+	// Call init — teams() now returns game participants via cached snapshot.
 	savedState, err := loadGameState(a.dataDir, name)
 	if err != nil {
 		a.serverLog(fmt.Sprintf("warning: could not load saved state: %v", err))
@@ -806,10 +827,40 @@ func (a *Server) unloadGame() {
 	}
 	game.Unload()
 
+	// Close the JS chat channel so the drainer goroutine exits.
+	if jrt, ok := game.(*jsRuntime); ok && jrt.chatCh != nil {
+		close(jrt.chatCh)
+	}
+
 	a.broadcastMsg(common.GameUnloadedMsg{})
 	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhaseNone})
 	a.broadcastChat(common.Message{Text: "Game unloaded."})
 	a.serverLog("game unloaded")
+}
+
+// buildTeamsCache builds a pre-resolved teams snapshot for JS teams().
+// Resolves player IDs to names so jsRuntime doesn't need CentralState access.
+func (a *Server) buildTeamsCache() []map[string]any {
+	teams := a.state.GetGameTeams()
+	result := make([]map[string]any, 0, len(teams))
+	for _, t := range teams {
+		playerList := make([]any, 0, len(t.Players))
+		for _, pid := range t.Players {
+			entry := map[string]any{"id": pid}
+			if p := a.state.GetPlayer(pid); p != nil {
+				entry["name"] = p.Name
+			} else {
+				entry["name"] = pid
+			}
+			playerList = append(playerList, entry)
+		}
+		result = append(result, map[string]any{
+			"name":    t.Name,
+			"color":   t.Color,
+			"players": playerList,
+		})
+	}
+	return result
 }
 
 func (a *Server) SetConsoleProgram(p *tea.Program) {
@@ -1123,6 +1174,28 @@ func probeGameTeamRange(path string) common.TeamRange {
 		return common.TeamRange{}
 	}
 	vm := goja.New()
+	// Register stub globals so scripts using include/log/etc. don't crash.
+	baseDir := filepath.Dir(path)
+	included := map[string]bool{}
+	vm.Set("include", func(name string) {
+		if !strings.HasSuffix(name, ".js") {
+			name += ".js"
+		}
+		absPath := filepath.Join(baseDir, name)
+		if included[absPath] {
+			return
+		}
+		included[absPath] = true
+		inc, err := os.ReadFile(absPath)
+		if err != nil {
+			return // silently skip in probe mode
+		}
+		_, _ = vm.RunScript(name, string(inc))
+	})
+	noop := func(goja.FunctionCall) goja.Value { return goja.Undefined() }
+	for _, name := range []string{"log", "chat", "chatPlayer", "teams", "gameOver", "figlet", "addMenu", "messageBox", "registerCommand"} {
+		vm.Set(name, noop)
+	}
 	_, err = vm.RunScript(path, string(src))
 	if err != nil {
 		return common.TeamRange{}

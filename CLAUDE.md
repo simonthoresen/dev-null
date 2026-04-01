@@ -354,6 +354,25 @@ Each attempt uses a short `ConnectTimeout`; falls through on failure.
 
 ---
 
+## Concurrency — Lock Ordering
+
+Two primary mutexes protect shared state:
+
+| Mutex | Type | Location | Protects |
+|-------|------|----------|----------|
+| `CentralState.mu` | RWMutex | `state.go` | Players, teams, game phase, chat history, network info |
+| `jsRuntime.mu` | Mutex | `runtime.go` | Goja JS VM and all JS callback execution |
+
+**Invariant:** `jsRuntime` must **never** acquire `CentralState.mu`. This is enforced structurally — `jsRuntime` has no reference to `CentralState`. Data flows through:
+- **Teams:** Server builds a cache (`buildTeamsCache`) and pushes it via `SetTeamsCache()`. JS `teams()` reads the local cache.
+- **Chat:** JS `chat()`/`chatPlayer()` send on a buffered channel; a server goroutine drains it and calls `broadcastChat()`.
+
+**Callers** (server.go, chrome.go) must release `state.mu` **before** calling any `jsRuntime` Game method (`Init`, `Start`, `View`, `OnInput`, etc.). All existing call sites follow this pattern — verify any new ones do too.
+
+Other mutexes (`programsMu`, `sessionsMu`, `consoleProgramMu`, `commandRegistry.mu`) are leaf locks — they don't call into JS or acquire `state.mu`.
+
+---
+
 ## Dependencies (charm.land v2 stack)
 - `charm.land/bubbletea/v2` — TUI framework
 - `charm.land/wish/v2` — SSH server (use `bubbletea.Middleware`, not deprecated wish middleware)

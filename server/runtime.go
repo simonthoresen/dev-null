@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,15 +47,32 @@ func watchdogJS(vm *goja.Runtime, method string) func() {
 	return func() { close(done) }
 }
 
+// LOCK ORDERING INVARIANT
+//
+// The system has two primary mutexes:
+//   1. CentralState.mu   — protects shared game state (state.go)
+//   2. jsRuntime.mu       — protects the goja JS VM (this file)
+//
+// Permitted lock order: jsRuntime.mu → (nothing external)
+//
+// jsRuntime must NEVER hold or acquire CentralState.mu. To enforce this
+// structurally, jsRuntime has no reference to CentralState. All data flows:
+//   - Teams data: cached snapshot set by server via SetTeamsCache()
+//   - Chat output: buffered channel drained by a server goroutine
+//
+// Callers (server.go, chrome.go) must release state.mu BEFORE calling
+// any jsRuntime Game method (Init, Start, View, OnInput, etc.).
+
 // jsRuntime wraps a goja JS runtime and implements common.Game.
 type jsRuntime struct {
-	mu    sync.Mutex
-	vm    *goja.Runtime
-	state *CentralState
+	mu      sync.Mutex
+	vm      *goja.Runtime
+	baseDir string // directory containing the game file (for include() resolution)
 
-	commands []common.Command
-	logFn    func(string)
-	chatFn   func(common.Message)
+	commands    []common.Command
+	cachedTeams []map[string]any   // snapshot set by server; read by JS teams()
+	logFn       func(string)
+	chatCh      chan common.Message // drained by server goroutine; closed on unload
 
 	// game object methods (nil if not defined)
 	onPlayerLeave goja.Callable
@@ -81,17 +100,17 @@ type jsRuntime struct {
 // LoadGame loads and executes a JS file from games/, extracts the Game object
 // methods, and returns a common.Game. Init() is NOT called here — the server
 // calls it at the splash→playing transition when GamePlayerIDs are set.
-func LoadGame(path string, state *CentralState, logFn func(string), chatFn func(common.Message)) (common.Game, error) {
+func LoadGame(path string, logFn func(string), chatCh chan common.Message) (common.Game, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read game file: %w", err)
 	}
 
 	rt := &jsRuntime{
-		vm:     goja.New(),
-		state:  state,
-		logFn:  logFn,
-		chatFn: chatFn,
+		vm:      goja.New(),
+		baseDir: filepath.Dir(path),
+		logFn:   logFn,
+		chatCh:  chatCh,
 	}
 
 	rt.registerGlobals()
@@ -149,40 +168,52 @@ func (r *jsRuntime) registerGlobals() {
 	})
 
 	r.vm.Set("chat", func(msg string) {
-		if r.chatFn != nil {
-			r.chatFn(common.Message{Text: msg})
+		if r.chatCh != nil {
+			select {
+			case r.chatCh <- common.Message{Text: msg}:
+			default:
+				slog.Warn("JS chat channel full, dropping message", "text", msg)
+			}
 		}
 	})
 
 	r.vm.Set("chatPlayer", func(playerID, msg string) {
-		if r.chatFn != nil {
-			r.chatFn(common.Message{
-				Text:      msg,
-				IsPrivate: true,
-				ToID:      playerID,
-			})
+		if r.chatCh != nil {
+			select {
+			case r.chatCh <- common.Message{Text: msg, IsPrivate: true, ToID: playerID}:
+			default:
+				slog.Warn("JS chatPlayer channel full, dropping message")
+			}
 		}
 	})
 
 	r.vm.Set("teams", func() []map[string]any {
-		teams := r.state.GetGameTeams()
-		result := make([]map[string]any, 0, len(teams))
-		for _, t := range teams {
-			playerList := make([]any, 0, len(t.Players))
-			for _, pid := range t.Players {
-				entry := map[string]any{"id": pid}
-				if p := r.state.GetPlayer(pid); p != nil {
-					entry["name"] = p.Name
+		// Return a deep copy of the cached snapshot to prevent JS mutation.
+		result := make([]map[string]any, len(r.cachedTeams))
+		for i, t := range r.cachedTeams {
+			cp := make(map[string]any, len(t))
+			for k, v := range t {
+				if k == "players" {
+					if players, ok := v.([]any); ok {
+						pCopy := make([]any, len(players))
+						for j, p := range players {
+							if pm, ok := p.(map[string]any); ok {
+								entry := make(map[string]any, len(pm))
+								for pk, pv := range pm {
+									entry[pk] = pv
+								}
+								pCopy[j] = entry
+							} else {
+								pCopy[j] = p
+							}
+						}
+						cp[k] = pCopy
+					}
 				} else {
-					entry["name"] = pid // disconnected — use ID as fallback
+					cp[k] = v
 				}
-				playerList = append(playerList, entry)
 			}
-			result = append(result, map[string]any{
-				"name":    t.Name,
-				"color":   t.Color,
-				"players": playerList,
-			})
+			result[i] = cp
 		}
 		return result
 	})
@@ -388,6 +419,32 @@ func (r *jsRuntime) registerGlobals() {
 		r.commands = append(r.commands, cmd)
 		return goja.Undefined()
 	})
+
+	// include("file.js") — evaluate another JS file relative to the game's directory.
+	// This enables multi-file games stored in games/<name>/ folders.
+	included := map[string]bool{} // track already-included files to prevent cycles
+	r.vm.Set("include", func(name string) {
+		// Sanitize: no path traversal, must end in .js
+		if strings.Contains(name, "..") || strings.ContainsAny(name, "/\\") {
+			panic(r.vm.NewGoError(fmt.Errorf("include: invalid path %q (no directories or ..)", name)))
+		}
+		if !strings.HasSuffix(name, ".js") {
+			name += ".js"
+		}
+		absPath := filepath.Join(r.baseDir, name)
+		if included[absPath] {
+			return // already included
+		}
+		included[absPath] = true
+		src, err := os.ReadFile(absPath)
+		if err != nil {
+			panic(r.vm.NewGoError(fmt.Errorf("include %q: %w", name, err)))
+		}
+		_, err = r.vm.RunScript(name, string(src))
+		if err != nil {
+			panic(r.vm.NewGoError(fmt.Errorf("include %q: %w", name, err)))
+		}
+	})
 }
 
 func (r *jsRuntime) extractGameObject() error {
@@ -553,6 +610,14 @@ func (r *jsRuntime) Menus() []common.MenuDef {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.menus
+}
+
+// SetTeamsCache replaces the cached teams snapshot that JS teams() returns.
+// Called by the server after loading teams or when a player reconnects.
+func (r *jsRuntime) SetTeamsCache(teams []map[string]any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cachedTeams = teams
 }
 
 // --- Lifecycle methods (part of Game interface) ---
