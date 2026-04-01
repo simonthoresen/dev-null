@@ -225,9 +225,9 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *consoleModel) consoleMenus() []common.MenuDef {
 	return []common.MenuDef{
 		{
-			Label: "Server",
+			Label: "&Server",
 			Items: []common.MenuItemDef{
-				{Label: "Shutdown", Handler: func(_ string) {
+				{Label: "&Shutdown", Handler: func(_ string) {
 					if m.cancel != nil {
 						m.cancel()
 					}

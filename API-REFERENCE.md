@@ -217,10 +217,10 @@ Use `chatPlayer(playerID, text)` to reply privately to the caller.
 Registers a top-level entry in the NC-style action bar. Call at the **top level** of your script (not inside a hook). The menu persists for the lifetime of the game.
 
 ```js
-addMenu("Game", [
-    { label: "New Game", onClick: function(playerID) { /* ... */ } },
+addMenu("&Game", [
+    { label: "&New Game", onClick: function(playerID) { /* ... */ } },
     { label: "---" },  // separator
-    { label: "High Scores", onClick: function(playerID) {
+    { label: "&High Scores", onClick: function(playerID) {
         messageBox(playerID, {
             title: "High Scores",
             message: "1. Alice  4200\n2. Bob    3100",
@@ -234,11 +234,13 @@ addMenu("Game", [
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `label` | string | Display text. A label of `"---"` (or any all-dashes string) renders as a separator line. |
+| `label` | string | Display text. Prefix a character with `&` to mark it as the keyboard shortcut (e.g. `"&Save"` → **S** is the shortcut, rendered highlighted). A label of `"---"` (or any all-dashes string) renders as a separator line. |
 | `disabled` | bool | Optional. If true, the item is shown greyed out and cannot be selected. |
 | `onClick` | function(playerID) | Called when the item is activated. `playerID` is the player who selected it. |
 
-**Navigation:** Press `F10` to focus the action bar. `Left`/`Right` move between menu titles. `Down` or `Enter` opens the dropdown. Inside a dropdown: `Up`/`Down` navigate items, `Enter` selects, `Esc` closes back to the bar. `F10` or `Esc` at the bar level deactivates.
+**Keyboard shortcuts:** Use `&` in labels to designate shortcut keys (e.g. `"&File"`, `"&Save"`). The shortcut character is rendered highlighted. `Alt+letter` opens a menu directly. When the bar is focused, pressing the letter key opens the matching menu. Inside a dropdown, pressing the letter activates the matching item.
+
+**Navigation:** Press `F10` or `Alt+letter` to activate the action bar. `Left`/`Right` move between menu titles. `Down` or `Enter` opens the dropdown. Inside a dropdown: `Up`/`Down` navigate items, `Enter` or shortcut letter selects, `Esc` closes back to the bar. `F10` or `Esc` at the bar level deactivates.
 
 ---
 

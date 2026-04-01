@@ -1267,20 +1267,20 @@ func (m *chromeModel) allMenus() []common.MenuDef {
 	var fileItems []common.MenuItemDef
 	if m.isLocal {
 		fileItems = []common.MenuItemDef{{
-			Label: "Quit",
+			Label: "&Quit",
 			Handler: func(_ string) {
 				// Ctrl+C is the reliable quit path in local mode.
 			},
 		}}
 	} else {
 		fileItems = []common.MenuItemDef{{
-			Label: "Disconnect",
+			Label: "&Disconnect",
 			Handler: func(playerID string) {
 				go m.app.kickPlayer(playerID)
 			},
 		}}
 	}
-	menus := []common.MenuDef{{Label: "File", Items: fileItems}}
+	menus := []common.MenuDef{{Label: "&File", Items: fileItems}}
 	m.app.state.mu.RLock()
 	game := m.app.state.ActiveGame
 	m.app.state.mu.RUnlock()

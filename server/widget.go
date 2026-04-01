@@ -9,6 +9,46 @@ import (
 )
 
 
+// ─── Shortcut-key helpers ──────────────────────────────────────────────────────
+
+// stripAmpersand returns the display label with the "&" removed,
+// and the lowercase shortcut character (or 0 if none).
+// e.g. "&File" → ("File", 'f'), "E&xit" → ("Exit", 'x'), "Help" → ("Help", 0)
+func stripAmpersand(label string) (string, rune) {
+	idx := strings.IndexByte(label, '&')
+	if idx < 0 || idx >= len(label)-1 {
+		return label, 0
+	}
+	clean := label[:idx] + label[idx+1:]
+	shortcut := rune(strings.ToLower(label[idx+1 : idx+2])[0])
+	return clean, shortcut
+}
+
+// renderLabel renders a label with the shortcut character underlined.
+// base is the normal style; accent highlights the shortcut char.
+func renderLabel(label string, base, accent lipgloss.Style) string {
+	idx := strings.IndexByte(label, '&')
+	if idx < 0 || idx >= len(label)-1 {
+		return base.Render(label)
+	}
+	before := label[:idx]
+	hotkey := label[idx+1 : idx+2]
+	after := label[idx+2:]
+	return base.Render(before) + accent.Render(hotkey) + base.Render(after)
+}
+
+// menuShortcut returns the shortcut rune for a MenuDef (from its Label).
+func menuShortcut(m common.MenuDef) rune {
+	_, r := stripAmpersand(m.Label)
+	return r
+}
+
+// itemShortcut returns the shortcut rune for a MenuItemDef (from its Label).
+func itemShortcut(it common.MenuItemDef) rune {
+	_, r := stripAmpersand(it.Label)
+	return r
+}
+
 // ─── Overlay state ─────────────────────────────────────────────────────────────
 
 // overlayState holds all per-player NC overlay UI state.
@@ -70,6 +110,19 @@ func (o *overlayState) handleKey(key string, menus []common.MenuDef, playerID st
 		}
 		return true
 	}
+	// Alt+letter opens a menu by its shortcut key (e.g. Alt+F for "&File").
+	if strings.HasPrefix(key, "alt+") && len(key) == 5 {
+		letter := rune(key[4])
+		for i, m := range menus {
+			if menuShortcut(m) == letter {
+				o.menuFocused = true
+				o.menuCursor = i
+				o.openMenu = i
+				o.dropCursor = firstSelectable(menus[i].Items)
+				return true
+			}
+		}
+	}
 	if o.openMenu >= 0 {
 		return o.handleDropdownKey(key, menus, playerID)
 	}
@@ -98,6 +151,19 @@ func (o *overlayState) handleMenuBarKey(key string, menus []common.MenuDef) bool
 		o.dropCursor = firstSelectable(menus[o.menuCursor].Items)
 	case "esc":
 		o.menuFocused = false
+	default:
+		// Letter key → open menu by shortcut (e.g. "f" for "&File").
+		if len(key) == 1 {
+			letter := rune(key[0])
+			for i, m := range menus {
+				if menuShortcut(m) == letter {
+					o.menuCursor = i
+					o.openMenu = i
+					o.dropCursor = firstSelectable(menus[i].Items)
+					return true
+				}
+			}
+		}
 	}
 	return true // consume all keys while menu bar is focused
 }
@@ -137,6 +203,22 @@ func (o *overlayState) handleDropdownKey(key string, menus []common.MenuDef, pla
 	case "esc":
 		o.openMenu = -1
 		// leave menuFocused = true so user is back on the bar
+	default:
+		// Letter key → activate item by shortcut (e.g. "s" for "&Save").
+		if len(key) == 1 {
+			letter := rune(key[0])
+			for i, it := range items {
+				if !it.Disabled && !isSeparator(it) && itemShortcut(it) == letter {
+					if it.Handler != nil {
+						o.openMenu = -1
+						o.menuFocused = false
+						it.Handler(playerID)
+					}
+					_ = i
+					return true
+				}
+			}
+		}
 	}
 	return true
 }
@@ -217,17 +299,24 @@ func prevSelectable(items []common.MenuItemDef, cur int) int {
 func (o *overlayState) renderNCBar(width int, menus []common.MenuDef, t *Theme) string {
 	barStyle    := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.DesktopFgC())
 	activeStyle := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
+	// Shortcut char accent: highlight fg on normal bg (stands out from regular text).
+	barAccent    := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.HighlightFgC())
+	activeAccent := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.DesktopFgC()).Bold(true).Underline(true)
 
 	var sb strings.Builder
 	for i, m := range menus {
 		if i > 0 {
 			sb.WriteString(barStyle.Render(t.Sep()))
 		}
-		label := " " + m.Label + " "
-		if (o.menuFocused || o.openMenu >= 0) && i == o.menuCursor {
-			sb.WriteString(activeStyle.Render(label))
+		focused := (o.menuFocused || o.openMenu >= 0) && i == o.menuCursor
+		if focused {
+			sb.WriteString(activeStyle.Render(" "))
+			sb.WriteString(renderLabel(m.Label, activeStyle, activeAccent))
+			sb.WriteString(activeStyle.Render(" "))
 		} else {
-			sb.WriteString(barStyle.Render(label))
+			sb.WriteString(barStyle.Render(" "))
+			sb.WriteString(renderLabel(m.Label, barStyle, barAccent))
+			sb.WriteString(barStyle.Render(" "))
 		}
 	}
 	content := sb.String()
@@ -244,9 +333,10 @@ func ncBarMenuPositions(menus []common.MenuDef) []int {
 	x := 0
 	for i, m := range menus {
 		pos[i] = x
-		x += 1 + len(m.Label) + 1 // " label " = 2 + len, then "│" separator = 1
+		clean, _ := stripAmpersand(m.Label)
+		x += 1 + len(clean) + 1 // " label " = 2 + len
 		if i < len(menus)-1 {
-			x++ // "│" separator
+			x++ // separator
 		}
 	}
 	return pos
@@ -267,8 +357,11 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 
 	maxLW := 0
 	for _, it := range items {
-		if !isSeparator(it) && len(it.Label) > maxLW {
-			maxLW = len(it.Label)
+		if !isSeparator(it) {
+			clean, _ := stripAmpersand(it.Label)
+			if len(clean) > maxLW {
+				maxLW = len(clean)
+			}
 		}
 	}
 	innerW := maxLW + 2 // 1-space padding each side
@@ -288,20 +381,24 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 	var lines []string
 	lines = append(lines, top)
 
+	menuAccent  := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.HighlightBgC())
+	activeAccent := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.MenuBgC()).Bold(true).Underline(true)
+
 	for i, it := range items {
 		if isSeparator(it) {
 			lines = append(lines, sepRow)
 			continue
 		}
-		padded := " " + it.Label + strings.Repeat(" ", innerW-2-len(it.Label)) + " "
+		clean, _ := stripAmpersand(it.Label)
+		pad := strings.Repeat(" ", innerW-2-len(clean))
 		var inner string
 		switch {
 		case it.Disabled:
-			inner = disabledStyle.Width(innerW).Render(padded)
+			inner = disabledStyle.Width(innerW).Render(" " + clean + pad + " ")
 		case i == o.dropCursor:
-			inner = activeStyle.Width(innerW).Render(padded)
+			inner = activeStyle.Render(" ") + renderLabel(it.Label, activeStyle, activeAccent) + activeStyle.Render(pad+" ")
 		default:
-			inner = menuStyle.Width(innerW).Render(padded)
+			inner = menuStyle.Render(" ") + renderLabel(it.Label, menuStyle, menuAccent) + menuStyle.Render(pad+" ")
 		}
 		lines = append(lines, menuStyle.Render(t.OV())+inner+menuStyle.Render(t.OV()))
 	}
