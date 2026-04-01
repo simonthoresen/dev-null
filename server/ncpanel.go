@@ -300,65 +300,67 @@ func (ti *NCTextInput) Render(width int, focused bool, base lipgloss.Style) stri
 	bg := ti.bg
 	fg := ti.fg
 
-	// Layout: prompt [field_area]
-	// The prompt is rendered by us, the field area by the textinput.
-	promptText := ti.Model.Prompt
-	promptW := ansi.StringWidth(promptText)
-	fieldW := max(1, width-promptW-2) // -2 for "[" and "]"
+	// Layout: [text·····dots·····]
+	// No prompt — just brackets and field content with dots filling unused space.
+	fieldW := max(1, width-2) // -2 for "[" and "]"
 
-	promptStyle := base
 	bracketStyle := base
-	fieldBg := bg
-	fieldFg := fg
+	inputStyle := lipgloss.NewStyle().Background(bg).Foreground(fg)
+	dotStyle := lipgloss.NewStyle().Background(bg).Foreground(fg).Faint(true)
+
+	// Configure the underlying textinput — suppress its own rendering features;
+	// we render everything manually for precise control.
+	ti.Model.Prompt = ""
+	ti.Model.Placeholder = ""
+	ti.Model.SetWidth(fieldW + 1) // +1 so cursor can sit after last char
+	s := ti.Model.Styles()
+	s.Focused.Prompt = lipgloss.NewStyle()
+	s.Focused.Text = inputStyle
+	s.Focused.Placeholder = lipgloss.NewStyle()
+	s.Cursor.Color = fg
+	s.Cursor.Blink = true
+	ti.Model.SetStyles(s)
+	ti.Model.SetVirtualCursor(false)
 
 	if focused {
-		// Focused: input bg, bright text, cursor visible.
-		inputStyle := lipgloss.NewStyle().Background(fieldBg).Foreground(fieldFg)
-		s := ti.Model.Styles()
-		s.Focused.Prompt = lipgloss.NewStyle() // we render prompt ourselves
-		s.Focused.Text = inputStyle
-		s.Focused.Placeholder = inputStyle.Faint(true)
-		s.Cursor.Color = fieldFg
-		s.Cursor.Blink = true
-		ti.Model.SetStyles(s)
-		ti.Model.SetVirtualCursor(false)
-		ti.Model.Placeholder = strings.Repeat("·", fieldW)
-		ti.Model.Prompt = "" // suppress built-in prompt
-		ti.Model.SetWidth(fieldW)
 		ti.Model.Focus()
-
-		view := ti.Model.View()
-		ti.Model.Prompt = promptText // restore for next render
-
-		// Pad field to exact width.
-		viewW := ansi.StringWidth(view)
-		pad := ""
-		if viewW < fieldW {
-			pad = lipgloss.NewStyle().Background(fieldBg).Render(strings.Repeat(" ", fieldW-viewW))
-		}
-
-		return promptStyle.Render(promptText) +
-			bracketStyle.Render("[") +
-			view + pad +
-			bracketStyle.Render("]")
+	} else {
+		ti.Model.Blur()
 	}
 
-	// Unfocused: panel bg, dots showing field extent, no cursor.
-	ti.Model.Blur()
 	val := ti.Model.Value()
-	dotStyle := base.Faint(true)
+	textW := ansi.StringWidth(val)
+	dotsW := fieldW - textW
+	if dotsW < 0 {
+		dotsW = 0
+	}
+	dots := dotStyle.Render(strings.Repeat("·", dotsW))
+
+	if focused {
+		// Render the textinput's View() for cursor support, then append dots.
+		view := ti.Model.View()
+		viewW := ansi.StringWidth(view)
+		// The view includes the text + cursor. Fill remaining with dots.
+		remaining := fieldW - viewW
+		if remaining < 0 {
+			remaining = 0
+		}
+		fill := dotStyle.Render(strings.Repeat("·", remaining))
+		return bracketStyle.Render("[") + view + fill + bracketStyle.Render("]")
+	}
+
+	// Unfocused: show text + dots, all in panel bg.
+	unfocusedDot := base.Faint(true)
 	if val == "" {
-		dots := strings.Repeat("·", fieldW)
-		return promptStyle.Render(promptText) + dotStyle.Render("["+dots+"]")
+		return unfocusedDot.Render("[" + strings.Repeat("·", fieldW) + "]")
 	}
-	text := truncateStyled(val, fieldW)
-	textW := ansi.StringWidth(text)
-	dots := ""
+	text := base.Render(truncateStyled(val, fieldW))
+	_ = dots
+	dotsAfter := ""
 	if textW < fieldW {
-		dots = strings.Repeat("·", fieldW-textW)
+		dotsAfter = unfocusedDot.Render(strings.Repeat("·", fieldW-textW))
 	}
-	return promptStyle.Render(promptText) +
-		dotStyle.Render("[") + base.Render(text) + dotStyle.Render(dots+"]")
+	return unfocusedDot.Render("[") + text + dotsAfter + unfocusedDot.Render("]")
 }
 
 // ─── NCSeparator ──────────────────────────────────────────────────────────────
@@ -504,7 +506,8 @@ func (p *NCPanel) CursorPosition() (cx, cy int, visible bool) {
 	if cursor == nil {
 		return 0, 0, false
 	}
-	cx = p.screenX + 1 + cursor.Position.X
+	// +1 for panel border, +1 for "[" bracket
+	cx = p.screenX + 2 + cursor.Position.X
 	cy = p.controlY[p.FocusIdx]
 	return cx, cy, true
 }

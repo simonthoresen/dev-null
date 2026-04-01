@@ -43,7 +43,7 @@ type consoleModel struct {
 func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	input := new(textinput.Model)
 	*input = textinput.New()
-	input.Prompt = "> "
+	input.Prompt = ""
 	input.Placeholder = ""
 	input.CharLimit = 256
 	input.SetWidth(78)
