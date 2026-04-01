@@ -71,7 +71,7 @@ func main() {
 	}
 
 	if password == "" {
-		fmt.Fprintln(os.Stderr, "WARNING: no admin password set (use --password)")
+		fmt.Fprintln(os.Stderr, "No admin password set — players cannot elevate to admin. Set one with --password or /password at runtime.")
 	}
 
 	// Determine port from address

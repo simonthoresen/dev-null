@@ -875,6 +875,10 @@ func (a *Server) registerBuiltins() {
 			a.state.mu.RLock()
 			pw := a.state.AdminPassword
 			a.state.mu.RUnlock()
+			if pw == "" {
+				ctx.Reply("No admin password set. Ask the server operator to set one with /password.")
+				return
+			}
 			if args[0] != pw {
 				ctx.Reply("Invalid password.")
 				return
