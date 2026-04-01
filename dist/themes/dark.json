@@ -10,6 +10,8 @@
     "popupFg":     "#CDD6F4",
     "highlightBg": "#89B4FA",
     "highlightFg": "#1E1E2E",
+    "inputBg":     "#11111B",
+    "inputFg":     "#A6E3A1",
     "disabledFg":  "#6C7086",
     "shadowBg":    "#11111B"
 }

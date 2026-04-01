@@ -218,7 +218,12 @@ func (p *NCPanel) Render(x, y, width, height int, t *Theme) string {
 		ch := c.Height(avail)
 		focused := i == p.FocusIdx
 
-		content := c.Render(p.innerW, focused, boxStyle)
+		// Use input-layer colors for text input controls.
+		style := boxStyle
+		if _, isInput := c.(*NCTextInput); isInput {
+			style = lipgloss.NewStyle().Background(t.InputBgC()).Foreground(t.InputFgC())
+		}
+		content := c.Render(p.innerW, focused, style)
 		for _, line := range strings.Split(content, "\n") {
 			rows = append(rows, lv+line+rv)
 			currentY++

@@ -45,6 +45,10 @@ type Theme struct {
 	HighlightBg string `json:"highlightBg"`
 	HighlightFg string `json:"highlightFg"`
 
+	// Input fields (text inputs, editable areas)
+	InputBg string `json:"inputBg"`
+	InputFg string `json:"inputFg"`
+
 	// Disabled items
 	DisabledFg string `json:"disabledFg"`
 
@@ -101,6 +105,10 @@ func (t *Theme) PopupFgC() color.Color { return tc(t.PopupFg, "#000000") }
 // Highlight
 func (t *Theme) HighlightBgC() color.Color { return tc(t.HighlightBg, "#000080") }
 func (t *Theme) HighlightFgC() color.Color { return tc(t.HighlightFg, "#FFFFFF") }
+
+// Input fields
+func (t *Theme) InputBgC() color.Color { return tc(t.InputBg, "#000000") }
+func (t *Theme) InputFgC() color.Color { return tc(t.InputFg, "#55FFFF") }
 
 // Extras
 func (t *Theme) DisabledFgC() color.Color { return tc(t.DisabledFg, "#888888") }

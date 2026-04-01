@@ -10,6 +10,8 @@
     "popupFg":     "#222222",
     "highlightBg": "#4A90D9",
     "highlightFg": "#FFFFFF",
+    "inputBg":     "#FFFFFF",
+    "inputFg":     "#222222",
     "disabledFg":  "#999999",
     "shadowBg":    "#AAAAAA",
     "outerTL": "┌", "outerTR": "┐", "outerBL": "└", "outerBR": "┘",
