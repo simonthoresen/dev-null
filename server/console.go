@@ -241,39 +241,67 @@ func (m *consoleModel) View() tea.View {
 	}
 
 	t := m.theme
-	mbStyle := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.DesktopFgC()).Bold(true)
-	logStyle := lipgloss.NewStyle().Background(t.DialogBgC()).Foreground(t.DialogFgC())
-	cmdStyle := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.MenuFgC())
+	boxStyle := lipgloss.NewStyle().Background(t.DialogBgC()).Foreground(t.DialogFgC())
+	titleStyle := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
+	statusStyle := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.DesktopFgC()).Bold(true)
 
-	setInputStyle(&m.input, t.MenuBgC(), t.MenuFgC())
+	setInputStyle(&m.input, t.DialogBgC(), t.DialogFgC())
 
 	// NC action bar (row 0)
 	ncBar := m.overlay.renderNCBar(m.width, m.consoleMenus(), t)
 
-	// Log area — grows from bottom up (most recent lines at the bottom,
-	// empty space at the top when there are fewer lines than the area height).
-	logH := m.logHeight()
-	var logRows []string
+	// NC panel: bordered box with title, log area, divider, and input row.
+	// Layout:  ┌─ Server Log ──┐   (title bar)
+	//          │ log line       │   (log rows, bottom-aligned)
+	//          ├────────────────┤   (inner divider)
+	//          │ > input        │   (command input)
+	//          └────────────────┘   (bottom border)
+	innerW := m.width - 2 // subtract left+right border
+	if innerW < 1 {
+		innerW = 1
+	}
+
+	// Title bar row
+	titleText := " Server Log "
+	titleRendered := titleStyle.Render(titleText)
+	titleFill := innerW - len(titleText)
+	if titleFill < 0 {
+		titleFill = 0
+	}
+	topRow := boxStyle.Render(t.OTL()) + boxStyle.Render(t.IH()) + titleRendered + boxStyle.Render(strings.Repeat(t.OH(), titleFill-1)) + boxStyle.Render(t.OTR())
+
+	// Log rows — bottom-aligned within available height.
+	// Panel overhead: title(1) + divider(1) + input(1) + bottom border(1) + status bar(1) + NC bar(1) = 6
+	logH := max(1, m.height-6)
 	n := len(m.logLines)
+	var logRows []string
 	if n >= logH {
 		logRows = m.logLines[n-logH:]
 	} else {
-		// Pad with empty lines at the top.
 		for i := 0; i < logH-n; i++ {
 			logRows = append(logRows, "")
 		}
 		logRows = append(logRows, m.logLines...)
 	}
-	var logView string
+
+	lv := boxStyle.Render(t.OV())
+	var logLines []string
 	for _, line := range logRows {
-		logView += logStyle.Width(m.width).Render(truncateStyled(line, m.width)) + "\n"
+		cell := boxStyle.Width(innerW).Render(truncateStyled(line, innerW))
+		logLines = append(logLines, lv+cell+lv)
 	}
-	logView = strings.TrimRight(logView, "\n")
 
-	// Command input bar
-	cmdBar := cmdStyle.Width(m.width).Render(truncateStyled(m.input.View(), m.width))
+	// Inner divider
+	divider := boxStyle.Render(t.XL() + strings.Repeat(t.IH(), innerW) + t.XR())
 
-	// Bottom status bar
+	// Input row
+	inputContent := boxStyle.Width(innerW).Render(truncateStyled(m.input.View(), innerW))
+	inputRow := lv + inputContent + lv
+
+	// Bottom border
+	bottomBorder := boxStyle.Render(t.OBL() + strings.Repeat(t.OH(), innerW) + t.OBR())
+
+	// Status bar
 	m.app.state.mu.RLock()
 	gameName := m.app.state.GameName
 	phase := m.app.state.GamePhase
@@ -291,9 +319,13 @@ func (m *consoleModel) View() tea.View {
 		}
 	}
 	statusText := fmt.Sprintf("game: %s | teams: %d | uptime %s | %s", gameLabel, m.app.state.TeamCount(), m.app.uptime(), time.Now().Format("15:04:05"))
-	bottomBar := mbStyle.Width(m.width).Render(truncateStyled(statusText, m.width))
+	statusBar := statusStyle.Width(m.width).Render(truncateStyled(statusText, m.width))
 
-	content := lipgloss.JoinVertical(lipgloss.Left, ncBar, logView, cmdBar, bottomBar)
+	// Assemble panel
+	parts := []string{ncBar, topRow}
+	parts = append(parts, logLines...)
+	parts = append(parts, divider, inputRow, bottomBorder, statusBar)
+	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	// Overlay layers (dropdown menus, dialogs)
 	menus := m.consoleMenus()
@@ -313,7 +345,8 @@ func (m *consoleModel) View() tea.View {
 	view.MouseMode = tea.MouseModeCellMotion
 
 	if cursor := m.input.Cursor(); cursor != nil {
-		cursor.Position.Y = m.height - 2
+		cursor.Position.Y = m.height - 3 // input row: above bottom border and status bar
+		cursor.Position.X += 1           // offset for left border
 		view.Cursor = cursor
 	}
 
@@ -321,7 +354,7 @@ func (m *consoleModel) View() tea.View {
 }
 
 func (m *consoleModel) logHeight() int {
-	return max(1, m.height-3) // NC bar + command bar + bottom bar
+	return max(1, m.height-6) // NC bar + title + divider + input + bottom border + status bar
 }
 
 func (m *consoleModel) resize() {
