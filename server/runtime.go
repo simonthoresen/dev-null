@@ -613,6 +613,32 @@ func gojaToWidgetNode(vm *goja.Runtime, val goja.Value) *common.WidgetNode {
 		node.Height = int(v.ToInteger())
 	}
 
+	// Interactive control fields
+	if v := obj.Get("action"); v != nil && !goja.IsUndefined(v) {
+		node.Action = v.String()
+	}
+	if v := obj.Get("focusable"); v != nil && !goja.IsUndefined(v) {
+		node.IsFocusable = v.ToBoolean()
+	}
+	if v := obj.Get("tabIndex"); v != nil && !goja.IsUndefined(v) {
+		node.TabIndex = int(v.ToInteger())
+	}
+	if v := obj.Get("checked"); v != nil && !goja.IsUndefined(v) {
+		node.Checked = v.ToBoolean()
+	}
+	if v := obj.Get("value"); v != nil && !goja.IsUndefined(v) {
+		node.Value = v.String()
+	}
+	if v := obj.Get("lines"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+		arr := v.ToObject(vm)
+		for _, key := range arr.Keys() {
+			line := arr.Get(key)
+			if line != nil && !goja.IsUndefined(line) {
+				node.Lines = append(node.Lines, line.String())
+			}
+		}
+	}
+
 	// Children array
 	if v := obj.Get("children"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
 		arr := v.ToObject(vm)

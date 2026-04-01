@@ -60,15 +60,23 @@ type TeamRange struct {
 // Games build a tree of these to describe their viewport layout using
 // real NC-style controls rendered by the framework.
 type WidgetNode struct {
-	Type     string        // "gameview", "panel", "label", "hsplit", "vsplit", "divider", "table"
+	Type     string        // "gameview", "panel", "label", "hsplit", "vsplit", "divider", "table", "button", "textinput", "checkbox", "textview"
 	Title    string        // panel title (for "panel")
-	Text     string        // content text (for "label")
+	Text     string        // content text (for "label", "button", "checkbox")
 	Align    string        // "left" (default), "center", "right" (for "label")
 	Weight   float64       // flex weight in split layouts (0 = use fixed size)
 	Width    int           // fixed width (for split children, 0 = use weight)
 	Height   int           // fixed height (for split children, 0 = use weight)
 	Rows     [][]string    // table rows (for "table")
 	Children []*WidgetNode // child nodes (for split/panel containers)
+
+	// Interactive control fields
+	Action   string   // action ID sent via OnInput when control is activated (for "button", "textinput", "checkbox")
+	IsFocusable bool  // participates in Tab cycling (for "gameview")
+	TabIndex int      // focus order; lower values first (0 = default)
+	Checked  bool     // current checked state (for "checkbox")
+	Value    string   // current value (for "textinput")
+	Lines    []string // content lines (for "textview")
 }
 
 // Hash returns a content hash of this node and all descendants.
@@ -80,6 +88,11 @@ func (n *WidgetNode) Hash() uint64 {
 	}
 	// gameview nodes (and unknown types that fall back to gameview) are always dirty.
 	if n.Type == "gameview" || n.Type == "" {
+		return 0
+	}
+	// Interactive nodes are uncacheable — their rendered output depends on
+	// framework state (focus highlight, cursor position) not just content.
+	if n.Action != "" || n.IsFocusable {
 		return 0
 	}
 

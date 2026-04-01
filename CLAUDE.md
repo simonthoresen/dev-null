@@ -218,7 +218,7 @@ type Message struct {
 
 Games live in `dist/games/` as either single `.js` files or folders containing `main.js` (for multi-file games using `include()`). Loaded at runtime via `/game load <name>`. A HTTPS URL can be given instead of a name — `.js` files are cached in `dist/games/.cache/`, `.zip` files are extracted to `dist/games/<name>/`. GitHub blob URLs are converted to raw automatically.
 
-**Game** — exports a global `Game` object with hooks `onPlayerJoin`, `onPlayerLeave`, `onInput`, `view`, `viewNC`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `splashScreen`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport. `viewNC` returns a declarative widget tree for NC-panel layouts; if defined, `view()` is only called for `{type: "gameview"}` nodes within the tree.
+**Game** — exports a global `Game` object with hooks `onPlayerJoin`, `onPlayerLeave`, `onInput`, `view`, `viewNC`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `splashScreen`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport. `viewNC` returns a declarative widget tree that the framework renders using real NC controls; if defined, `view()` is only called for `{type: "gameview"}` nodes within the tree. Interactive node types (`button`, `textinput`, `checkbox`) route actions back via `onInput(playerID, action)`. Tab cycles focus between interactive controls; Esc returns to raw `onInput` mode.
 
 **Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `teams()`, `registerCommand()`, `gameOver(results, state)`, `figlet(text, font?)` (ASCII art via figlet4go; built-in fonts: `"standard"`, `"larry3d"`; extra fonts loaded from `dist/fonts/*.flf` at startup), `include(name)` (evaluate another `.js` file from the same directory — for multi-file games).
 
@@ -275,7 +275,9 @@ Themes use a 4-layer depth model matching the original Norton Commander. Each la
 
 **Color fields** (per layer): `bg/fg`, `accent`, `highlightBg/Fg`, `activeBg/Fg`, `inputBg/Fg`, `disabledFg`. **Border fields** (per layer): outer frame (`outerTL/TR/BL/BR/H/V`), inner dividers (`innerH/V`), intersections (`crossL/R/T/B/X`), bar separator (`barSep`). Defaults: double-line outer (`╔═╗║╚╝`), single-line inner (`─│`), intersections (`╟╢╤╧`). Any omitted field falls back to hardcoded defaults. Different layers can use different border styles (e.g., double-line for desktop, single-line for menus).
 
-**Render signatures** all take `layer *ThemeLayer` (no separate `*Theme` param): `NCControl.Render(w, h, layer)`, `NCWindow.Render(x, y, w, h, layer)`, `renderNCBar(w, menus, layer)`, `renderDropdown(menus, row, layer)`, `renderDialog(sw, sh, layer)`, `renderWidgetTree(node, w, h, layer, viewFn, cache)`.
+**Render signatures** all take `layer *ThemeLayer` (no separate `*Theme` param): `NCControl.Render(w, h, focused, layer)`, `NCWindow.Render(x, y, w, h, layer)`, `renderNCBar(w, menus, layer)`, `renderDropdown(menus, row, layer)`, `renderDialog(sw, sh, layer)`.
+
+**Widget tree reconciler** (`server/ncreconcile.go`): `ReconcileGameWindow()` builds real `NCControl` instances from a `WidgetNode` tree, reusing controls by tree path to preserve state (focus, cursor, scroll) across frames. Supports interactive nodes: `button` (action via OnInput), `textinput` (submit via OnInput), `checkbox` (toggle via OnInput), `textview` (scrollable), `gameview` (optionally focusable). NC framework owns focus — Tab cycles controls, Esc blurs all, unfocused keys fall through to `game.OnInput()`.
 
 **JSON backwards compat**: Global border fields at the theme root are copied into any layer that has empty borders via `resolveDefaults()`. New themes should define borders per-layer.
 

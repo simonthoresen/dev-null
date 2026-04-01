@@ -134,6 +134,10 @@ type chromeModel struct {
 
 	// Cached NC widget tree renders — survives across frames per player.
 	ncCache *ncRenderCache
+
+	// Game NC window — built from WidgetNode tree via reconciler.
+	// Preserves interactive control state (focus, cursor, scroll) across frames.
+	gameWindow *GameNCWindow
 }
 
 func newChromeModel(app *Server, playerID string) chromeModel {
@@ -440,7 +444,30 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.mode == modeIdle {
-		switch msg.String() {
+		key := msg.String()
+
+		// If a game NC control has focus, route keys to it.
+		if m.gameWindow != nil && m.gameWindow.Window.FocusIdx >= 0 {
+			if key == "esc" {
+				// Esc blurs all game controls, returning to raw OnInput mode.
+				m.gameWindow.Window.FocusIdx = -1
+				return m, nil
+			}
+			cmd := m.gameWindow.Window.HandleUpdate(msg)
+			return m, cmd
+		}
+
+		// Tab/Shift-Tab cycle focus among game controls (if any).
+		if key == "tab" && m.gameWindow != nil && m.gameWindow.HasFocusable() {
+			cmd := m.gameWindow.Window.CycleFocus()
+			return m, cmd
+		}
+		if key == "shift+tab" && m.gameWindow != nil && m.gameWindow.HasFocusable() {
+			cmd := m.gameWindow.Window.CycleFocusBack()
+			return m, cmd
+		}
+
+		switch key {
 		case "enter":
 			setInputStyle(&m.input, menuBg, menuFg)
 			m.mode = modeInput
@@ -452,7 +479,6 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			game := m.app.state.ActiveGame
 			m.app.state.mu.RUnlock()
 			if game != nil {
-				key := msg.String()
 				// Bubble Tea v2 returns "space" for spacebar; normalize to " "
 				// so game scripts can use the intuitive key === " " check.
 				if key == "space" {
@@ -1027,12 +1053,14 @@ func (m chromeModel) viewPlaying(menus []common.MenuDef, game common.Game, gameN
 
 	var gameView string
 	if ncTree := game.ViewNC(m.playerID, m.width, gameH); ncTree != nil {
-		// Game provides a declarative NC widget tree — render it.
-		gameView = renderWidgetTree(ncTree, m.width, gameH, m.theme.LayerAt(0), func(w, h int) string {
-			return game.View(m.playerID, w, h)
-		}, m.ncCache)
+		// Game provides a declarative NC widget tree — build/reconcile real NC controls.
+		m.gameWindow = ReconcileGameWindow(m.gameWindow, ncTree,
+			func(w, h int) string { return game.View(m.playerID, w, h) },
+			func(action string) { game.OnInput(m.playerID, action) })
+		// y=3: ncBar(1) + menuBar(1) + gameStatusBar(1) above the game viewport.
+		gameView = m.gameWindow.Window.Render(0, 3, m.width, gameH, m.theme.LayerAt(0))
 	} else {
-		// Fallback: wrap View() output directly (default gameview behavior).
+		m.gameWindow = nil
 		gameView = fitBlock(game.View(m.playerID, m.width, gameH), m.width, gameH)
 	}
 	chatView := renderChatLines(m.chatLines, m.width, chatH, m.chatScrollOffset, chStyle, chatBg)

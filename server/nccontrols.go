@@ -14,14 +14,29 @@ import (
 
 // NCLabel is a static text control, 1 row.
 type NCLabel struct {
-	Text string
+	Text  string
+	Align string // "left" (default), "center", "right"
 }
 
-func (l *NCLabel) Update(_ tea.Msg)                                      {}
-func (l *NCLabel) Focusable() bool                                       { return false }
-func (l *NCLabel) MinSize() (int, int)                                   { return ansi.StringWidth(l.Text), 1 }
+func (l *NCLabel) Update(_ tea.Msg)    {}
+func (l *NCLabel) Focusable() bool     { return false }
+func (l *NCLabel) MinSize() (int, int) { return ansi.StringWidth(l.Text), 1 }
 func (l *NCLabel) Render(w, h int, _ bool, layer *ThemeLayer) string {
-	return layer.BaseStyle().Width(w).Render(truncateStyled(l.Text, w))
+	text := l.Text
+	vis := ansi.StringWidth(text)
+	style := layer.BaseStyle()
+	switch l.Align {
+	case "center":
+		if vis < w {
+			pad := (w - vis) / 2
+			text = strings.Repeat(" ", pad) + text + strings.Repeat(" ", w-vis-pad)
+		}
+	case "right":
+		if vis < w {
+			text = strings.Repeat(" ", w-vis) + text
+		}
+	}
+	return style.Width(w).Render(truncateStyled(text, w))
 }
 
 // ─── NCTextInput ──────────────────────────────────────────────────────────────
@@ -708,4 +723,261 @@ func renderScrollbar(total, visible, offset int, style lipgloss.Style) []string 
 		}
 	}
 	return track
+}
+
+// ─── NCGameView ──────────────────────────────────────────────────────────────
+
+// NCGameView wraps a game's View() function as an NCControl. When focused,
+// non-Tab keys are forwarded to the game via OnKey.
+type NCGameView struct {
+	ViewFn               func(w, h int) string
+	OnKey                func(key string) // bound to game.OnInput(playerID, key)
+	focusable            bool
+	WantTab, WantBackTab bool
+}
+
+func (g *NCGameView) Focusable() bool     { return g.focusable }
+func (g *NCGameView) MinSize() (int, int) { return 1, 1 }
+func (g *NCGameView) TabWant() (bool, bool) {
+	fwd, back := g.WantTab, g.WantBackTab
+	g.WantTab = false
+	g.WantBackTab = false
+	return fwd, back
+}
+
+func (g *NCGameView) Update(msg tea.Msg) {
+	g.WantTab = false
+	g.WantBackTab = false
+	if km, ok := msg.(tea.KeyPressMsg); ok {
+		switch km.String() {
+		case "tab":
+			g.WantTab = true
+		case "shift+tab":
+			g.WantBackTab = true
+		default:
+			if g.OnKey != nil {
+				key := km.String()
+				if key == "space" {
+					key = " "
+				}
+				g.OnKey(key)
+			}
+		}
+	}
+}
+
+func (g *NCGameView) Render(width, height int, _ bool, layer *ThemeLayer) string {
+	if g.ViewFn == nil {
+		blank := strings.Repeat(" ", width)
+		var rows []string
+		for range height {
+			rows = append(rows, blank)
+		}
+		return strings.Join(rows, "\n")
+	}
+	raw := g.ViewFn(width, height)
+	lines := strings.Split(raw, "\n")
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for i := range lines {
+		lines[i] = fitLine(lines[i], width)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// ─── NCTable ─────────────────────────────────────────────────────────────────
+
+// NCTable renders a table from row/column data.
+type NCTable struct {
+	Rows [][]string
+}
+
+func (t *NCTable) Update(_ tea.Msg)           {}
+func (t *NCTable) Focusable() bool            { return false }
+func (t *NCTable) MinSize() (int, int)        { return 1, len(t.Rows) }
+
+func (t *NCTable) Render(width, height int, _ bool, layer *ThemeLayer) string {
+	if len(t.Rows) == 0 {
+		blank := strings.Repeat(" ", width)
+		var lines []string
+		for range height {
+			lines = append(lines, blank)
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	// Calculate column widths.
+	cols := 0
+	for _, row := range t.Rows {
+		if len(row) > cols {
+			cols = len(row)
+		}
+	}
+	colWidths := make([]int, cols)
+	for _, row := range t.Rows {
+		for c, cell := range row {
+			w := ansi.StringWidth(cell)
+			if w > colWidths[c] {
+				colWidths[c] = w
+			}
+		}
+	}
+
+	var result []string
+	for _, row := range t.Rows {
+		var line strings.Builder
+		for c := range cols {
+			cell := ""
+			if c < len(row) {
+				cell = row[c]
+			}
+			line.WriteString(fitLine(cell, colWidths[c]))
+			if c < cols-1 {
+				line.WriteByte(' ')
+			}
+		}
+		result = append(result, fitLine(line.String(), width))
+	}
+
+	for len(result) < height {
+		result = append(result, strings.Repeat(" ", width))
+	}
+	if len(result) > height {
+		result = result[:height]
+	}
+	return strings.Join(result, "\n")
+}
+
+// ─── NCContainer ─────────────────────────────────────────────────────────────
+
+// NCContainer is a borderless layout container that arranges children
+// horizontally (hsplit) or vertically (vsplit). It replaces the duplicated
+// layout logic that was in ncrender.go.
+type NCContainer struct {
+	Horizontal bool // true = side-by-side, false = stacked
+	Children   []ContainerChild
+}
+
+// ContainerChild pairs an NCControl with its sizing info.
+type ContainerChild struct {
+	Control NCControl
+	Weight  float64 // flex weight (0 = use Fixed)
+	Fixed   int     // fixed size (0 = use Weight)
+}
+
+func (c *NCContainer) Update(_ tea.Msg)     {}
+func (c *NCContainer) Focusable() bool      { return false }
+func (c *NCContainer) MinSize() (int, int)  { return 1, 1 }
+
+func (c *NCContainer) Render(width, height int, _ bool, layer *ThemeLayer) string {
+	if len(c.Children) == 0 {
+		blank := strings.Repeat(" ", width)
+		var lines []string
+		for range height {
+			lines = append(lines, blank)
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	// Compute sizes using the same allocation logic.
+	sizes := c.allocate(width, height)
+
+	if c.Horizontal {
+		return c.renderHorizontal(sizes, width, height, layer)
+	}
+	return c.renderVertical(sizes, width, height, layer)
+}
+
+func (c *NCContainer) allocate(width, height int) []int {
+	total := height
+	if c.Horizontal {
+		total = width
+	}
+	sizes := make([]int, len(c.Children))
+	remaining := total
+	totalWeight := 0.0
+
+	for i, child := range c.Children {
+		if child.Fixed > 0 {
+			sizes[i] = min(child.Fixed, remaining)
+			remaining -= sizes[i]
+		} else {
+			w := child.Weight
+			if w <= 0 {
+				w = 1
+			}
+			totalWeight += w
+		}
+	}
+
+	if totalWeight > 0 && remaining > 0 {
+		distributed := 0
+		for i, child := range c.Children {
+			if child.Fixed > 0 {
+				continue
+			}
+			w := child.Weight
+			if w <= 0 {
+				w = 1
+			}
+			sizes[i] = int(float64(remaining) * w / totalWeight)
+			distributed += sizes[i]
+		}
+		leftover := remaining - distributed
+		for i, child := range c.Children {
+			if child.Fixed == 0 {
+				sizes[i] += leftover
+				break
+			}
+			_ = child
+		}
+	}
+	return sizes
+}
+
+func (c *NCContainer) renderHorizontal(widths []int, totalW, height int, layer *ThemeLayer) string {
+	// Render each child column.
+	childCols := make([][]string, len(c.Children))
+	for i, child := range c.Children {
+		cw := widths[i]
+		rendered := child.Control.Render(cw, height, false, layer)
+		childCols[i] = strings.Split(rendered, "\n")
+	}
+
+	// Merge columns side by side.
+	result := make([]string, height)
+	for y := range height {
+		var row strings.Builder
+		for i, cols := range childCols {
+			cw := widths[i]
+			if y < len(cols) {
+				row.WriteString(fitLine(cols[y], cw))
+			} else {
+				row.WriteString(strings.Repeat(" ", cw))
+			}
+		}
+		result[y] = row.String()
+	}
+	return strings.Join(result, "\n")
+}
+
+func (c *NCContainer) renderVertical(heights []int, width, totalH int, layer *ThemeLayer) string {
+	var lines []string
+	for i, child := range c.Children {
+		ch := heights[i]
+		rendered := child.Control.Render(width, ch, false, layer)
+		lines = append(lines, strings.Split(rendered, "\n")...)
+	}
+
+	for len(lines) < totalH {
+		lines = append(lines, strings.Repeat(" ", width))
+	}
+	if len(lines) > totalH {
+		lines = lines[:totalH]
+	}
+	return strings.Join(lines, "\n")
 }
