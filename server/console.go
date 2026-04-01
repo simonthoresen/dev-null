@@ -20,9 +20,9 @@ type consoleModel struct {
 	width  int
 	height int
 
-	inputCtrl *NCTextInput // owned by the panel; canonical input model
+	inputCtrl *NCTextInput
 	logView   *NCTextView
-	panel     *NCPanel
+	window    *NCWindow
 
 	// Tab completion state (used by tabComplete callback).
 	tabPrefix     string
@@ -52,20 +52,21 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	logView := &NCTextView{BottomAlign: true, Scrollable: true}
 	inputCtrl := &NCTextInput{Model: input}
 
-	panel := &NCPanel{
-		Controls: []NCControl{
-			logView,
-			inputCtrl,
+	window := &NCWindow{
+		Children: []GridChild{
+			{Control: logView, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, WeightY: 1, Fill: FillBoth}},
+			{Control: &NCHDivider{Connected: true}, Constraint: GridConstraint{Col: 0, Row: 1}},
+			{Control: inputCtrl, Constraint: GridConstraint{Col: 0, Row: 2, WeightX: 1, Fill: FillHorizontal}},
 		},
 	}
-	panel.FocusFirst()
+	window.FocusFirst()
 
 	m := &consoleModel{
 		app:       app,
 		cancel:    cancel,
 		inputCtrl: inputCtrl,
 		logView:   logView,
-		panel:     panel,
+		window:    window,
 		theme:     DefaultTheme(),
 		overlay:   overlayState{openMenu: -1},
 	}
@@ -154,7 +155,7 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.overlay.handleClick(msg.X, msg.Y, 0, m.width, m.height, m.consoleMenus(), "") {
 				return m, nil
 			}
-			m.panel.HandleClick(msg.X, msg.Y)
+			m.window.HandleClick(msg.X, msg.Y)
 		}
 		return m, nil
 
@@ -164,17 +165,17 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Everything else goes to the focused panel control.
-		m.panel.HandleUpdate(msg)
+		m.window.HandleUpdate(msg)
 		return m, nil
 
 	case tea.MouseWheelMsg:
 		// Route scroll events to the panel (NCTextView handles them).
-		m.panel.HandleUpdate(msg)
+		m.window.HandleUpdate(msg)
 		return m, nil
 	}
 
 	// Forward other messages to focused control (cursor blink etc.)
-	m.panel.HandleUpdate(msg)
+	m.window.HandleUpdate(msg)
 	return m, nil
 }
 
@@ -302,7 +303,7 @@ func (m *consoleModel) View() tea.View {
 
 	// NC panel with log + input (rows 1 through height-2) — primary palette
 	panelH := m.height - 2 // subtract NC bar and status bar
-	panelContent := m.panel.Render(0, 1, m.width, panelH, primary, t)
+	panelContent := m.window.Render(0, 1, m.width, panelH, primary, t)
 
 	// Status bar (bottom row)
 	m.app.state.mu.RLock()
@@ -350,7 +351,7 @@ func (m *consoleModel) View() tea.View {
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
 
-	if cx, cy, visible := m.panel.CursorPosition(); visible {
+	if cx, cy, visible := m.window.CursorPosition(); visible {
 		if cursor := m.inputCtrl.Model.Cursor(); cursor != nil {
 			cursor.Position.X = cx
 			cursor.Position.Y = cy
