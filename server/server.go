@@ -1192,6 +1192,9 @@ func probeGameTeamRange(path string) common.TeamRange {
 	baseDir := filepath.Dir(path)
 	included := map[string]bool{}
 	vm.Set("include", func(name string) {
+		if strings.Contains(name, "..") || strings.ContainsAny(name, "/\\") {
+			return // reject path traversal
+		}
 		if !strings.HasSuffix(name, ".js") {
 			name += ".js"
 		}
