@@ -246,7 +246,18 @@ Example `~/.null-space.txt`:
 
 ### Themes
 
-JSON files in `dist/themes/` that control the NC-style chrome colors (action bar, dropdown menus, dialog boxes, shadows). Switch at runtime with `/theme <name>`. Bundled themes: `norton` (default), `dark`, `light`. Theme fields: `barBg`, `barFg`, `barActiveBg`, `barActiveFg`, `boxBg`, `boxFg`, `boxTitleBg`, `boxTitleFg`, `btnActiveBg`, `btnActiveFg`, `disabledFg`, `shadowBg`. Any omitted field falls back to the norton defaults.
+JSON files in `dist/themes/` that control the NC-style chrome colors. Switch at runtime with `/theme <name>` (per-player, not global). Bundled themes: `norton` (default), `dark`, `light`.
+
+Themes use a 4-layer depth model matching the original Norton Commander:
+
+| Layer | Field prefix | NC role |
+|-------|-------------|---------|
+| 0 — Desktop | `desktopBg/Fg` | Action bar, background behind everything |
+| 1 — Menu | `menuBg/Fg` | Dropdown menus from the action bar |
+| 2 — Dialog | `dialogBg/Fg` | Modal dialog boxes |
+| 3 — Popup | `popupBg/Fg` | Nested popups inside dialogs |
+
+Plus: `highlightBg/Fg` (focused items, title bars, active buttons), `disabledFg`, `shadowBg`. Any omitted field falls back to the norton defaults. Theme authors can deliberately share colors between layers.
 
 ---
 

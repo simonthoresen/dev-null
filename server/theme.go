@@ -11,26 +11,39 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Theme defines the color palette for the NC-style chrome (action bar,
-// dropdowns, dialogs, and their shadows).
+// Theme defines the NC-style chrome palette as 4 depth layers, each with a
+// background and foreground color. Theme authors choose whether layers share
+// colors or are distinct.
+//
+//   Layer 0 — Desktop:  action bar, the "background" behind everything
+//   Layer 1 — Menu:     dropdown menus pulled from the action bar
+//   Layer 2 — Dialog:   modal dialog boxes
+//   Layer 3 — Popup:    nested popups inside dialogs (confirmations, selectors)
+//
+// Additional colors: disabled text, drop shadow, and a highlight (selection)
+// pair used for focused items, title bars, and active buttons.
 type Theme struct {
 	Name string `json:"name"`
 
-	// Action bar
-	BarBg       string `json:"barBg"`
-	BarFg       string `json:"barFg"`
-	BarActiveBg string `json:"barActiveBg"`
-	BarActiveFg string `json:"barActiveFg"`
+	// Layer 0 — Desktop / action bar
+	DesktopBg string `json:"desktopBg"`
+	DesktopFg string `json:"desktopFg"`
 
-	// Boxes (dropdowns, dialogs)
-	BoxBg      string `json:"boxBg"`
-	BoxFg      string `json:"boxFg"`
-	BoxTitleBg string `json:"boxTitleBg"`
-	BoxTitleFg string `json:"boxTitleFg"`
+	// Layer 1 — Menu (dropdown panels)
+	MenuBg string `json:"menuBg"`
+	MenuFg string `json:"menuFg"`
 
-	// Active button / highlighted item
-	BtnActiveBg string `json:"btnActiveBg"`
-	BtnActiveFg string `json:"btnActiveFg"`
+	// Layer 2 — Dialog (modal boxes)
+	DialogBg string `json:"dialogBg"`
+	DialogFg string `json:"dialogFg"`
+
+	// Layer 3 — Popup (nested over dialogs)
+	PopupBg string `json:"popupBg"`
+	PopupFg string `json:"popupFg"`
+
+	// Highlight — selected/focused items, title bars, active buttons
+	HighlightBg string `json:"highlightBg"`
+	HighlightFg string `json:"highlightFg"`
 
 	// Disabled items
 	DisabledFg string `json:"disabledFg"`
@@ -47,18 +60,29 @@ func tc(hex, fallback string) color.Color {
 	return lipgloss.Color(hex)
 }
 
-func (t *Theme) BarBgC() color.Color       { return tc(t.BarBg, "#000080") }
-func (t *Theme) BarFgC() color.Color       { return tc(t.BarFg, "#AAAAAA") }
-func (t *Theme) BarActiveBgC() color.Color { return tc(t.BarActiveBg, "#AAAAAA") }
-func (t *Theme) BarActiveFgC() color.Color { return tc(t.BarActiveFg, "#000080") }
-func (t *Theme) BoxBgC() color.Color       { return tc(t.BoxBg, "#AAAAAA") }
-func (t *Theme) BoxFgC() color.Color       { return tc(t.BoxFg, "#000000") }
-func (t *Theme) BoxTitleBgC() color.Color  { return tc(t.BoxTitleBg, "#000080") }
-func (t *Theme) BoxTitleFgC() color.Color  { return tc(t.BoxTitleFg, "#FFFFFF") }
-func (t *Theme) BtnActiveBgC() color.Color { return tc(t.BtnActiveBg, "#000080") }
-func (t *Theme) BtnActiveFgC() color.Color { return tc(t.BtnActiveFg, "#FFFFFF") }
-func (t *Theme) DisabledFgC() color.Color  { return tc(t.DisabledFg, "#888888") }
-func (t *Theme) ShadowBgC() color.Color    { return tc(t.ShadowBg, "#333333") }
+// Layer 0 — Desktop
+func (t *Theme) DesktopBgC() color.Color { return tc(t.DesktopBg, "#000080") }
+func (t *Theme) DesktopFgC() color.Color { return tc(t.DesktopFg, "#AAAAAA") }
+
+// Layer 1 — Menu
+func (t *Theme) MenuBgC() color.Color { return tc(t.MenuBg, "#AAAAAA") }
+func (t *Theme) MenuFgC() color.Color { return tc(t.MenuFg, "#000000") }
+
+// Layer 2 — Dialog
+func (t *Theme) DialogBgC() color.Color { return tc(t.DialogBg, "#AAAAAA") }
+func (t *Theme) DialogFgC() color.Color { return tc(t.DialogFg, "#000000") }
+
+// Layer 3 — Popup
+func (t *Theme) PopupBgC() color.Color { return tc(t.PopupBg, "#AAAAAA") }
+func (t *Theme) PopupFgC() color.Color { return tc(t.PopupFg, "#000000") }
+
+// Highlight
+func (t *Theme) HighlightBgC() color.Color { return tc(t.HighlightBg, "#000080") }
+func (t *Theme) HighlightFgC() color.Color { return tc(t.HighlightFg, "#FFFFFF") }
+
+// Extras
+func (t *Theme) DisabledFgC() color.Color { return tc(t.DisabledFg, "#888888") }
+func (t *Theme) ShadowBgC() color.Color   { return tc(t.ShadowBg, "#333333") }
 
 // LoadTheme reads a theme JSON file and returns the parsed Theme.
 func LoadTheme(path string) (*Theme, error) {

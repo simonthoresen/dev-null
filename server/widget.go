@@ -215,8 +215,8 @@ func prevSelectable(items []common.MenuItemDef, cur int) int {
 
 // renderNCBar renders the NC-style action bar row (full terminal width).
 func (o *overlayState) renderNCBar(width int, menus []common.MenuDef, t *Theme) string {
-	barStyle    := lipgloss.NewStyle().Background(t.BarBgC()).Foreground(t.BarFgC())
-	activeStyle := lipgloss.NewStyle().Background(t.BarActiveBgC()).Foreground(t.BarActiveFgC()).Bold(true)
+	barStyle    := lipgloss.NewStyle().Background(t.DesktopBgC()).Foreground(t.DesktopFgC())
+	activeStyle := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
 
 	var sb strings.Builder
 	for i, m := range menus {
@@ -276,14 +276,14 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 		innerW = 14
 	}
 
-	boxStyle      := lipgloss.NewStyle().Background(t.BoxBgC()).Foreground(t.BoxFgC())
-	activeStyle   := lipgloss.NewStyle().Background(t.BtnActiveBgC()).Foreground(t.BtnActiveFgC()).Bold(true)
-	disabledStyle := lipgloss.NewStyle().Background(t.BoxBgC()).Foreground(t.DisabledFgC())
+	menuStyle     := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.MenuFgC())
+	activeStyle   := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
+	disabledStyle := lipgloss.NewStyle().Background(t.MenuBgC()).Foreground(t.DisabledFgC())
 	shadowStyle   := lipgloss.NewStyle().Background(t.ShadowBgC())
 
-	top    := boxStyle.Render("┌" + strings.Repeat("─", innerW) + "┐")
-	bottom := boxStyle.Render("└" + strings.Repeat("─", innerW) + "┘")
-	sepRow := boxStyle.Render("├" + strings.Repeat("─", innerW) + "┤")
+	top    := menuStyle.Render("┌" + strings.Repeat("─", innerW) + "┐")
+	bottom := menuStyle.Render("└" + strings.Repeat("─", innerW) + "┘")
+	sepRow := menuStyle.Render("├" + strings.Repeat("─", innerW) + "┤")
 
 	var lines []string
 	lines = append(lines, top)
@@ -301,9 +301,9 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, t *T
 		case i == o.dropCursor:
 			inner = activeStyle.Width(innerW).Render(padded)
 		default:
-			inner = boxStyle.Width(innerW).Render(padded)
+			inner = menuStyle.Width(innerW).Render(padded)
 		}
-		lines = append(lines, boxStyle.Render("│")+inner+boxStyle.Render("│"))
+		lines = append(lines, menuStyle.Render("│")+inner+menuStyle.Render("│"))
 	}
 	lines = append(lines, bottom)
 
@@ -368,8 +368,8 @@ func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int
 		innerW = 22
 	}
 
-	boxStyle    := lipgloss.NewStyle().Background(t.BoxBgC()).Foreground(t.BoxFgC())
-	titleStyle  := lipgloss.NewStyle().Background(t.BoxTitleBgC()).Foreground(t.BoxTitleFgC()).Bold(true)
+	boxStyle    := lipgloss.NewStyle().Background(t.DialogBgC()).Foreground(t.DialogFgC())
+	titleStyle  := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
 	shadowStyle := lipgloss.NewStyle().Background(t.ShadowBgC())
 
 	hbar := func(l, f, r string) string {
@@ -399,7 +399,7 @@ func (o *overlayState) renderDialog(screenW, screenH int, t *Theme) (string, int
 	lines = append(lines, hbar("├", "─", "┤"))
 
 	// Button row.
-	btnActiveSt := lipgloss.NewStyle().Background(t.BtnActiveBgC()).Foreground(t.BtnActiveFgC()).Bold(true)
+	btnActiveSt := lipgloss.NewStyle().Background(t.HighlightBgC()).Foreground(t.HighlightFgC()).Bold(true)
 	var btnParts []string
 	for i, b := range btns {
 		label := "[ " + b + " ]"
