@@ -14,7 +14,7 @@ import (
 // NCControl is the base interface for all NC widgets.
 type NCControl interface {
 	// Render returns the styled content for this control at the given size.
-	Render(width, height int, pal *Palette, t *Theme) string
+	Render(width, height int, layer *ThemeLayer) string
 	// Update handles a tea.Msg. Only called when this control has focus.
 	Update(msg tea.Msg)
 	// MinSize returns the minimum (width, height) this control needs.
@@ -82,7 +82,7 @@ type NCWindow struct {
 }
 
 // Render draws the window at (x, y) with the given dimensions.
-func (w *NCWindow) Render(x, y, width, height int, pal *Palette, t *Theme) string {
+func (w *NCWindow) Render(x, y, width, height int, layer *ThemeLayer) string {
 	w.screenX = x
 	w.screenY = y
 	w.width = width
@@ -90,10 +90,10 @@ func (w *NCWindow) Render(x, y, width, height int, pal *Palette, t *Theme) strin
 	w.innerW = max(1, width-2)
 	w.innerH = max(1, height-2) // top border + bottom border
 
-	boxStyle := pal.BaseStyle()
-	titleStyle := pal.HighlightStyle()
-	lv := boxStyle.Render(t.OV())
-	rv := boxStyle.Render(t.OV())
+	boxStyle := layer.BaseStyle()
+	titleStyle := layer.HighlightStyle()
+	lv := boxStyle.Render(layer.OV())
+	rv := boxStyle.Render(layer.OV())
 
 	// Top border / title row.
 	var topRow string
@@ -101,13 +101,13 @@ func (w *NCWindow) Render(x, y, width, height int, pal *Palette, t *Theme) strin
 		titleText := " " + w.Title + " "
 		titleRendered := titleStyle.Render(titleText)
 		titleFill := max(0, w.innerW-1-ansi.StringWidth(titleText))
-		topRow = boxStyle.Render(t.OTL()+t.IH()) + titleRendered + boxStyle.Render(strings.Repeat(t.OH(), titleFill)+t.OTR())
+		topRow = boxStyle.Render(layer.OTL()+layer.IH()) + titleRendered + boxStyle.Render(strings.Repeat(layer.OH(), titleFill)+layer.OTR())
 	} else {
-		topRow = boxStyle.Render(t.OTL() + strings.Repeat(t.OH(), w.innerW) + t.OTR())
+		topRow = boxStyle.Render(layer.OTL() + strings.Repeat(layer.OH(), w.innerW) + layer.OTR())
 	}
 
 	// Compute grid layout.
-	w.computeGrid(pal, t)
+	w.computeGrid(layer)
 
 	// Render each row of the inner area.
 	innerRows := make([]string, w.innerH)
@@ -124,7 +124,7 @@ func (w *NCWindow) Render(x, y, width, height int, pal *Palette, t *Theme) strin
 		_ = i == w.FocusIdx // TODO: use for focus-dependent styling
 		// Removed: slog.Debug here caused a feedback loop when debug logging
 		// was enabled — render → slog → console event → re-render.
-		content := child.Control.Render(cw, ch, pal, t)
+		content := child.Control.Render(cw, ch, layer)
 		contentLines := strings.Split(content, "\n")
 		for j, line := range contentLines {
 			ry := cy - (y + 1) + j // relative to inner area
@@ -141,7 +141,7 @@ func (w *NCWindow) Render(x, y, width, height int, pal *Palette, t *Theme) strin
 	for _, ir := range innerRows {
 		rows = append(rows, lv+ir+rv)
 	}
-	rows = append(rows, boxStyle.Render(t.OBL()+strings.Repeat(t.OH(), w.innerW)+t.OBR()))
+	rows = append(rows, boxStyle.Render(layer.OBL()+strings.Repeat(layer.OH(), w.innerW)+layer.OBR()))
 
 	// Render connected dividers (HDivider, VDivider) with proper junctions.
 	// TODO: junction rendering for connected dividers
@@ -150,7 +150,7 @@ func (w *NCWindow) Render(x, y, width, height int, pal *Palette, t *Theme) strin
 }
 
 // computeGrid determines column widths and row heights.
-func (w *NCWindow) computeGrid(pal *Palette, t *Theme) {
+func (w *NCWindow) computeGrid(layer *ThemeLayer) {
 	// Determine grid dimensions.
 	maxCol, maxRow := 0, 0
 	for _, child := range w.Children {

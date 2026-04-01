@@ -16,8 +16,8 @@ func TestRenderNCBarSingleMenu(t *testing.T) {
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 	}
-	pal := testTheme().PaletteAt(1)
-	output := o.renderNCBar(20, menus, pal, testTheme())
+	pal := testTheme().LayerAt(1)
+	output := o.renderNCBar(20, menus, pal)
 	s := newScreen(output)
 
 	// Bar should be exactly 1 line.
@@ -43,8 +43,8 @@ func TestRenderNCBarMultipleMenus(t *testing.T) {
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
 		{Label: "&Help", Items: []common.MenuItemDef{{Label: "&About"}}},
 	}
-	pal := testTheme().PaletteAt(1)
-	output := o.renderNCBar(40, menus, pal, testTheme())
+	pal := testTheme().LayerAt(1)
+	output := o.renderNCBar(40, menus, pal)
 
 	s := newScreen(output)
 	// All menu labels should appear, separated by │.
@@ -65,8 +65,8 @@ func TestRenderNCBarFocusedMenu(t *testing.T) {
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
 	}
-	pal := testTheme().PaletteAt(1)
-	output := o.renderNCBar(30, menus, pal, testTheme())
+	pal := testTheme().LayerAt(1)
+	output := o.renderNCBar(30, menus, pal)
 	s := newScreen(output)
 
 	// Both labels should still be present.
@@ -89,8 +89,8 @@ func TestRenderDropdownBasic(t *testing.T) {
 			{Label: "&Save"},
 		}},
 	}
-	pal := testTheme().PaletteAt(1)
-	box := o.renderDropdown(menus, 0, pal, testTheme())
+	pal := testTheme().LayerAt(1)
+	box := o.renderDropdown(menus, 0, pal)
 	dd, col, row := box.content, box.col, box.row
 
 	if col != 0 {
@@ -142,8 +142,8 @@ func TestRenderDropdownWithSeparator(t *testing.T) {
 			{Label: "&Quit"},
 		}},
 	}
-	pal := testTheme().PaletteAt(1)
-	dd := o.renderDropdown(menus, 0, pal, testTheme()).content
+	pal := testTheme().LayerAt(1)
+	dd := o.renderDropdown(menus, 0, pal).content
 	s := newScreen(dd)
 
 	// 5 lines: top + New + separator + Quit + bottom.
@@ -171,8 +171,8 @@ func TestRenderDropdownWithHotkey(t *testing.T) {
 			{Label: "&Quit", Hotkey: "ctrl+q"},
 		}},
 	}
-	pal := testTheme().PaletteAt(1)
-	dd := o.renderDropdown(menus, 0, pal, testTheme()).content
+	pal := testTheme().LayerAt(1)
+	dd := o.renderDropdown(menus, 0, pal).content
 	s := newScreen(dd)
 
 	// Should show hotkey display.
@@ -189,8 +189,8 @@ func TestRenderDropdownWithToggles(t *testing.T) {
 			{Label: "&Toolbar", Toggle: true, Checked: func() bool { return false }},
 		}},
 	}
-	pal := testTheme().PaletteAt(1)
-	dd := o.renderDropdown(menus, 0, pal, testTheme()).content
+	pal := testTheme().LayerAt(1)
+	dd := o.renderDropdown(menus, 0, pal).content
 	s := newScreen(dd)
 
 	// Checked item should have checkmark.
@@ -217,8 +217,8 @@ func TestRenderDropdownSecondMenu(t *testing.T) {
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}, {Label: "&Paste"}}},
 	}
-	pal := testTheme().PaletteAt(1)
-	box := o.renderDropdown(menus, 0, pal, testTheme())
+	pal := testTheme().LayerAt(1)
+	box := o.renderDropdown(menus, 0, pal)
 	dd, col, row := box.content, box.col, box.row
 	s := newScreen(dd)
 
@@ -255,14 +255,13 @@ func TestDropdownOnBar(t *testing.T) {
 		}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
 	}
-	pal := testTheme().PaletteAt(1)
-	th := testTheme()
+	pal := testTheme().LayerAt(1)
 
 	// Render bar.
-	bar := o.renderNCBar(40, menus, pal, th)
+	bar := o.renderNCBar(40, menus, pal)
 
 	// Render dropdown.
-	ddBox := o.renderDropdown(menus, 0, pal, th)
+	ddBox := o.renderDropdown(menus, 0, pal)
 	dd, ddCol, ddRow := ddBox.content, ddBox.col, ddBox.row
 
 	// Build a background: bar + empty rows to have space for the dropdown.
@@ -315,8 +314,8 @@ func TestRenderDialogBasic(t *testing.T) {
 		Title: "Confirm",
 		Body:  "Are you sure?",
 	})
-	pal := testTheme().WarningPalette()
-	dlg := o.renderDialog(40, 20, pal, testTheme()).content
+	pal := testTheme().WarningLayer()
+	dlg := o.renderDialog(40, 20, pal).content
 	s := newScreen(dlg)
 
 	// Top border.
@@ -363,8 +362,8 @@ func TestRenderDialogMultipleButtons(t *testing.T) {
 		Body:    "Unsaved changes.",
 		Buttons: []string{"Yes", "No", "Cancel"},
 	})
-	pal := testTheme().WarningPalette()
-	dlg := o.renderDialog(60, 20, pal, testTheme()).content
+	pal := testTheme().WarningLayer()
+	dlg := o.renderDialog(60, 20, pal).content
 	s := newScreen(dlg)
 
 	// All buttons should be present.
@@ -396,8 +395,8 @@ func TestRenderDialogMultilineBody(t *testing.T) {
 		Title: "Info",
 		Body:  "Line one\nLine two\nLine three",
 	})
-	pal := testTheme().WarningPalette()
-	dlg := o.renderDialog(50, 20, pal, testTheme()).content
+	pal := testTheme().WarningLayer()
+	dlg := o.renderDialog(50, 20, pal).content
 	s := newScreen(dlg)
 
 	// Should have: top + title + sep + 3 body + sep + buttons + bottom = 9 lines.
@@ -422,8 +421,8 @@ func TestRenderDialogCentered(t *testing.T) {
 		Title: "Test",
 		Body:  "Hi",
 	})
-	pal := testTheme().WarningPalette()
-	box := o.renderDialog(80, 24, pal, testTheme())
+	pal := testTheme().WarningLayer()
+	box := o.renderDialog(80, 24, pal)
 	col, row := box.col, box.row
 
 	// Dialog should be roughly centered.
@@ -443,8 +442,8 @@ func TestDialogOnBackground(t *testing.T) {
 		Title: "OK?",
 		Body:  "Sure?",
 	})
-	pal := testTheme().WarningPalette()
-	dlgBox := o.renderDialog(40, 12, pal, testTheme())
+	pal := testTheme().WarningLayer()
+	dlgBox := o.renderDialog(40, 12, pal)
 	dlg, dlgCol, dlgRow := dlgBox.content, dlgBox.col, dlgBox.row
 
 	// Build a dot-filled background.
@@ -496,7 +495,7 @@ func TestNCWindowRenderAssertScreen(t *testing.T) {
 			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
 		},
 	}
-	output := win.Render(0, 0, 12, 4, testPalette(), testTheme())
+	output := win.Render(0, 0, 12, 4, testLayer())
 	s := newScreen(output)
 
 	// Verify structure line by line.
@@ -535,7 +534,7 @@ func TestRegionExtractionFromNCWindow(t *testing.T) {
 			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
 		},
 	}
-	output := win.Render(0, 0, 14, 4, testPalette(), testTheme())
+	output := win.Render(0, 0, 14, 4, testLayer())
 
 	// Extract just the content area (inside borders).
 	// Border is 1 char each side, so content starts at col 1, row 1.

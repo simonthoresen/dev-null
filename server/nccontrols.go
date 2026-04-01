@@ -20,8 +20,8 @@ type NCLabel struct {
 func (l *NCLabel) Update(_ tea.Msg)                              {}
 func (l *NCLabel) Focusable() bool                               { return false }
 func (l *NCLabel) MinSize() (int, int)                           { return ansi.StringWidth(l.Text), 1 }
-func (l *NCLabel) Render(w, h int, pal *Palette, t *Theme) string {
-	return pal.BaseStyle().Width(w).Render(truncateStyled(l.Text, w))
+func (l *NCLabel) Render(w, h int, layer *ThemeLayer) string {
+	return layer.BaseStyle().Width(w).Render(truncateStyled(l.Text, w))
 }
 
 // ─── NCTextInput ──────────────────────────────────────────────────────────────
@@ -160,16 +160,16 @@ func (ci *NCCommandInput) Update(msg tea.Msg) {
 	*ci.Model = updated
 }
 
-func (ti *NCTextInput) Render(width, height int, pal *Palette, t *Theme) string {
-	bg := pal.InputBgC()
-	fg := pal.InputFgC()
+func (ti *NCTextInput) Render(width, height int, layer *ThemeLayer) string {
+	bg := layer.InputBgC()
+	fg := layer.InputFgC()
 	ti.bg = bg
 	ti.fg = fg
 
 	fieldW := max(1, width-2)
 	// Removed: slog.Debug here caused a feedback loop when debug logging
 	// was enabled — render → slog → console event → re-render.
-	bracketStyle := pal.BaseStyle()
+	bracketStyle := layer.BaseStyle()
 	inputStyle := lipgloss.NewStyle().Background(bg).Foreground(fg)
 	dotStyle := lipgloss.NewStyle().Background(bg).Foreground(fg).Faint(true)
 
@@ -270,8 +270,8 @@ func (v *NCTextView) clampScroll() {
 	}
 }
 
-func (v *NCTextView) Render(width, height int, pal *Palette, t *Theme) string {
-	style := pal.BaseStyle()
+func (v *NCTextView) Render(width, height int, layer *ThemeLayer) string {
+	style := layer.BaseStyle()
 	v.height = height
 	h := max(1, height)
 	v.clampScroll()
@@ -407,13 +407,13 @@ func (a *NCTextArea) Update(msg tea.Msg) {
 	}
 }
 
-func (a *NCTextArea) Render(width, height int, pal *Palette, t *Theme) string {
+func (a *NCTextArea) Render(width, height int, layer *ThemeLayer) string {
 	a.height = height
 	fieldW := max(1, width-2) // -2 for "[" and "]"
 
-	bracketStyle := pal.BaseStyle()
-	inputStyle := pal.InputStyle()
-	dotStyle := lipgloss.NewStyle().Background(pal.InputBgC()).Foreground(pal.InputFgC()).Faint(true)
+	bracketStyle := layer.BaseStyle()
+	inputStyle := layer.InputStyle()
+	dotStyle := lipgloss.NewStyle().Background(layer.InputBgC()).Foreground(layer.InputFgC()).Faint(true)
 
 	// Ensure at least one line.
 	if len(a.Lines) == 0 {
@@ -467,11 +467,11 @@ func (b *NCButton) Update(msg tea.Msg) {
 		}
 	}
 }
-func (b *NCButton) Render(width, height int, pal *Palette, t *Theme) string {
+func (b *NCButton) Render(width, height int, layer *ThemeLayer) string {
 	// Buttons use highlight style when focused (handled by parent),
 	// but we render with palette's active style since buttons are action items.
 	label := "[ " + b.Label + " ]"
-	return pal.HighlightStyle().Render(label)
+	return layer.HighlightStyle().Render(label)
 }
 
 // ─── NCCheckbox ───────────────────────────────────────────────────────────────
@@ -493,13 +493,13 @@ func (cb *NCCheckbox) Update(msg tea.Msg) {
 		}
 	}
 }
-func (cb *NCCheckbox) Render(width, height int, pal *Palette, t *Theme) string {
+func (cb *NCCheckbox) Render(width, height int, layer *ThemeLayer) string {
 	mark := " "
 	if cb.Checked {
 		mark = "x"
 	}
 	text := "[" + mark + "] " + cb.Label
-	return pal.BaseStyle().Width(width).Render(truncateStyled(text, width))
+	return layer.BaseStyle().Width(width).Render(truncateStyled(text, width))
 }
 
 // ─── NCHDivider ───────────────────────────────────────────────────────────────
@@ -514,9 +514,9 @@ type NCHDivider struct {
 func (d *NCHDivider) Update(_ tea.Msg)     {}
 func (d *NCHDivider) Focusable() bool      { return false }
 func (d *NCHDivider) MinSize() (int, int)  { return 1, 1 }
-func (d *NCHDivider) Render(width, height int, pal *Palette, t *Theme) string {
+func (d *NCHDivider) Render(width, height int, layer *ThemeLayer) string {
 	// The actual junction chars are rendered by the window — here we just render the inner line.
-	return pal.BaseStyle().Render(strings.Repeat(t.IH(), width))
+	return layer.BaseStyle().Render(strings.Repeat(layer.IH(), width))
 }
 
 // ─── NCVDivider ───────────────────────────────────────────────────────────────
@@ -531,11 +531,11 @@ type NCVDivider struct {
 func (d *NCVDivider) Update(_ tea.Msg)     {}
 func (d *NCVDivider) Focusable() bool      { return false }
 func (d *NCVDivider) MinSize() (int, int)  { return 1, 1 }
-func (d *NCVDivider) Render(width, height int, pal *Palette, t *Theme) string {
-	style := pal.BaseStyle()
+func (d *NCVDivider) Render(width, height int, layer *ThemeLayer) string {
+	style := layer.BaseStyle()
 	var rows []string
 	for i := 0; i < height; i++ {
-		rows = append(rows, style.Render(t.IV()))
+		rows = append(rows, style.Render(layer.IV()))
 	}
 	return strings.Join(rows, "\n")
 }
@@ -558,23 +558,23 @@ func (p *NCPanel) Focusable() bool     { return false } // panels aren't directl
 func (p *NCPanel) MinSize() (int, int) { return 4, 3 }  // min border box
 func (p *NCPanel) Update(msg tea.Msg)  {}               // updates go to children directly
 
-func (p *NCPanel) Render(width, height int, pal *Palette, t *Theme) string {
+func (p *NCPanel) Render(width, height int, layer *ThemeLayer) string {
 	p.innerW = max(1, width-2)
 	p.innerH = max(1, height-2)
 
-	boxStyle := pal.BaseStyle()
-	titleStyle := pal.HighlightStyle()
-	lv := boxStyle.Render(t.OV())
-	rv := boxStyle.Render(t.OV())
+	boxStyle := layer.BaseStyle()
+	titleStyle := layer.HighlightStyle()
+	lv := boxStyle.Render(layer.OV())
+	rv := boxStyle.Render(layer.OV())
 
 	var topRow string
 	if p.Title != "" {
 		titleText := " " + p.Title + " "
 		titleRendered := titleStyle.Render(titleText)
 		titleFill := max(0, p.innerW-1-ansi.StringWidth(titleText))
-		topRow = boxStyle.Render(t.OTL()+t.IH()) + titleRendered + boxStyle.Render(strings.Repeat(t.OH(), titleFill)+t.OTR())
+		topRow = boxStyle.Render(layer.OTL()+layer.IH()) + titleRendered + boxStyle.Render(strings.Repeat(layer.OH(), titleFill)+layer.OTR())
 	} else {
-		topRow = boxStyle.Render(t.OTL() + strings.Repeat(t.OH(), p.innerW) + t.OTR())
+		topRow = boxStyle.Render(layer.OTL() + strings.Repeat(layer.OH(), p.innerW) + layer.OTR())
 	}
 
 	// Fill inner area with base style.
@@ -597,7 +597,7 @@ func (p *NCPanel) Render(width, height int, pal *Palette, t *Theme) string {
 		if ch <= 0 {
 			continue
 		}
-		content := child.Control.Render(p.innerW, ch, pal, t)
+		content := child.Control.Render(p.innerW, ch, layer)
 		for j, line := range strings.Split(content, "\n") {
 			if cy+j < p.innerH {
 				innerRows[cy+j] = line
@@ -611,7 +611,7 @@ func (p *NCPanel) Render(width, height int, pal *Palette, t *Theme) string {
 	for _, ir := range innerRows {
 		rows = append(rows, lv+ir+rv)
 	}
-	rows = append(rows, boxStyle.Render(t.OBL()+strings.Repeat(t.OH(), p.innerW)+t.OBR()))
+	rows = append(rows, boxStyle.Render(layer.OBL()+strings.Repeat(layer.OH(), p.innerW)+layer.OBR()))
 
 	return strings.Join(rows, "\n")
 }

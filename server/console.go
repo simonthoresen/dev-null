@@ -376,15 +376,15 @@ func (m *consoleModel) View() tea.View {
 	}
 
 	t := m.theme
-	primary := t.PaletteAt(0)   // desktop
-	secondary := t.PaletteAt(1) // menus, status bar
+	primary := t.LayerAt(0)   // desktop
+	secondary := t.LayerAt(1) // menus, status bar
 
 	// NC action bar (row 0) — uses secondary palette (like NC menu bar)
-	ncBar := m.overlay.renderNCBar(m.width, m.consoleMenus(), secondary, t)
+	ncBar := m.overlay.renderNCBar(m.width, m.consoleMenus(), secondary)
 
 	// NC panel with log + input (rows 1 through height-2) — primary palette
 	panelH := m.height - 2 // subtract NC bar and status bar
-	panelContent := m.window.Render(0, 1, m.width, panelH, primary, t)
+	panelContent := m.window.Render(0, 1, m.width, panelH, primary)
 
 	// Status bar (bottom row)
 	m.app.state.mu.RLock()
@@ -414,7 +414,7 @@ func (m *consoleModel) View() tea.View {
 	ss := t.ShadowStyle()
 	lines := strings.Split(content, "\n")
 	if m.overlay.openMenu >= 0 {
-		if dd := m.overlay.renderDropdown(menus, 0, secondary, t); dd.content != "" {
+		if dd := m.overlay.renderDropdown(menus, 0, secondary); dd.content != "" {
 			overLines := strings.Split(dd.content, "\n")
 			placeOverlayLines(dd.col, dd.row, overLines, lines)
 			sh := shadowFor(dd.col, dd.row, dd.width, dd.height)
@@ -422,7 +422,7 @@ func (m *consoleModel) View() tea.View {
 		}
 	}
 	if m.overlay.hasDialog() {
-		if dlg := m.overlay.renderDialog(m.width, m.height, t.PaletteAt(2), t); dlg.content != "" {
+		if dlg := m.overlay.renderDialog(m.width, m.height, t.LayerAt(2)); dlg.content != "" {
 			overLines := strings.Split(dlg.content, "\n")
 			placeOverlayLines(dlg.col, dlg.row, overLines, lines)
 			sh := shadowFor(dlg.col, dlg.row, dlg.width, dlg.height)

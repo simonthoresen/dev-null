@@ -262,16 +262,22 @@ Example `~/.null-space/client.txt`:
 
 JSON files in `dist/themes/` that control the NC-style chrome colors. Switch at runtime with `/theme <name>` (per-player, not global). Bundled themes: `norton` (default), `dark`, `light`.
 
-Themes use a 4-layer depth model matching the original Norton Commander:
+Themes use a 4-layer depth model matching the original Norton Commander. Each layer (`ThemeLayer`) carries **both** a color palette (`Palette`) **and** a border character set (`BorderSet`):
 
-| Layer | Field prefix | NC role |
-|-------|-------------|---------|
-| 0 — Desktop | `desktopBg/Fg` | Action bar, background behind everything |
-| 1 — Menu | `menuBg/Fg` | Dropdown menus from the action bar |
-| 2 — Dialog | `dialogBg/Fg` | Modal dialog boxes |
-| 3 — Popup | `popupBg/Fg` | Nested popups inside dialogs |
+| Layer | Depth | NC role |
+|-------|-------|---------|
+| Primary | 0 | Desktop: main windows, panels |
+| Secondary | 1, 3, 5… | Menus, dropdowns, status bar |
+| Tertiary | 2, 4, 6… | Dialogs, nested popups |
+| Warning | (explicit) | Error/warning dialogs |
 
-Plus: `highlightBg/Fg` (focused items, title bars, active buttons), `disabledFg`, `shadowBg`. Border characters are also themeable with outer/inner/intersection sets matching the NC model: outer frame (`outerTL/TR/BL/BR/H/V`), inner dividers (`innerH/V`), intersections where inner meets outer (`crossL/R/T/B`), and `barSep`. Defaults to double-line outer (`╔═╗║╚╝`) with single-line inner (`─│`) and proper intersection chars (`╟╢╤╧`), matching the original NC window style. A **window** is a top-level container (double outer border); **panels** are subdivisions inside a window (separated by inner single-line dividers). Any omitted field falls back to the norton defaults. Theme authors can deliberately share colors between layers.
+`Theme.LayerAt(depth)` returns the layer, cycling Secondary/Tertiary for depth > 0. `Theme.WarningLayer()` returns the Warning layer regardless of depth. `Theme.ShadowStyle()` is global (not per-layer).
+
+**Color fields** (per layer): `bg/fg`, `accent`, `highlightBg/Fg`, `activeBg/Fg`, `inputBg/Fg`, `disabledFg`. **Border fields** (per layer): outer frame (`outerTL/TR/BL/BR/H/V`), inner dividers (`innerH/V`), intersections (`crossL/R/T/B/X`), bar separator (`barSep`). Defaults: double-line outer (`╔═╗║╚╝`), single-line inner (`─│`), intersections (`╟╢╤╧`). Any omitted field falls back to hardcoded defaults. Different layers can use different border styles (e.g., double-line for desktop, single-line for menus).
+
+**Render signatures** all take `layer *ThemeLayer` (no separate `*Theme` param): `NCControl.Render(w, h, layer)`, `NCWindow.Render(x, y, w, h, layer)`, `renderNCBar(w, menus, layer)`, `renderDropdown(menus, row, layer)`, `renderDialog(sw, sh, layer)`, `renderWidgetTree(node, w, h, layer, viewFn, cache)`.
+
+**JSON backwards compat**: Global border fields at the theme root are copied into any layer that has empty borders via `resolveDefaults()`. New themes should define borders per-layer.
 
 ---
 

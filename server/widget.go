@@ -514,16 +514,16 @@ type overlayBox struct {
 // ─── Menu bar rendering ────────────────────────────────────────────────────────
 
 // renderNCBar renders the NC-style action bar row (full terminal width).
-func (o *overlayState) renderNCBar(width int, menus []common.MenuDef, p *Palette, t *Theme) string {
-	barStyle     := p.BaseStyle()
-	activeStyle  := p.HighlightStyle()
-	barAccent    := p.AccentStyle()
-	activeAccent := lipgloss.NewStyle().Background(p.HighlightBgC()).Foreground(p.AccentC()).Bold(true).Underline(true)
+func (o *overlayState) renderNCBar(width int, menus []common.MenuDef, layer *ThemeLayer) string {
+	barStyle     := layer.BaseStyle()
+	activeStyle  := layer.HighlightStyle()
+	barAccent    := layer.AccentStyle()
+	activeAccent := lipgloss.NewStyle().Background(layer.HighlightBgC()).Foreground(layer.AccentC()).Bold(true).Underline(true)
 
 	var sb strings.Builder
 	for i, m := range menus {
 		if i > 0 {
-			sb.WriteString(barStyle.Render(t.Sep()))
+			sb.WriteString(barStyle.Render(layer.Sep()))
 		}
 		focused := (o.menuFocused || o.openMenu >= 0) && i == o.menuCursor
 		if focused {
@@ -563,7 +563,7 @@ func ncBarMenuPositions(menus []common.MenuDef) []int {
 
 // renderDropdown returns (overlayString, col, row) for PlaceOverlay.
 // ncBarRow is the screen row (0-based) of the NC action bar.
-func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, p *Palette, t *Theme) overlayBox {
+func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, layer *ThemeLayer) overlayBox {
 	if o.openMenu < 0 || o.openMenu >= len(menus) {
 		return overlayBox{}
 	}
@@ -603,20 +603,20 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, p *P
 		innerW = 14
 	}
 
-	menuStyle     := p.BaseStyle()
-	activeStyle   := p.HighlightStyle()
-	disabledStyle := p.DisabledStyle()
+	menuStyle     := layer.BaseStyle()
+	activeStyle   := layer.HighlightStyle()
+	disabledStyle := layer.DisabledStyle()
 
-	top    := menuStyle.Render(t.OTL() + strings.Repeat(t.OH(), innerW) + t.OTR())
-	bottom := menuStyle.Render(t.OBL() + strings.Repeat(t.OH(), innerW) + t.OBR())
+	top    := menuStyle.Render(layer.OTL() + strings.Repeat(layer.OH(), innerW) + layer.OTR())
+	bottom := menuStyle.Render(layer.OBL() + strings.Repeat(layer.OH(), innerW) + layer.OBR())
 	// Menu separators don't connect to the outer border (unlike panel dividers).
-	sepRow := menuStyle.Render(t.OV() + strings.Repeat(t.IH(), innerW) + t.OV())
+	sepRow := menuStyle.Render(layer.OV() + strings.Repeat(layer.IH(), innerW) + layer.OV())
 
 	var lines []string
 	lines = append(lines, top)
 
-	menuAccent  := p.AccentStyle()
-	activeAccent := lipgloss.NewStyle().Background(p.HighlightBgC()).Foreground(p.AccentC()).Bold(true).Underline(true)
+	menuAccent  := layer.AccentStyle()
+	activeAccent := lipgloss.NewStyle().Background(layer.HighlightBgC()).Foreground(layer.AccentC()).Bold(true).Underline(true)
 
 	for i, it := range items {
 		if isSeparator(it) {
@@ -649,7 +649,7 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, p *P
 		default:
 			inner = menuStyle.Render(" "+check) + renderLabel(it.Label, menuStyle, menuAccent) + menuStyle.Render(pad+hk+" ")
 		}
-		lines = append(lines, menuStyle.Render(t.OV())+inner+menuStyle.Render(t.OV()))
+		lines = append(lines, menuStyle.Render(layer.OV())+inner+menuStyle.Render(layer.OV()))
 	}
 	lines = append(lines, bottom)
 
@@ -673,7 +673,7 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, p *P
 // ─── Dialog rendering ──────────────────────────────────────────────────────────
 
 // renderDialog returns an overlayBox for PlaceOverlay, centered in the screen.
-func (o *overlayState) renderDialog(screenW, screenH int, p *Palette, t *Theme) overlayBox {
+func (o *overlayState) renderDialog(screenW, screenH int, layer *ThemeLayer) overlayBox {
 	d := o.topDialog()
 	if d == nil {
 		return overlayBox{}
@@ -709,23 +709,23 @@ func (o *overlayState) renderDialog(screenW, screenH int, p *Palette, t *Theme) 
 		innerW = 22
 	}
 
-	boxStyle    := p.BaseStyle()
-	titleStyle  := p.HighlightStyle()
+	boxStyle    := layer.BaseStyle()
+	titleStyle  := layer.HighlightStyle()
 
 	hbar := func(l, f, r string) string {
 		return boxStyle.Render(l + strings.Repeat(f, innerW) + r)
 	}
-	lb := boxStyle.Render(t.OV())
-	rb := boxStyle.Render(t.OV())
+	lb := boxStyle.Render(layer.OV())
+	rb := boxStyle.Render(layer.OV())
 
 	var lines []string
-	lines = append(lines, hbar(t.OTL(), t.OH(), t.OTR()))
+	lines = append(lines, hbar(layer.OTL(), layer.OH(), layer.OTR()))
 
 	// Title: full-width blue bar.
 	titlePad := " " + d.Title + strings.Repeat(" ", max(0, innerW-1-ansi.StringWidth(d.Title)))
 	lines = append(lines, lb+titleStyle.Width(innerW).Render(titlePad)+rb)
 
-	lines = append(lines, hbar(t.XL(), t.IH(), t.XR()))
+	lines = append(lines, hbar(layer.XL(), layer.IH(), layer.XR()))
 
 	// Body rows.
 	for _, bl := range bodyLines {
@@ -736,10 +736,10 @@ func (o *overlayState) renderDialog(screenW, screenH int, p *Palette, t *Theme) 
 		}
 	}
 
-	lines = append(lines, hbar(t.XL(), t.IH(), t.XR()))
+	lines = append(lines, hbar(layer.XL(), layer.IH(), layer.XR()))
 
 	// Button row.
-	btnActiveSt := p.ActiveStyle()
+	btnActiveSt := layer.ActiveStyle()
 	var btnParts []string
 	for i, b := range btns {
 		label := "[ " + b + " ]"
@@ -770,7 +770,7 @@ func (o *overlayState) renderDialog(screenW, screenH int, p *Palette, t *Theme) 
 	btnRow := boxStyle.Render(strings.Repeat(" ", lpad)) + btnContent + boxStyle.Render(strings.Repeat(" ", rpad))
 	lines = append(lines, lb+btnRow+rb)
 
-	lines = append(lines, hbar(t.OBL(), t.OH(), t.OBR()))
+	lines = append(lines, hbar(layer.OBL(), layer.OH(), layer.OBR()))
 
 	content := strings.Join(lines, "\n")
 	totalW := innerW + 2

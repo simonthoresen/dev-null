@@ -20,8 +20,8 @@ import (
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
-func testTheme() *Theme   { return DefaultTheme() }
-func testPalette() *Palette { return testTheme().PaletteAt(0) }
+func testTheme() *Theme        { return DefaultTheme() }
+func testLayer() *ThemeLayer   { return testTheme().LayerAt(0) }
 
 func newTestTextInput() *textinput.Model {
 	m := new(textinput.Model)
@@ -59,49 +59,50 @@ func TestDefaultThemeNotNil(t *testing.T) {
 	}
 }
 
-func TestPaletteAtDepth(t *testing.T) {
+func TestLayerAtDepth(t *testing.T) {
 	th := DefaultTheme()
-	p0 := th.PaletteAt(0)
-	p1 := th.PaletteAt(1)
-	p2 := th.PaletteAt(2)
-	p3 := th.PaletteAt(3)
-	p4 := th.PaletteAt(4)
+	l0 := th.LayerAt(0)
+	l1 := th.LayerAt(1)
+	l2 := th.LayerAt(2)
+	l3 := th.LayerAt(3)
+	l4 := th.LayerAt(4)
 
-	if p0 != &th.Primary {
+	if l0 != &th.Primary {
 		t.Error("depth 0 should be Primary")
 	}
-	if p1 != &th.Secondary {
+	if l1 != &th.Secondary {
 		t.Error("depth 1 should be Secondary")
 	}
-	if p2 != &th.Tertiary {
+	if l2 != &th.Tertiary {
 		t.Error("depth 2 should be Tertiary")
 	}
-	if p3 != &th.Secondary {
+	if l3 != &th.Secondary {
 		t.Error("depth 3 should be Secondary (alternating)")
 	}
-	if p4 != &th.Tertiary {
+	if l4 != &th.Tertiary {
 		t.Error("depth 4 should be Tertiary (alternating)")
 	}
 }
 
-func TestWarningPalette(t *testing.T) {
+func TestWarningLayer(t *testing.T) {
 	th := DefaultTheme()
-	w := th.WarningPalette()
+	w := th.WarningLayer()
 	if w != &th.Warning {
-		t.Error("WarningPalette should return Warning palette")
+		t.Error("WarningLayer should return Warning layer")
 	}
 }
 
 func TestBorderDefaults(t *testing.T) {
 	th := DefaultTheme()
-	if th.OTL() != "╔" {
-		t.Errorf("expected double-line TL, got %q", th.OTL())
+	layer := th.LayerAt(0)
+	if layer.OTL() != "╔" {
+		t.Errorf("expected double-line TL, got %q", layer.OTL())
 	}
-	if th.IH() != "─" {
-		t.Errorf("expected single-line inner H, got %q", th.IH())
+	if layer.IH() != "─" {
+		t.Errorf("expected single-line inner H, got %q", layer.IH())
 	}
-	if th.XL() != "╟" {
-		t.Errorf("expected double-single intersection, got %q", th.XL())
+	if layer.XL() != "╟" {
+		t.Errorf("expected double-single intersection, got %q", layer.XL())
 	}
 }
 
@@ -110,10 +111,9 @@ func TestBorderDefaults(t *testing.T) {
 func TestNCTextInputRender(t *testing.T) {
 	model := newTestTextInput()
 	ti := &NCTextInput{Model: model}
-	pal := testPalette()
-	th := testTheme()
+	layer := testLayer()
 
-	output := ti.Render(20, 1, pal, th)
+	output := ti.Render(20, 1, layer)
 	stripped := stripANSI(output)
 
 	if !strings.HasPrefix(stripped, "[") {
@@ -131,11 +131,10 @@ func TestNCTextInputRender(t *testing.T) {
 func TestNCTextInputRenderWidth(t *testing.T) {
 	model := newTestTextInput()
 	ti := &NCTextInput{Model: model}
-	pal := testPalette()
-	th := testTheme()
+	layer := testLayer()
 
 	for _, w := range []int{10, 20, 40, 80} {
-		output := ti.Render(w, 1, pal, th)
+		output := ti.Render(w, 1, layer)
 		visW := ansi.StringWidth(output)
 		if visW > w {
 			t.Errorf("width %d: rendered width %d exceeds allocated width", w, visW)
@@ -258,10 +257,9 @@ func TestNCTextViewRender(t *testing.T) {
 		Lines:       []string{"line1", "line2", "line3"},
 		BottomAlign: true,
 	}
-	pal := testPalette()
-	th := testTheme()
+	layer := testLayer()
 
-	output := tv.Render(20, 5, pal, th)
+	output := tv.Render(20, 5, layer)
 	lines := strings.Split(output, "\n")
 
 	if len(lines) != 5 {
@@ -299,7 +297,7 @@ func TestNCTextViewScrollClamp(t *testing.T) {
 
 func TestNCButtonRender(t *testing.T) {
 	btn := &NCButton{Label: "OK"}
-	output := btn.Render(10, 1, testPalette(), testTheme())
+	output := btn.Render(10, 1, testLayer())
 	stripped := stripANSI(output)
 	if !strings.Contains(stripped, "[ OK ]") {
 		t.Errorf("expected '[ OK ]', got %q", stripped)
@@ -335,14 +333,14 @@ func TestNCCheckboxToggle(t *testing.T) {
 
 func TestNCCheckboxRender(t *testing.T) {
 	cb := &NCCheckbox{Label: "Opt", Checked: true}
-	output := cb.Render(20, 1, testPalette(), testTheme())
+	output := cb.Render(20, 1, testLayer())
 	stripped := stripANSI(output)
 	if !strings.Contains(stripped, "[x] Opt") {
 		t.Errorf("expected '[x] Opt', got %q", stripped)
 	}
 
 	cb.Checked = false
-	output = cb.Render(20, 1, testPalette(), testTheme())
+	output = cb.Render(20, 1, testLayer())
 	stripped = stripANSI(output)
 	if !strings.Contains(stripped, "[ ] Opt") {
 		t.Errorf("expected '[ ] Opt', got %q", stripped)
@@ -360,7 +358,7 @@ func TestNCWindowRenderBasic(t *testing.T) {
 		},
 	}
 
-	output := win.Render(0, 0, 30, 5, testPalette(), testTheme())
+	output := win.Render(0, 0, 30, 5, testLayer())
 	lines := strings.Split(output, "\n")
 
 	if len(lines) != 5 {
@@ -385,7 +383,7 @@ func TestNCWindowNoTitle(t *testing.T) {
 			{Control: &NCLabel{Text: "X"}, Constraint: GridConstraint{Col: 0, Row: 0}},
 		},
 	}
-	output := win.Render(0, 0, 20, 4, testPalette(), testTheme())
+	output := win.Render(0, 0, 20, 4, testLayer())
 	stripped := stripANSI(strings.Split(output, "\n")[0])
 
 	// Should be plain top border without title.
@@ -439,7 +437,7 @@ func TestNCWindowCursorPosition(t *testing.T) {
 	win.FocusFirst()
 
 	// Render to compute positions and trigger Focus().
-	win.Render(5, 10, 30, 4, testPalette(), testTheme())
+	win.Render(5, 10, 30, 4, testLayer())
 
 	cx, cy, visible := win.CursorPosition()
 	if !visible {
@@ -465,7 +463,7 @@ func TestNCWindowGridLayout(t *testing.T) {
 			{Control: tv, Constraint: GridConstraint{Col: 0, Row: 1, WeightY: 1, Fill: FillBoth}},
 		},
 	}
-	win.Render(0, 0, 20, 10, testPalette(), testTheme())
+	win.Render(0, 0, 20, 10, testLayer())
 
 	// Label gets row 0 (height 1), textview gets the rest.
 	_, _, _, labelH := win.childRect(0)
@@ -483,7 +481,7 @@ func TestNCWindowGridLayout(t *testing.T) {
 
 func TestNCHDividerRender(t *testing.T) {
 	d := &NCHDivider{Connected: true}
-	output := d.Render(10, 1, testPalette(), testTheme())
+	output := d.Render(10, 1, testLayer())
 	stripped := stripANSI(output)
 	// The divider renders inner horizontal chars repeated to fill width.
 	visW := ansi.StringWidth(output)
@@ -494,7 +492,7 @@ func TestNCHDividerRender(t *testing.T) {
 
 func TestNCVDividerRender(t *testing.T) {
 	d := &NCVDivider{}
-	output := d.Render(1, 3, testPalette(), testTheme())
+	output := d.Render(1, 3, testLayer())
 	lines := strings.Split(output, "\n")
 	if len(lines) != 3 {
 		t.Errorf("expected 3 lines, got %d", len(lines))
@@ -681,7 +679,7 @@ func TestPlaceOverlay(t *testing.T) {
 // ─── Scrollbar tests ─────────────────────────────────────────────────────────
 
 func TestRenderScrollbar(t *testing.T) {
-	pal := testPalette()
+	pal := testLayer()
 	sb := renderScrollbar(100, 10, 0, pal.BaseStyle())
 
 	if len(sb) != 10 {
@@ -701,7 +699,7 @@ func TestRenderScrollbar(t *testing.T) {
 }
 
 func TestRenderScrollbarNoScroll(t *testing.T) {
-	pal := testPalette()
+	pal := testLayer()
 	sb := renderScrollbar(5, 10, 0, pal.BaseStyle())
 
 	// Content fits — no scrollbar needed.
@@ -738,7 +736,7 @@ func TestNCWindowIntegration(t *testing.T) {
 	}
 
 	// Render should produce output.
-	output := win.Render(0, 0, 40, 10, testPalette(), testTheme())
+	output := win.Render(0, 0, 40, 10, testLayer())
 	if output == "" {
 		t.Error("expected non-empty render output")
 	}
@@ -877,11 +875,10 @@ func TestAboutDialogClickDetection(t *testing.T) {
 	})
 
 	screenW, screenH := 120, 30
-	pal := testTheme().PaletteAt(2)
-	th := testTheme()
+	layer := testTheme().LayerAt(2)
 
 	// Get the rendered dialog position.
-	dlgBox := o.renderDialog(screenW, screenH, pal, th)
+	dlgBox := o.renderDialog(screenW, screenH, layer)
 	dlgStr, renderCol, renderRow := dlgBox.content, dlgBox.col, dlgBox.row
 	if dlgStr == "" {
 		t.Fatal("renderDialog returned empty string")
@@ -937,11 +934,10 @@ func TestDialogClickMultiButton(t *testing.T) {
 	})
 
 	screenW, screenH := 80, 24
-	pal := testTheme().PaletteAt(2)
-	th := testTheme()
+	layer := testTheme().LayerAt(2)
 
 	// Render to find button positions.
-	dlgBox := o.renderDialog(screenW, screenH, pal, th)
+	dlgBox := o.renderDialog(screenW, screenH, layer)
 	dlgStr, renderCol, renderRow := dlgBox.content, dlgBox.col, dlgBox.row
 	dlgLines := strings.Split(dlgStr, "\n")
 

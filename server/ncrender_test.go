@@ -8,7 +8,7 @@ import (
 )
 
 func TestRenderGameViewNode(t *testing.T) {
-	theme := DefaultTheme()
+	theme := DefaultTheme().LayerAt(0)
 	node := &common.WidgetNode{Type: "gameview"}
 
 	called := false
@@ -30,7 +30,7 @@ func TestRenderGameViewNode(t *testing.T) {
 }
 
 func TestRenderPanelNode(t *testing.T) {
-	theme := DefaultTheme()
+	theme := DefaultTheme().LayerAt(0)
 	node := &common.WidgetNode{
 		Type:  "panel",
 		Title: "Test",
@@ -55,7 +55,7 @@ func TestRenderPanelNode(t *testing.T) {
 }
 
 func TestRenderHSplit(t *testing.T) {
-	theme := DefaultTheme()
+	theme := DefaultTheme().LayerAt(0)
 	node := &common.WidgetNode{
 		Type: "hsplit",
 		Children: []*common.WidgetNode{
@@ -76,7 +76,7 @@ func TestRenderHSplit(t *testing.T) {
 }
 
 func TestRenderVSplit(t *testing.T) {
-	theme := DefaultTheme()
+	theme := DefaultTheme().LayerAt(0)
 	node := &common.WidgetNode{
 		Type: "vsplit",
 		Children: []*common.WidgetNode{
@@ -101,7 +101,7 @@ func TestRenderVSplit(t *testing.T) {
 func TestNilViewNCFallsBack(t *testing.T) {
 	// When ViewNC returns nil, chrome should fall back to View()
 	// This is tested at the integration level, but verify the node rendering handles nil
-	theme := DefaultTheme()
+	theme := DefaultTheme().LayerAt(0)
 	result := renderWidgetTree(nil, 10, 3, theme, nil, nil)
 	lines := strings.Split(result, "\n")
 	if len(lines) != 3 {
@@ -110,7 +110,7 @@ func TestNilViewNCFallsBack(t *testing.T) {
 }
 
 func TestGameViewInsidePanel(t *testing.T) {
-	theme := DefaultTheme()
+	theme := DefaultTheme().LayerAt(0)
 	// A panel containing a gameview — the hybrid use case
 	node := &common.WidgetNode{
 		Type: "hsplit",
@@ -141,7 +141,7 @@ func TestGameViewInsidePanel(t *testing.T) {
 
 func TestNCRenderCacheHit(t *testing.T) {
 	// A pure-label tree (no gameview) should be cached after the first render.
-	theme := DefaultTheme()
+	theme := DefaultTheme().LayerAt(0)
 	cache := newNCRenderCache()
 	node := &common.WidgetNode{
 		Type: "panel",
@@ -170,7 +170,7 @@ func TestNCRenderCacheHit(t *testing.T) {
 func TestNCRenderCacheMissOnGameview(t *testing.T) {
 	// Trees containing a gameview should NOT be cached (hash == 0).
 	cache := newNCRenderCache()
-	theme := DefaultTheme()
+	theme := DefaultTheme().LayerAt(0)
 	callCount := 0
 	node := &common.WidgetNode{
 		Type: "hsplit",
@@ -198,7 +198,7 @@ func TestNCRenderCacheMissOnGameview(t *testing.T) {
 
 func TestNCRenderCacheInvalidatesOnContentChange(t *testing.T) {
 	cache := newNCRenderCache()
-	theme := DefaultTheme()
+	theme := DefaultTheme().LayerAt(0)
 	node := &common.WidgetNode{Type: "label", Text: "v1"}
 
 	r1 := renderWidgetTree(node, 10, 1, theme, nil, cache)

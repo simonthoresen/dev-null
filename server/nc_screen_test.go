@@ -211,34 +211,38 @@ func TestScreenRegionOutOfBounds(t *testing.T) {
 // singleLineTheme returns a theme that uses single-line box drawing chars.
 func singleLineTheme() *Theme {
 	th := DefaultTheme()
-	th.OuterTL = "┌"
-	th.OuterTR = "┐"
-	th.OuterBL = "└"
-	th.OuterBR = "┘"
-	th.OuterH = "─"
-	th.OuterV = "│"
-	th.InnerH = "·"
-	th.InnerV = ":"
-	th.CrossL = "├"
-	th.CrossR = "┤"
-	th.BarSep = "|"
+	for _, l := range []*ThemeLayer{&th.Primary, &th.Secondary, &th.Tertiary, &th.Warning} {
+		l.OuterTL = "┌"
+		l.OuterTR = "┐"
+		l.OuterBL = "└"
+		l.OuterBR = "┘"
+		l.OuterH = "─"
+		l.OuterV = "│"
+		l.InnerH = "·"
+		l.InnerV = ":"
+		l.CrossL = "├"
+		l.CrossR = "┤"
+		l.BarSep = "|"
+	}
 	return th
 }
 
 // asciiTheme returns a theme with plain ASCII borders.
 func asciiTheme() *Theme {
 	th := DefaultTheme()
-	th.OuterTL = "+"
-	th.OuterTR = "+"
-	th.OuterBL = "+"
-	th.OuterBR = "+"
-	th.OuterH = "-"
-	th.OuterV = "|"
-	th.InnerH = "."
-	th.InnerV = ":"
-	th.CrossL = "+"
-	th.CrossR = "+"
-	th.BarSep = "|"
+	for _, l := range []*ThemeLayer{&th.Primary, &th.Secondary, &th.Tertiary, &th.Warning} {
+		l.OuterTL = "+"
+		l.OuterTR = "+"
+		l.OuterBL = "+"
+		l.OuterBR = "+"
+		l.OuterH = "-"
+		l.OuterV = "|"
+		l.InnerH = "."
+		l.InnerV = ":"
+		l.CrossL = "+"
+		l.CrossR = "+"
+		l.BarSep = "|"
+	}
 	return th
 }
 
@@ -251,7 +255,7 @@ func TestNCWindowBordersDefaultTheme(t *testing.T) {
 		},
 	}
 	th := DefaultTheme()
-	output := win.Render(0, 0, 10, 3, th.PaletteAt(0), th)
+	output := win.Render(0, 0, 10, 3, th.LayerAt(0))
 	s := newScreen(output)
 
 	// Default theme uses double-line borders.
@@ -277,7 +281,7 @@ func TestNCWindowBordersSingleLineTheme(t *testing.T) {
 		},
 	}
 	th := singleLineTheme()
-	output := win.Render(0, 0, 10, 3, th.PaletteAt(0), th)
+	output := win.Render(0, 0, 10, 3, th.LayerAt(0))
 	s := newScreen(output)
 
 	assertRegion(t, output, 0, 0, 1, 3, `
@@ -305,7 +309,7 @@ func TestNCWindowBordersASCIITheme(t *testing.T) {
 		},
 	}
 	th := asciiTheme()
-	output := win.Render(0, 0, 10, 3, th.PaletteAt(0), th)
+	output := win.Render(0, 0, 10, 3, th.LayerAt(0))
 	s := newScreen(output)
 
 	assertRegion(t, output, 0, 0, 1, 3, `
@@ -331,7 +335,7 @@ func TestDropdownBordersSingleLineTheme(t *testing.T) {
 		}},
 	}
 	th := singleLineTheme()
-	dd := o.renderDropdown(menus, 0, th.PaletteAt(1), th).content
+	dd := o.renderDropdown(menus, 0, th.LayerAt(1)).content
 	s := newScreen(dd)
 
 	// Top/bottom use single-line.
@@ -359,7 +363,7 @@ func TestMenuBarSeparatorFromTheme(t *testing.T) {
 
 	// Default theme separator is │.
 	th := DefaultTheme()
-	output := o.renderNCBar(30, menus, th.PaletteAt(1), th)
+	output := o.renderNCBar(30, menus, th.LayerAt(1))
 	s := newScreen(output)
 	if !strings.Contains(s.lines[0], "│") {
 		t.Errorf("default bar should use │ separator, got %q", s.lines[0])
@@ -367,7 +371,7 @@ func TestMenuBarSeparatorFromTheme(t *testing.T) {
 
 	// Custom theme separator.
 	th2 := singleLineTheme() // uses "|"
-	output2 := o.renderNCBar(30, menus, th2.PaletteAt(1), th2)
+	output2 := o.renderNCBar(30, menus, th2.LayerAt(1))
 	s2 := newScreen(output2)
 	if !strings.Contains(s2.lines[0], "|") {
 		t.Errorf("custom bar should use | separator, got %q", s2.lines[0])
@@ -381,7 +385,7 @@ func TestDialogBordersASCIITheme(t *testing.T) {
 		Body:  "Oops",
 	})
 	th := asciiTheme()
-	dlg := o.renderDialog(40, 20, th.WarningPalette(), th).content
+	dlg := o.renderDialog(40, 20, th.WarningLayer()).content
 	s := newScreen(dlg)
 
 	if !strings.HasPrefix(s.lines[0], "+") || !strings.HasSuffix(s.lines[0], "+") {
@@ -429,7 +433,7 @@ func TestSameLayoutDifferentThemeBorders(t *testing.T) {
 
 	for i, th := range themes {
 		win := makeWin()
-		output := win.Render(0, 0, 12, 3, th.PaletteAt(0), th)
+		output := win.Render(0, 0, 12, 3, th.LayerAt(0))
 		s := newScreen(output)
 
 		tl := s.region(0, 0, 1, 1)
@@ -477,15 +481,15 @@ func TestPaletteDepthOnNCWindow(t *testing.T) {
 	}
 
 	// Depth 0 → Primary.
-	output0 := win.Render(0, 0, 20, 4, th.PaletteAt(0), th)
+	output0 := win.Render(0, 0, 20, 4, th.LayerAt(0))
 	assertHasANSI(t, output0, "#110000", "depth 0 (Primary)")
 
 	// Depth 1 → Secondary.
-	output1 := win.Render(0, 0, 20, 4, th.PaletteAt(1), th)
+	output1 := win.Render(0, 0, 20, 4, th.LayerAt(1))
 	assertHasANSI(t, output1, "#002200", "depth 1 (Secondary)")
 
 	// Depth 2 → Tertiary.
-	output2 := win.Render(0, 0, 20, 4, th.PaletteAt(2), th)
+	output2 := win.Render(0, 0, 20, 4, th.LayerAt(2))
 	assertHasANSI(t, output2, "#000033", "depth 2 (Tertiary)")
 }
 
@@ -502,7 +506,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
 		},
 	}
-	layer0 := win.Render(0, 0, 40, 12, th.PaletteAt(0), th)
+	layer0 := win.Render(0, 0, 40, 12, th.LayerAt(0))
 	assertHasANSI(t, layer0, "#110000", "layer 0 (Primary)")
 
 	s0 := newScreen(layer0)
@@ -515,7 +519,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}, {Label: "&Quit"}}},
 	}
-	ddBox := o.renderDropdown(menus, 0, th.PaletteAt(1), th)
+	ddBox := o.renderDropdown(menus, 0, th.LayerAt(1))
 	dd, ddCol, ddRow := ddBox.content, ddBox.col, ddBox.row
 	assertHasANSI(t, dd, "#002200", "layer 1 dropdown (Secondary)")
 
@@ -542,7 +546,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 		Body:    "Proceed?",
 		Buttons: []string{"Yes", "No"},
 	})
-	dlgBox := o2.renderDialog(40, 12, th.PaletteAt(2), th)
+	dlgBox := o2.renderDialog(40, 12, th.LayerAt(2))
 	dlg, dlgCol, dlgRow := dlgBox.content, dlgBox.col, dlgBox.row
 	assertHasANSI(t, dlg, "#000033", "layer 2 dialog (Tertiary)")
 
@@ -554,7 +558,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	// Layer 3: Nested dialog at depth 3 → Secondary again.
 	o3 := overlayState{openMenu: -1}
 	o3.pushDialog(common.DialogRequest{Title: "Nested", Body: "Inner"})
-	dlg3Box := o3.renderDialog(40, 12, th.PaletteAt(3), th)
+	dlg3Box := o3.renderDialog(40, 12, th.LayerAt(3))
 	dlg3, dlg3Col, dlg3Row := dlg3Box.content, dlg3Box.col, dlg3Box.row
 	assertHasANSI(t, dlg3, "#002200", "layer 3 nested dialog (Secondary again)")
 
@@ -574,7 +578,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	// Layer 4: Depth 4 → Tertiary again.
 	o4 := overlayState{openMenu: -1}
 	o4.pushDialog(common.DialogRequest{Title: "Deep", Body: "Very deep"})
-	dlg4 := o4.renderDialog(40, 12, th.PaletteAt(4), th).content
+	dlg4 := o4.renderDialog(40, 12, th.LayerAt(4)).content
 	assertHasANSI(t, dlg4, "#000033", "layer 4 (Tertiary again)")
 }
 
@@ -583,7 +587,7 @@ func TestPaletteDepthWarningBypassesCycle(t *testing.T) {
 	o := overlayState{openMenu: -1}
 	o.pushDialog(common.DialogRequest{Title: "Error", Body: "Something broke"})
 
-	dlg := o.renderDialog(40, 20, th.WarningPalette(), th).content
+	dlg := o.renderDialog(40, 20, th.WarningLayer()).content
 	assertHasANSI(t, dlg, "#330000", "warning dialog")
 
 	s := newScreen(dlg)
@@ -599,9 +603,218 @@ func TestNCBarPaletteMatchesDepth(t *testing.T) {
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 	}
 
-	bar1 := o.renderNCBar(30, menus, th.PaletteAt(1), th)
+	bar1 := o.renderNCBar(30, menus, th.LayerAt(1))
 	assertHasANSI(t, bar1, "#002200", "bar at depth 1 (Secondary)")
 
-	bar0 := o.renderNCBar(30, menus, th.PaletteAt(0), th)
+	bar0 := o.renderNCBar(30, menus, th.LayerAt(0))
 	assertHasANSI(t, bar0, "#110000", "bar at depth 0 (Primary)")
+}
+
+// ─── Per-layer border depth tests ────────────────────────────────────────────
+
+// layeredBorderTheme creates a theme where each layer has distinct border chars,
+// allowing depth cycling to be verified structurally from stripped text.
+func layeredBorderTheme() *Theme {
+	th := DefaultTheme()
+	// Primary (depth 0): double-line (default)
+	th.Primary.OuterTL = "╔"
+	th.Primary.OuterTR = "╗"
+	th.Primary.OuterBL = "╚"
+	th.Primary.OuterBR = "╝"
+	th.Primary.OuterH = "═"
+	th.Primary.OuterV = "║"
+	th.Primary.InnerH = "─"
+	th.Primary.CrossL = "╟"
+	th.Primary.CrossR = "╢"
+	th.Primary.BarSep = "│"
+	// Secondary (depth 1, 3, 5...): single-line
+	th.Secondary.OuterTL = "┌"
+	th.Secondary.OuterTR = "┐"
+	th.Secondary.OuterBL = "└"
+	th.Secondary.OuterBR = "┘"
+	th.Secondary.OuterH = "─"
+	th.Secondary.OuterV = "│"
+	th.Secondary.InnerH = "·"
+	th.Secondary.CrossL = "├"
+	th.Secondary.CrossR = "┤"
+	th.Secondary.BarSep = "|"
+	// Tertiary (depth 2, 4, 6...): ASCII
+	th.Tertiary.OuterTL = "+"
+	th.Tertiary.OuterTR = "+"
+	th.Tertiary.OuterBL = "+"
+	th.Tertiary.OuterBR = "+"
+	th.Tertiary.OuterH = "-"
+	th.Tertiary.OuterV = "|"
+	th.Tertiary.InnerH = "."
+	th.Tertiary.CrossL = "+"
+	th.Tertiary.CrossR = "+"
+	th.Tertiary.BarSep = ":"
+	return th
+}
+
+func TestPerLayerBordersOnNCWindow(t *testing.T) {
+	th := layeredBorderTheme()
+	label := &NCLabel{Text: "X"}
+
+	makeWin := func() *NCWindow {
+		return &NCWindow{
+			Title: "T",
+			Children: []GridChild{
+				{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+			},
+		}
+	}
+
+	// Depth 0 → Primary → double-line borders.
+	win0 := makeWin()
+	out0 := win0.Render(0, 0, 10, 3, th.LayerAt(0))
+	assertRegion(t, out0, 0, 0, 1, 3, "╔\n║\n╚")
+	assertRegion(t, out0, 9, 0, 1, 3, "╗\n║\n╝")
+
+	// Depth 1 → Secondary → single-line borders.
+	win1 := makeWin()
+	out1 := win1.Render(0, 0, 10, 3, th.LayerAt(1))
+	assertRegion(t, out1, 0, 0, 1, 3, "┌\n│\n└")
+	assertRegion(t, out1, 9, 0, 1, 3, "┐\n│\n┘")
+
+	// Depth 2 → Tertiary → ASCII borders.
+	win2 := makeWin()
+	out2 := win2.Render(0, 0, 10, 3, th.LayerAt(2))
+	assertRegion(t, out2, 0, 0, 1, 3, "+\n|\n+")
+	assertRegion(t, out2, 9, 0, 1, 3, "+\n|\n+")
+
+	// Depth 3 → Secondary again (single-line).
+	win3 := makeWin()
+	out3 := win3.Render(0, 0, 10, 3, th.LayerAt(3))
+	assertRegion(t, out3, 0, 0, 1, 3, "┌\n│\n└")
+
+	// Depth 4 → Tertiary again (ASCII).
+	win4 := makeWin()
+	out4 := win4.Render(0, 0, 10, 3, th.LayerAt(4))
+	assertRegion(t, out4, 0, 0, 1, 3, "+\n|\n+")
+}
+
+func TestPerLayerBordersOnDropdown(t *testing.T) {
+	th := layeredBorderTheme()
+	menus := []common.MenuDef{
+		{Label: "&File", Items: []common.MenuItemDef{
+			{Label: "&New"},
+			{Label: "---"},
+			{Label: "&Quit"},
+		}},
+	}
+
+	// Depth 1 → Secondary → single-line.
+	o1 := overlayState{menuFocused: true, menuCursor: 0, openMenu: 0, dropCursor: 0}
+	dd1 := o1.renderDropdown(menus, 0, th.LayerAt(1)).content
+	s1 := newScreen(dd1)
+	if !strings.HasPrefix(s1.lines[0], "┌") || !strings.HasSuffix(s1.lines[0], "┐") {
+		t.Errorf("depth 1 dropdown: expected single-line top, got %q", s1.lines[0])
+	}
+	if !strings.Contains(s1.lines[2], "·") {
+		t.Errorf("depth 1 separator: expected '·', got %q", s1.lines[2])
+	}
+
+	// Depth 2 → Tertiary → ASCII.
+	o2 := overlayState{menuFocused: true, menuCursor: 0, openMenu: 0, dropCursor: 0}
+	dd2 := o2.renderDropdown(menus, 0, th.LayerAt(2)).content
+	s2 := newScreen(dd2)
+	if !strings.HasPrefix(s2.lines[0], "+") || !strings.HasSuffix(s2.lines[0], "+") {
+		t.Errorf("depth 2 dropdown: expected ASCII top, got %q", s2.lines[0])
+	}
+	if !strings.Contains(s2.lines[2], ".") {
+		t.Errorf("depth 2 separator: expected '.', got %q", s2.lines[2])
+	}
+}
+
+func TestPerLayerBordersOnDialog(t *testing.T) {
+	th := layeredBorderTheme()
+
+	// Depth 2 → Tertiary → ASCII.
+	o2 := overlayState{openMenu: -1}
+	o2.pushDialog(common.DialogRequest{Title: "Test", Body: "Hello"})
+	dlg2 := o2.renderDialog(40, 20, th.LayerAt(2)).content
+	s2 := newScreen(dlg2)
+	if !strings.HasPrefix(s2.lines[0], "+") || !strings.HasSuffix(s2.lines[0], "+") {
+		t.Errorf("depth 2 dialog: expected ASCII top, got %q", s2.lines[0])
+	}
+	// Title separator should use Tertiary CrossL/CrossR.
+	if !strings.HasPrefix(s2.lines[2], "+") || !strings.HasSuffix(s2.lines[2], "+") {
+		t.Errorf("depth 2 dialog separator: expected +...+, got %q", s2.lines[2])
+	}
+
+	// Depth 1 → Secondary → single-line.
+	o1 := overlayState{openMenu: -1}
+	o1.pushDialog(common.DialogRequest{Title: "Test", Body: "Hello"})
+	dlg1 := o1.renderDialog(40, 20, th.LayerAt(1)).content
+	s1 := newScreen(dlg1)
+	if !strings.HasPrefix(s1.lines[0], "┌") || !strings.HasSuffix(s1.lines[0], "┐") {
+		t.Errorf("depth 1 dialog: expected single-line top, got %q", s1.lines[0])
+	}
+}
+
+func TestPerLayerBordersOnMenuBar(t *testing.T) {
+	th := layeredBorderTheme()
+	o := overlayState{openMenu: -1}
+	menus := []common.MenuDef{
+		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
+		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
+	}
+
+	// Depth 1 → Secondary → "|" separator.
+	bar1 := o.renderNCBar(30, menus, th.LayerAt(1))
+	s1 := newScreen(bar1)
+	if !strings.Contains(s1.lines[0], "|") {
+		t.Errorf("depth 1 bar: expected '|' separator, got %q", s1.lines[0])
+	}
+
+	// Depth 0 → Primary → "│" separator.
+	bar0 := o.renderNCBar(30, menus, th.LayerAt(0))
+	s0 := newScreen(bar0)
+	if !strings.Contains(s0.lines[0], "│") {
+		t.Errorf("depth 0 bar: expected '│' separator, got %q", s0.lines[0])
+	}
+
+	// Depth 2 → Tertiary → ":" separator.
+	bar2 := o.renderNCBar(30, menus, th.LayerAt(2))
+	s2 := newScreen(bar2)
+	if !strings.Contains(s2.lines[0], ":") {
+		t.Errorf("depth 2 bar: expected ':' separator, got %q", s2.lines[0])
+	}
+}
+
+func TestPerLayerBordersCompositedStack(t *testing.T) {
+	th := layeredBorderTheme()
+
+	// Render a window at depth 0 (double-line).
+	label := &NCLabel{Text: "main"}
+	win := &NCWindow{
+		Title: "Main",
+		Children: []GridChild{
+			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+		},
+	}
+	layer0 := win.Render(0, 0, 30, 10, th.LayerAt(0))
+	s0 := newScreen(layer0)
+	if !strings.HasPrefix(s0.lines[0], "╔") {
+		t.Fatalf("depth 0 window should use ╔, got %q", s0.lines[0])
+	}
+
+	// Composite a dropdown at depth 1 (single-line).
+	o := overlayState{menuFocused: true, menuCursor: 0, openMenu: 0, dropCursor: 0}
+	menus := []common.MenuDef{
+		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
+	}
+	ddBox := o.renderDropdown(menus, 0, th.LayerAt(1))
+	composited := PlaceOverlay(ddBox.col, ddBox.row, ddBox.content, layer0)
+	sc := newScreen(composited)
+
+	// Row 0 should still have the double-line window border.
+	if !strings.HasPrefix(sc.lines[0], "╔") {
+		t.Errorf("window border lost after overlay, got %q", sc.lines[0])
+	}
+	// The dropdown (starting row 1) should use single-line borders.
+	if !strings.HasPrefix(sc.lines[1], "┌") {
+		t.Errorf("dropdown at depth 1 should use ┌, got %q", sc.lines[1])
+	}
 }

@@ -14,8 +14,6 @@ import (
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 // Palette defines a complete color set for one visual layer.
-// NC used 3 palettes (primary/secondary/tertiary) that alternated by depth,
-// plus a fixed warning palette for error dialogs.
 type Palette struct {
 	Bg          string `json:"bg"`          // body background
 	Fg          string `json:"fg"`          // body foreground (normal text)
@@ -69,10 +67,60 @@ func (p *Palette) InputStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Background(p.InputBgC()).Foreground(p.InputFgC())
 }
 
+// ─── BorderSet ───────────────────────────────────────────────────────────────
+
+// BorderSet defines border/divider characters for one visual layer.
+type BorderSet struct {
+	OuterTL string `json:"outerTL,omitempty"`
+	OuterTR string `json:"outerTR,omitempty"`
+	OuterBL string `json:"outerBL,omitempty"`
+	OuterBR string `json:"outerBR,omitempty"`
+	OuterH  string `json:"outerH,omitempty"`
+	OuterV  string `json:"outerV,omitempty"`
+	InnerH  string `json:"innerH,omitempty"`
+	InnerV  string `json:"innerV,omitempty"`
+	CrossL  string `json:"crossL,omitempty"`
+	CrossR  string `json:"crossR,omitempty"`
+	CrossT  string `json:"crossT,omitempty"`
+	CrossB  string `json:"crossB,omitempty"`
+	CrossX  string `json:"crossX,omitempty"`
+	BarSep  string `json:"barSep,omitempty"`
+}
+
+// ─── ThemeLayer ──────────────────────────────────────────────────────────────
+
+// ThemeLayer combines a color palette and border characters for one depth level.
+type ThemeLayer struct {
+	Palette   // embedded — promotes BaseStyle(), HighlightStyle(), etc.
+	BorderSet // embedded — border fields
+}
+
+// Outer border accessors (default: double-line, matching NC windows).
+func (l *ThemeLayer) OTL() string { return ts(l.OuterTL, "╔") }
+func (l *ThemeLayer) OTR() string { return ts(l.OuterTR, "╗") }
+func (l *ThemeLayer) OBL() string { return ts(l.OuterBL, "╚") }
+func (l *ThemeLayer) OBR() string { return ts(l.OuterBR, "╝") }
+func (l *ThemeLayer) OH() string  { return ts(l.OuterH, "═") }
+func (l *ThemeLayer) OV() string  { return ts(l.OuterV, "║") }
+
+// Inner divider accessors (default: single-line).
+func (l *ThemeLayer) IH() string { return ts(l.InnerH, "─") }
+func (l *ThemeLayer) IV() string { return ts(l.InnerV, "│") }
+
+// Intersection accessors (inner single meets outer double).
+func (l *ThemeLayer) XL() string { return ts(l.CrossL, "╟") }
+func (l *ThemeLayer) XR() string { return ts(l.CrossR, "╢") }
+func (l *ThemeLayer) XT() string { return ts(l.CrossT, "╤") }
+func (l *ThemeLayer) XB() string { return ts(l.CrossB, "╧") }
+func (l *ThemeLayer) XX() string { return ts(l.CrossX, "┼") }
+
+// Action bar separator.
+func (l *ThemeLayer) Sep() string { return ts(l.BarSep, "│") }
+
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
-// Theme defines the complete visual theme with 4 palettes that alternate by
-// depth, plus global border characters and shadow color.
+// Theme defines the complete visual theme with 4 layers that alternate by
+// depth. Each layer carries both colors and border characters.
 //
 // Depth assignment:
 //
@@ -84,41 +132,37 @@ func (p *Palette) InputStyle() lipgloss.Style {
 type Theme struct {
 	Name string `json:"name"`
 
-	Primary   Palette `json:"primary"`
-	Secondary Palette `json:"secondary"`
-	Tertiary  Palette `json:"tertiary"`
-	Warning   Palette `json:"warning"`
+	Primary   ThemeLayer `json:"primary"`
+	Secondary ThemeLayer `json:"secondary"`
+	Tertiary  ThemeLayer `json:"tertiary"`
+	Warning   ThemeLayer `json:"warning"`
 
 	// Drop shadow (bg = shadow area, fg = half-block foreground for depth effect)
 	ShadowBg string `json:"shadowBg"`
 	ShadowFg string `json:"shadowFg"`
 
-	// Outer border (the box/window frame)
-	OuterTL string `json:"outerTL"`
-	OuterTR string `json:"outerTR"`
-	OuterBL string `json:"outerBL"`
-	OuterBR string `json:"outerBR"`
-	OuterH  string `json:"outerH"`
-	OuterV  string `json:"outerV"`
-
-	// Inner dividers (separators inside windows/panels)
-	InnerH string `json:"innerH"`
-	InnerV string `json:"innerV"`
-
-	// Intersections (where inner dividers meet the outer frame)
-	CrossL string `json:"crossL"`
-	CrossR string `json:"crossR"`
-	CrossT string `json:"crossT"`
-	CrossB string `json:"crossB"`
-	CrossX string `json:"crossX"`
-
-	// Action bar separator
-	BarSep string `json:"barSep"`
+	// Deprecated: global border fields for JSON backwards compatibility.
+	// resolveDefaults() copies these into any layer that has empty borders.
+	// New themes should define borders per-layer instead.
+	LegacyOuterTL string `json:"outerTL,omitempty"`
+	LegacyOuterTR string `json:"outerTR,omitempty"`
+	LegacyOuterBL string `json:"outerBL,omitempty"`
+	LegacyOuterBR string `json:"outerBR,omitempty"`
+	LegacyOuterH  string `json:"outerH,omitempty"`
+	LegacyOuterV  string `json:"outerV,omitempty"`
+	LegacyInnerH  string `json:"innerH,omitempty"`
+	LegacyInnerV  string `json:"innerV,omitempty"`
+	LegacyCrossL  string `json:"crossL,omitempty"`
+	LegacyCrossR  string `json:"crossR,omitempty"`
+	LegacyCrossT  string `json:"crossT,omitempty"`
+	LegacyCrossB  string `json:"crossB,omitempty"`
+	LegacyCrossX  string `json:"crossX,omitempty"`
+	LegacyBarSep  string `json:"barSep,omitempty"`
 }
 
-// PaletteAt returns the palette for the given depth level.
+// LayerAt returns the theme layer for the given depth level.
 // Depth 0 = Primary, odd = Secondary, even > 0 = Tertiary.
-func (t *Theme) PaletteAt(depth int) *Palette {
+func (t *Theme) LayerAt(depth int) *ThemeLayer {
 	switch {
 	case depth <= 0:
 		return &t.Primary
@@ -129,8 +173,8 @@ func (t *Theme) PaletteAt(depth int) *Palette {
 	}
 }
 
-// WarningPalette returns the warning palette.
-func (t *Theme) WarningPalette() *Palette { return &t.Warning }
+// WarningLayer returns the warning theme layer.
+func (t *Theme) WarningLayer() *ThemeLayer { return &t.Warning }
 
 // Global color accessors.
 func (t *Theme) ShadowBgC() color.Color { return tc(t.ShadowBg, "#000000") }
@@ -149,27 +193,32 @@ func ts(s, fallback string) string {
 	return s
 }
 
-// Outer border accessors (default: double-line, matching NC windows).
-func (t *Theme) OTL() string { return ts(t.OuterTL, "╔") }
-func (t *Theme) OTR() string { return ts(t.OuterTR, "╗") }
-func (t *Theme) OBL() string { return ts(t.OuterBL, "╚") }
-func (t *Theme) OBR() string { return ts(t.OuterBR, "╝") }
-func (t *Theme) OH() string  { return ts(t.OuterH, "═") }
-func (t *Theme) OV() string  { return ts(t.OuterV, "║") }
+// resolveDefaults copies global (legacy) border fields into any layer
+// that has empty border fields, providing JSON backwards compatibility.
+func (t *Theme) resolveDefaults() {
+	for _, layer := range []*ThemeLayer{&t.Primary, &t.Secondary, &t.Tertiary, &t.Warning} {
+		copyIfEmpty(&layer.OuterTL, t.LegacyOuterTL)
+		copyIfEmpty(&layer.OuterTR, t.LegacyOuterTR)
+		copyIfEmpty(&layer.OuterBL, t.LegacyOuterBL)
+		copyIfEmpty(&layer.OuterBR, t.LegacyOuterBR)
+		copyIfEmpty(&layer.OuterH, t.LegacyOuterH)
+		copyIfEmpty(&layer.OuterV, t.LegacyOuterV)
+		copyIfEmpty(&layer.InnerH, t.LegacyInnerH)
+		copyIfEmpty(&layer.InnerV, t.LegacyInnerV)
+		copyIfEmpty(&layer.CrossL, t.LegacyCrossL)
+		copyIfEmpty(&layer.CrossR, t.LegacyCrossR)
+		copyIfEmpty(&layer.CrossT, t.LegacyCrossT)
+		copyIfEmpty(&layer.CrossB, t.LegacyCrossB)
+		copyIfEmpty(&layer.CrossX, t.LegacyCrossX)
+		copyIfEmpty(&layer.BarSep, t.LegacyBarSep)
+	}
+}
 
-// Inner divider accessors (default: single-line).
-func (t *Theme) IH() string { return ts(t.InnerH, "─") }
-func (t *Theme) IV() string { return ts(t.InnerV, "│") }
-
-// Intersection accessors (inner single meets outer double).
-func (t *Theme) XL() string { return ts(t.CrossL, "╟") }
-func (t *Theme) XR() string { return ts(t.CrossR, "╢") }
-func (t *Theme) XT() string { return ts(t.CrossT, "╤") }
-func (t *Theme) XB() string { return ts(t.CrossB, "╧") }
-func (t *Theme) XX() string { return ts(t.CrossX, "┼") }
-
-// Action bar separator.
-func (t *Theme) Sep() string { return ts(t.BarSep, "│") }
+func copyIfEmpty(dst *string, src string) {
+	if *dst == "" && src != "" {
+		*dst = src
+	}
+}
 
 // LoadTheme reads a theme JSON file and returns the parsed Theme.
 func LoadTheme(path string) (*Theme, error) {
@@ -184,41 +233,42 @@ func LoadTheme(path string) (*Theme, error) {
 	if t.Name == "" {
 		t.Name = strings.TrimSuffix(filepath.Base(path), ".json")
 	}
+	t.resolveDefaults()
 	return &t, nil
 }
 
-// DefaultTheme returns the built-in norton theme (all fields empty = use defaults).
+// DefaultTheme returns the built-in norton theme.
 func DefaultTheme() *Theme {
 	return &Theme{
 		Name: "norton",
-		Primary: Palette{
+		Primary: ThemeLayer{Palette: Palette{
 			Bg: "#000080", Fg: "#00AAAA", Accent: "#FFFF55",
 			HighlightBg: "#00AAAA", HighlightFg: "#000000",
 			ActiveBg: "#FFFF55", ActiveFg: "#000000",
 			InputBg: "#000000", InputFg: "#55FFFF",
 			DisabledFg: "#555555",
-		},
-		Secondary: Palette{
+		}},
+		Secondary: ThemeLayer{Palette: Palette{
 			Bg: "#008080", Fg: "#000000", Accent: "#FFFF55",
 			HighlightBg: "#000000", HighlightFg: "#00AAAA",
 			ActiveBg: "#FFFF55", ActiveFg: "#000000",
 			InputBg: "#000000", InputFg: "#55FFFF",
 			DisabledFg: "#555555",
-		},
-		Tertiary: Palette{
+		}},
+		Tertiary: ThemeLayer{Palette: Palette{
 			Bg: "#AAAAAA", Fg: "#000000", Accent: "#FFFF55",
 			HighlightBg: "#000000", HighlightFg: "#FFFFFF",
 			ActiveBg: "#FFFF55", ActiveFg: "#000000",
 			InputBg: "#000000", InputFg: "#55FFFF",
 			DisabledFg: "#555555",
-		},
-		Warning: Palette{
+		}},
+		Warning: ThemeLayer{Palette: Palette{
 			Bg: "#AA0000", Fg: "#FFFFFF", Accent: "#FFFF55",
 			HighlightBg: "#FFFFFF", HighlightFg: "#AA0000",
 			ActiveBg: "#FFFF55", ActiveFg: "#000000",
 			InputBg: "#000000", InputFg: "#55FFFF",
 			DisabledFg: "#555555",
-		},
+		}},
 		ShadowBg: "#333333",
 	}
 }

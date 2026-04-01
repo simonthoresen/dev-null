@@ -795,7 +795,7 @@ func (m chromeModel) View() tea.View {
 	ss := m.theme.ShadowStyle()
 	lines := strings.Split(content, "\n")
 	if m.overlay.openMenu >= 0 {
-		if dd := m.overlay.renderDropdown(menus, 1, m.theme.PaletteAt(1), m.theme); dd.content != "" {
+		if dd := m.overlay.renderDropdown(menus, 1, m.theme.LayerAt(1)); dd.content != "" {
 			overLines := strings.Split(dd.content, "\n")
 			placeOverlayLines(dd.col, dd.row, overLines, lines)
 			sh := shadowFor(dd.col, dd.row, dd.width, dd.height)
@@ -803,7 +803,7 @@ func (m chromeModel) View() tea.View {
 		}
 	}
 	if m.overlay.hasDialog() {
-		if dlg := m.overlay.renderDialog(m.width, m.height, m.theme.PaletteAt(2), m.theme); dlg.content != "" {
+		if dlg := m.overlay.renderDialog(m.width, m.height, m.theme.LayerAt(2)); dlg.content != "" {
 			overLines := strings.Split(dlg.content, "\n")
 			placeOverlayLines(dlg.col, dlg.row, overLines, lines)
 			sh := shadowFor(dlg.col, dlg.row, dlg.width, dlg.height)
@@ -845,7 +845,7 @@ func (m chromeModel) View() tea.View {
 }
 
 func (m chromeModel) viewLobby(menus []common.MenuDef, mbStyle, chStyle, ciStyle lipgloss.Style, chatBg color.Color) string {
-	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.PaletteAt(1), m.theme)
+	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.LayerAt(1))
 	contentH := m.height - 4 // server info + NC bar + input row + status bar
 	if contentH < 1 {
 		contentH = 1
@@ -942,7 +942,7 @@ func (m chromeModel) viewLobby(menus []common.MenuDef, mbStyle, chStyle, ciStyle
 }
 
 func (m chromeModel) viewSplash(menus []common.MenuDef, game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style) string {
-	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.PaletteAt(1), m.theme)
+	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.LayerAt(1))
 	displayName := gameName
 	if gn := game.GameName(); gn != "" {
 		displayName = gn
@@ -977,7 +977,7 @@ func (m chromeModel) viewSplash(menus []common.MenuDef, game common.Game, gameNa
 }
 
 func (m chromeModel) viewGameOver(menus []common.MenuDef, game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style) string {
-	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.PaletteAt(1), m.theme)
+	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.LayerAt(1))
 	displayName := gameName
 	if gn := game.GameName(); gn != "" {
 		displayName = gn
@@ -1009,7 +1009,7 @@ func (m chromeModel) viewGameOver(menus []common.MenuDef, game common.Game, game
 }
 
 func (m chromeModel) viewPlaying(menus []common.MenuDef, game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style, chatBg color.Color) string {
-	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.PaletteAt(1), m.theme)
+	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.LayerAt(1))
 	menuBar := mbStyle.Width(m.width).Render(truncateStyled(gameName, m.width))
 	gameStatusBar := mbStyle.Bold(false).Width(m.width).Render(game.StatusBar(m.playerID))
 
@@ -1028,7 +1028,7 @@ func (m chromeModel) viewPlaying(menus []common.MenuDef, game common.Game, gameN
 	var gameView string
 	if ncTree := game.ViewNC(m.playerID, m.width, gameH); ncTree != nil {
 		// Game provides a declarative NC widget tree — render it.
-		gameView = renderWidgetTree(ncTree, m.width, gameH, m.theme, func(w, h int) string {
+		gameView = renderWidgetTree(ncTree, m.width, gameH, m.theme.LayerAt(0), func(w, h int) string {
 			return game.View(m.playerID, w, h)
 		}, m.ncCache)
 	} else {
