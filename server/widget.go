@@ -1,0 +1,480 @@
+package server
+
+import (
+	"strings"
+
+	"charm.land/lipgloss/v2"
+
+	"null-space/common"
+)
+
+// ─── NC chrome colors ──────────────────────────────────────────────────────────
+
+var (
+	ncBarBg       = lipgloss.Color("#000080")
+	ncBarFg       = lipgloss.Color("#AAAAAA")
+	ncBarActiveBg = lipgloss.Color("#AAAAAA")
+	ncBarActiveFg = lipgloss.Color("#000080")
+
+	ncBoxBg      = lipgloss.Color("#AAAAAA")
+	ncBoxFg      = lipgloss.Color("#000000")
+	ncBoxTitleBg = lipgloss.Color("#000080")
+	ncBoxTitleFg = lipgloss.Color("#FFFFFF")
+
+	ncBtnActiveBg = lipgloss.Color("#000080")
+	ncBtnActiveFg = lipgloss.Color("#FFFFFF")
+
+	ncShadowBg = lipgloss.Color("#333333")
+)
+
+// ─── Overlay state ─────────────────────────────────────────────────────────────
+
+// overlayState holds all per-player NC overlay UI state.
+type overlayState struct {
+	menuFocused bool // F10 was pressed; action bar is focused
+	menuCursor  int  // which menu title is highlighted
+	openMenu    int  // index of open dropdown (-1 = none)
+	dropCursor  int  // focused item index in open dropdown
+
+	dialogs     []common.DialogRequest
+	dialogFocus int // focused button in top dialog
+}
+
+// showDialogMsg is sent to a player's Bubble Tea program to push a dialog.
+type showDialogMsg struct{ dialog common.DialogRequest }
+
+func (o *overlayState) hasDialog() bool { return len(o.dialogs) > 0 }
+
+func (o *overlayState) topDialog() *common.DialogRequest {
+	if len(o.dialogs) == 0 {
+		return nil
+	}
+	return &o.dialogs[len(o.dialogs)-1]
+}
+
+func (o *overlayState) pushDialog(d common.DialogRequest) {
+	o.dialogs = append(o.dialogs, d)
+	o.dialogFocus = 0
+}
+
+func (o *overlayState) popDialog() {
+	if len(o.dialogs) > 0 {
+		o.dialogs = o.dialogs[:len(o.dialogs)-1]
+		o.dialogFocus = 0
+	}
+}
+
+// isActive returns true when any overlay is intercepting input.
+func (o *overlayState) isActive() bool {
+	return o.hasDialog() || o.menuFocused || o.openMenu >= 0
+}
+
+// ─── Key handling ──────────────────────────────────────────────────────────────
+
+// handleKey routes a key press through the overlay state machine.
+// Returns true if the key was consumed and normal chrome should not process it.
+func (o *overlayState) handleKey(key string, menus []common.MenuDef, playerID string) bool {
+	if o.hasDialog() {
+		return o.handleDialogKey(key)
+	}
+	if key == "f10" {
+		if o.menuFocused || o.openMenu >= 0 {
+			o.menuFocused = false
+			o.openMenu = -1
+		} else {
+			o.menuFocused = true
+			o.menuCursor = 0
+			o.openMenu = -1
+		}
+		return true
+	}
+	if o.openMenu >= 0 {
+		return o.handleDropdownKey(key, menus, playerID)
+	}
+	if o.menuFocused {
+		return o.handleMenuBarKey(key, menus)
+	}
+	return false
+}
+
+func (o *overlayState) handleMenuBarKey(key string, menus []common.MenuDef) bool {
+	n := len(menus)
+	if n == 0 {
+		return true
+	}
+	switch key {
+	case "left":
+		if o.menuCursor > 0 {
+			o.menuCursor--
+		} else {
+			o.menuCursor = n - 1
+		}
+	case "right":
+		o.menuCursor = (o.menuCursor + 1) % n
+	case "down", "enter":
+		o.openMenu = o.menuCursor
+		o.dropCursor = firstSelectable(menus[o.menuCursor].Items)
+	case "esc":
+		o.menuFocused = false
+	}
+	return true // consume all keys while menu bar is focused
+}
+
+func (o *overlayState) handleDropdownKey(key string, menus []common.MenuDef, playerID string) bool {
+	if o.openMenu >= len(menus) {
+		return false
+	}
+	items := menus[o.openMenu].Items
+	n := len(menus)
+	switch key {
+	case "up":
+		o.dropCursor = prevSelectable(items, o.dropCursor)
+	case "down":
+		o.dropCursor = nextSelectable(items, o.dropCursor)
+	case "left":
+		if o.menuCursor > 0 {
+			o.menuCursor--
+		} else {
+			o.menuCursor = n - 1
+		}
+		o.openMenu = o.menuCursor
+		o.dropCursor = firstSelectable(menus[o.menuCursor].Items)
+	case "right":
+		o.menuCursor = (o.menuCursor + 1) % n
+		o.openMenu = o.menuCursor
+		o.dropCursor = firstSelectable(menus[o.menuCursor].Items)
+	case "enter":
+		if o.dropCursor >= 0 && o.dropCursor < len(items) {
+			item := items[o.dropCursor]
+			if !item.Disabled && item.Handler != nil {
+				o.openMenu = -1
+				o.menuFocused = false
+				item.Handler(playerID)
+			}
+		}
+	case "esc":
+		o.openMenu = -1
+		// leave menuFocused = true so user is back on the bar
+	}
+	return true
+}
+
+func (o *overlayState) handleDialogKey(key string) bool {
+	d := o.topDialog()
+	if d == nil {
+		return false
+	}
+	btns := d.Buttons
+	if len(btns) == 0 {
+		btns = []string{"OK"}
+	}
+	switch key {
+	case "tab":
+		o.dialogFocus = (o.dialogFocus + 1) % len(btns)
+	case "left":
+		if o.dialogFocus > 0 {
+			o.dialogFocus--
+		}
+	case "right":
+		if o.dialogFocus < len(btns)-1 {
+			o.dialogFocus++
+		}
+	case "enter", " ":
+		label := btns[o.dialogFocus]
+		cb := d.OnClose
+		o.popDialog()
+		if cb != nil {
+			cb(label)
+		}
+	case "esc":
+		cb := d.OnClose
+		o.popDialog()
+		if cb != nil {
+			cb("")
+		}
+	}
+	return true
+}
+
+// ─── Selectable-item helpers ───────────────────────────────────────────────────
+
+func isSeparator(item common.MenuItemDef) bool {
+	return strings.TrimLeft(item.Label, "-") == ""
+}
+
+func firstSelectable(items []common.MenuItemDef) int {
+	for i, it := range items {
+		if !isSeparator(it) && !it.Disabled {
+			return i
+		}
+	}
+	return 0
+}
+
+func nextSelectable(items []common.MenuItemDef, cur int) int {
+	for i := cur + 1; i < len(items); i++ {
+		if !isSeparator(items[i]) && !items[i].Disabled {
+			return i
+		}
+	}
+	return cur
+}
+
+func prevSelectable(items []common.MenuItemDef, cur int) int {
+	for i := cur - 1; i >= 0; i-- {
+		if !isSeparator(items[i]) && !items[i].Disabled {
+			return i
+		}
+	}
+	return cur
+}
+
+// ─── Menu bar rendering ────────────────────────────────────────────────────────
+
+// renderNCBar renders the NC-style action bar row (full terminal width).
+func (o *overlayState) renderNCBar(width int, menus []common.MenuDef) string {
+	barStyle    := lipgloss.NewStyle().Background(ncBarBg).Foreground(ncBarFg)
+	activeStyle := lipgloss.NewStyle().Background(ncBarActiveBg).Foreground(ncBarActiveFg).Bold(true)
+
+	var sb strings.Builder
+	for i, m := range menus {
+		if i > 0 {
+			sb.WriteString(barStyle.Render("│"))
+		}
+		label := " " + m.Label + " "
+		if (o.menuFocused || o.openMenu >= 0) && i == o.menuCursor {
+			sb.WriteString(activeStyle.Render(label))
+		} else {
+			sb.WriteString(barStyle.Render(label))
+		}
+	}
+	content := sb.String()
+	cw := lipgloss.Width(content)
+	if cw < width {
+		content += barStyle.Width(width - cw).Render("")
+	}
+	return truncateStyled(content, width)
+}
+
+// ncBarMenuPositions returns the starting x column of each menu title in the bar.
+func ncBarMenuPositions(menus []common.MenuDef) []int {
+	pos := make([]int, len(menus))
+	x := 0
+	for i, m := range menus {
+		pos[i] = x
+		x += 1 + len(m.Label) + 1 // " label " = 2 + len, then "│" separator = 1
+		if i < len(menus)-1 {
+			x++ // "│" separator
+		}
+	}
+	return pos
+}
+
+// ─── Dropdown rendering ────────────────────────────────────────────────────────
+
+// renderDropdown returns (overlayString, col, row) for PlaceOverlay.
+// ncBarRow is the screen row (0-based) of the NC action bar.
+func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int) (string, int, int) {
+	if o.openMenu < 0 || o.openMenu >= len(menus) {
+		return "", 0, 0
+	}
+	items := menus[o.openMenu].Items
+	if len(items) == 0 {
+		return "", 0, 0
+	}
+
+	maxLW := 0
+	for _, it := range items {
+		if !isSeparator(it) && len(it.Label) > maxLW {
+			maxLW = len(it.Label)
+		}
+	}
+	innerW := maxLW + 2 // 1-space padding each side
+	if innerW < 14 {
+		innerW = 14
+	}
+
+	boxStyle      := lipgloss.NewStyle().Background(ncBoxBg).Foreground(ncBoxFg)
+	activeStyle   := lipgloss.NewStyle().Background(ncBtnActiveBg).Foreground(ncBtnActiveFg).Bold(true)
+	disabledStyle := lipgloss.NewStyle().Background(ncBoxBg).Foreground(lipgloss.Color("#888888"))
+	shadowStyle   := lipgloss.NewStyle().Background(ncShadowBg)
+
+	top    := boxStyle.Render("┌" + strings.Repeat("─", innerW) + "┐")
+	bottom := boxStyle.Render("└" + strings.Repeat("─", innerW) + "┘")
+	sepRow := boxStyle.Render("├" + strings.Repeat("─", innerW) + "┤")
+
+	var lines []string
+	lines = append(lines, top)
+
+	for i, it := range items {
+		if isSeparator(it) {
+			lines = append(lines, sepRow)
+			continue
+		}
+		padded := " " + it.Label + strings.Repeat(" ", innerW-2-len(it.Label)) + " "
+		var inner string
+		switch {
+		case it.Disabled:
+			inner = disabledStyle.Width(innerW).Render(padded)
+		case i == o.dropCursor:
+			inner = activeStyle.Width(innerW).Render(padded)
+		default:
+			inner = boxStyle.Width(innerW).Render(padded)
+		}
+		lines = append(lines, boxStyle.Render("│")+inner+boxStyle.Render("│"))
+	}
+	lines = append(lines, bottom)
+
+	// Drop shadow: right strip on lines 1+, bottom row below box.
+	shadow1 := shadowStyle.Render(" ")
+	boxW := innerW + 2
+	var withShadow []string
+	for i, l := range lines {
+		if i == 0 {
+			withShadow = append(withShadow, l+" ") // no shadow on top-right corner
+		} else {
+			withShadow = append(withShadow, l+shadow1)
+		}
+	}
+	withShadow = append(withShadow, " "+shadowStyle.Width(boxW).Render(""))
+
+	pos := ncBarMenuPositions(menus)
+	anchorCol := 0
+	if o.openMenu < len(pos) {
+		anchorCol = pos[o.openMenu]
+	}
+
+	return strings.Join(withShadow, "\n"), anchorCol, ncBarRow + 1
+}
+
+// ─── Dialog rendering ──────────────────────────────────────────────────────────
+
+// renderDialog returns (overlayString, col, row) for PlaceOverlay, centered in
+// the screen.
+func (o *overlayState) renderDialog(screenW, screenH int) (string, int, int) {
+	d := o.topDialog()
+	if d == nil {
+		return "", 0, 0
+	}
+	btns := d.Buttons
+	if len(btns) == 0 {
+		btns = []string{"OK"}
+	}
+
+	bodyLines := strings.Split(d.Body, "\n")
+	maxBodyW := 0
+	for _, l := range bodyLines {
+		if len(l) > maxBodyW {
+			maxBodyW = len(l)
+		}
+	}
+
+	btnW := 0
+	for _, b := range btns {
+		btnW += len(b) + 4 // "[ b ]"
+	}
+	btnW += (len(btns) - 1) * 2 // gaps between buttons
+
+	innerW := maxBodyW + 2
+	if len(d.Title)+2 > innerW {
+		innerW = len(d.Title) + 2
+	}
+	if btnW+2 > innerW {
+		innerW = btnW + 2
+	}
+	if innerW < 22 {
+		innerW = 22
+	}
+
+	boxStyle    := lipgloss.NewStyle().Background(ncBoxBg).Foreground(ncBoxFg)
+	titleStyle  := lipgloss.NewStyle().Background(ncBoxTitleBg).Foreground(ncBoxTitleFg).Bold(true)
+	shadowStyle := lipgloss.NewStyle().Background(ncShadowBg)
+
+	hbar := func(l, f, r string) string {
+		return boxStyle.Render(l + strings.Repeat(f, innerW) + r)
+	}
+	lb := boxStyle.Render("│")
+	rb := boxStyle.Render("│")
+
+	var lines []string
+	lines = append(lines, hbar("┌", "─", "┐"))
+
+	// Title: full-width blue bar.
+	titlePad := " " + d.Title + strings.Repeat(" ", innerW-1-len(d.Title))
+	lines = append(lines, lb+titleStyle.Width(innerW).Render(titlePad)+rb)
+
+	lines = append(lines, hbar("├", "─", "┤"))
+
+	// Body rows.
+	for _, bl := range bodyLines {
+		if bl == "" {
+			lines = append(lines, lb+boxStyle.Width(innerW).Render("")+rb)
+		} else {
+			lines = append(lines, lb+boxStyle.Width(innerW).Render(" "+bl)+rb)
+		}
+	}
+
+	lines = append(lines, hbar("├", "─", "┤"))
+
+	// Button row.
+	btnActiveSt := lipgloss.NewStyle().Background(ncBtnActiveBg).Foreground(ncBtnActiveFg).Bold(true)
+	var btnParts []string
+	for i, b := range btns {
+		label := "[ " + b + " ]"
+		if i == o.dialogFocus {
+			btnParts = append(btnParts, btnActiveSt.Render(label))
+		} else {
+			btnParts = append(btnParts, boxStyle.Render(label))
+		}
+	}
+	// Join buttons with styled gap.
+	var btnSB strings.Builder
+	for i, p := range btnParts {
+		if i > 0 {
+			btnSB.WriteString(boxStyle.Render("  "))
+		}
+		btnSB.WriteString(p)
+	}
+	btnContent := btnSB.String()
+	bw := lipgloss.Width(btnContent)
+	lpad := (innerW - bw) / 2
+	if lpad < 0 {
+		lpad = 0
+	}
+	rpad := innerW - bw - lpad
+	if rpad < 0 {
+		rpad = 0
+	}
+	btnRow := boxStyle.Render(strings.Repeat(" ", lpad)) + btnContent + boxStyle.Render(strings.Repeat(" ", rpad))
+	lines = append(lines, lb+btnRow+rb)
+
+	lines = append(lines, hbar("└", "─", "┘"))
+
+	// Drop shadow.
+	shadow1 := shadowStyle.Render(" ")
+	boxW := innerW + 2
+	var withShadow []string
+	for i, l := range lines {
+		if i == 0 {
+			withShadow = append(withShadow, l+" ")
+		} else {
+			withShadow = append(withShadow, l+shadow1)
+		}
+	}
+	withShadow = append(withShadow, " "+shadowStyle.Width(boxW).Render(""))
+
+	content := strings.Join(withShadow, "\n")
+	totalW := boxW + 1
+	totalH := len(withShadow)
+
+	col := (screenW - totalW) / 2
+	if col < 0 {
+		col = 0
+	}
+	row := (screenH - totalH) / 2
+	if row < 2 {
+		row = 2
+	}
+
+	return content, col, row
+}

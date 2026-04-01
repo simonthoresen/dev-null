@@ -273,6 +273,8 @@ These are available in both games and plugins.
 | `figlet(text)` | Renders `text` as ASCII art using the built-in `"standard"` font. Returns a multi-line string. |
 | `figlet(text, font)` | Same, using the named font. Built-in fonts: `"standard"`, `"larry3d"`. Falls back to `"standard"` for unknown fonts. |
 | `registerCommand(spec)` | Registers a slash command. See below. |
+| `addMenu(label, items)` | Adds a top-level menu to the NC action bar. Call at the top level of your script. `label` is the menu title. `items` is an array of menu item objects; see below. |
+| `messageBox(playerID, opts)` | Shows a modal dialog to a specific player. `opts` is `{ title, message, buttons, onClose }`. See below. |
 | `gameOver()` | Signals that the game has ended. Transitions to the game-over screen. |
 | `gameOver(results)` | Same as above, with ranked results displayed on the game-over screen. `results` is an array of `{ name, result }` in ranked order. `name` is the display name (player or team). `result` is a freeform string (e.g. `"4200 pts"`, `"1st"`, `"DNF"`). |
 | `gameOver(results, state)` | Same as above, plus persists `state` to `dist/state/<gamename>.json` for the next run. Received via `config.savedState` in `init()`. |
@@ -293,6 +295,66 @@ The handler signature:
 - `args` — array of string arguments after the command name
 
 Use `chatPlayer(playerID, text)` to reply privately to the caller.
+
+---
+
+### `addMenu(label, items)`
+
+Registers a top-level entry in the NC-style action bar. Call at the **top level** of your script (not inside a hook). The menu persists for the lifetime of the game.
+
+```js
+addMenu("Game", [
+    { label: "New Game", onClick: function(playerID) { /* ... */ } },
+    { label: "---" },  // separator
+    { label: "High Scores", onClick: function(playerID) {
+        messageBox(playerID, {
+            title: "High Scores",
+            message: "1. Alice  4200\n2. Bob    3100",
+            buttons: ["OK"]
+        });
+    }}
+]);
+```
+
+**Item fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `label` | string | Display text. A label of `"---"` (or any all-dashes string) renders as a separator line. |
+| `disabled` | bool | Optional. If true, the item is shown greyed out and cannot be selected. |
+| `onClick` | function(playerID) | Called when the item is activated. `playerID` is the player who selected it. |
+
+**Navigation:** Press `F10` to focus the action bar. `Left`/`Right` move between menu titles. `Down` or `Enter` opens the dropdown. Inside a dropdown: `Up`/`Down` navigate items, `Enter` selects, `Esc` closes back to the bar. `F10` or `Esc` at the bar level deactivates.
+
+---
+
+### `messageBox(playerID, opts)`
+
+Shows a modal dialog to the specified player. The dialog overlays the current view and intercepts all keyboard input until dismissed.
+
+```js
+messageBox(playerID, {
+    title: "Confirm",
+    message: "Are you sure you want to restart?",
+    buttons: ["Yes", "No"],
+    onClose: function(button) {
+        if (button === "Yes") {
+            // restart game
+        }
+    }
+});
+```
+
+**`opts` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | string | Dialog title bar text. |
+| `message` | string | Body text. `\n` creates line breaks. |
+| `buttons` | array | Button labels. Defaults to `["OK"]` if omitted. |
+| `onClose` | function(button) | Called with the label of the button pressed, or `""` if the dialog was dismissed with `Esc`. |
+
+**Navigation:** `Tab` or `Left`/`Right` cycle through buttons. `Enter` or `Space` activates the focused button. `Esc` calls `onClose("")`.
 
 ---
 

@@ -168,6 +168,8 @@ type chromeModel struct {
 
 	// Game-over countdown tracking
 	gameOverStart time.Time
+
+	overlay overlayState
 }
 
 func newChromeModel(app *Server, playerID string) chromeModel {
@@ -193,6 +195,7 @@ func newChromeModel(app *Server, playerID string) chromeModel {
 		input:         input,
 		teamEditInput: teamInput,
 		historyIdx:    -1,
+		overlay:       overlayState{openMenu: -1},
 	}
 	m.syncChat()
 	// Always start in lobby/input mode. GameLoadedMsg will transition
@@ -300,6 +303,10 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeViewports()
 		return m, nil
 
+	case showDialogMsg:
+		m.overlay.pushDialog(msg.dialog)
+		return m, nil
+
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -342,6 +349,11 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.chatScrollOffset < 0 {
 			m.chatScrollOffset = 0
 		}
+		return m, nil
+	}
+
+	// Overlay intercepts keys when active (F10, menu navigation, dialog buttons).
+	if m.overlay.handleKey(msg.String(), m.allMenus(), m.playerID) {
 		return m, nil
 	}
 
@@ -618,6 +630,19 @@ func (m chromeModel) View() tea.View {
 		content = m.viewPlaying(game, gameName, mbStyle, chStyle, ciStyle, col.chatBg)
 	}
 
+	// Apply overlay layers on top of the base content.
+	menus := m.allMenus()
+	if m.overlay.openMenu >= 0 {
+		if ddStr, ddCol, ddRow := m.overlay.renderDropdown(menus, 1); ddStr != "" {
+			content = PlaceOverlay(ddCol, ddRow, ddStr, content)
+		}
+	}
+	if m.overlay.hasDialog() {
+		if dlgStr, dlgCol, dlgRow := m.overlay.renderDialog(m.width, m.height); dlgStr != "" {
+			content = PlaceOverlay(dlgCol, dlgRow, dlgStr, content)
+		}
+	}
+
 	view.SetContent(content)
 	view.AltScreen = true
 	if m.mode == modeInput {
@@ -641,7 +666,7 @@ func (m chromeModel) View() tea.View {
 				row += 1 + 1 + len(teams[i].Players) // blank + team header + members
 			}
 			row += 1 // blank before current team
-			cursor.Position.Y = 1 + row // +1 for menu bar
+			cursor.Position.Y = 2 + row // +1 server info bar, +1 NC action bar
 			cursor.Position.X += (m.width - teamW) + 5 // +1 for border │
 			view.Cursor = cursor
 		}
@@ -650,7 +675,8 @@ func (m chromeModel) View() tea.View {
 }
 
 func (m chromeModel) viewLobby(mbStyle, chStyle, ciStyle lipgloss.Style, chatBg color.Color) string {
-	contentH := m.height - 3 // menu bar + input row + status bar
+	ncBar := m.overlay.renderNCBar(m.width, m.allMenus())
+	contentH := m.height - 4 // server info + NC bar + input row + status bar
 	if contentH < 1 {
 		contentH = 1
 	}
@@ -742,10 +768,11 @@ func (m chromeModel) viewLobby(mbStyle, chStyle, ciStyle lipgloss.Style, chatBg 
 
 	statusBar := mbStyle.Width(m.width).Align(lipgloss.Right).Render(time.Now().Format("2006-01-02 15:04"))
 
-	return lipgloss.JoinVertical(lipgloss.Left, menuBar, middle, inputRow, statusBar)
+	return lipgloss.JoinVertical(lipgloss.Left, menuBar, ncBar, middle, inputRow, statusBar)
 }
 
 func (m chromeModel) viewSplash(game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style) string {
+	ncBar := m.overlay.renderNCBar(m.width, m.allMenus())
 	displayName := gameName
 	if gn := game.GameName(); gn != "" {
 		displayName = gn
@@ -753,7 +780,7 @@ func (m chromeModel) viewSplash(game common.Game, gameName string, mbStyle, chSt
 
 	menuBar := mbStyle.Width(m.width).Render(truncateStyled(displayName, m.width))
 
-	viewportH := m.height - 3
+	viewportH := m.height - 4
 	if viewportH < 1 {
 		viewportH = 1
 	}
@@ -776,10 +803,11 @@ func (m chromeModel) viewSplash(game common.Game, gameName string, mbStyle, chSt
 
 	statusBar := mbStyle.Width(m.width).Align(lipgloss.Right).Render(time.Now().Format("2006-01-02 15:04"))
 
-	return lipgloss.JoinVertical(lipgloss.Left, menuBar, viewport, cmdBar, statusBar)
+	return lipgloss.JoinVertical(lipgloss.Left, menuBar, ncBar, viewport, cmdBar, statusBar)
 }
 
 func (m chromeModel) viewGameOver(game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style) string {
+	ncBar := m.overlay.renderNCBar(m.width, m.allMenus())
 	displayName := gameName
 	if gn := game.GameName(); gn != "" {
 		displayName = gn
@@ -787,7 +815,7 @@ func (m chromeModel) viewGameOver(game common.Game, gameName string, mbStyle, ch
 
 	menuBar := mbStyle.Width(m.width).Render(truncateStyled(displayName+" - Game Over", m.width))
 
-	viewportH := m.height - 3
+	viewportH := m.height - 4
 	if viewportH < 1 {
 		viewportH = 1
 	}
@@ -807,17 +835,18 @@ func (m chromeModel) viewGameOver(game common.Game, gameName string, mbStyle, ch
 
 	statusBar := mbStyle.Width(m.width).Align(lipgloss.Right).Render(time.Now().Format("2006-01-02 15:04"))
 
-	return lipgloss.JoinVertical(lipgloss.Left, menuBar, viewport, cmdBar, statusBar)
+	return lipgloss.JoinVertical(lipgloss.Left, menuBar, ncBar, viewport, cmdBar, statusBar)
 }
 
 func (m chromeModel) viewPlaying(game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style, chatBg color.Color) string {
+	ncBar := m.overlay.renderNCBar(m.width, m.allMenus())
 	menuBar := mbStyle.Width(m.width).Render(truncateStyled(gameName, m.width))
 	gameStatusBar := mbStyle.Bold(false).Width(m.width).Render(game.StatusBar(m.playerID))
 
-	// Available rows: total - menu bar - game status bar - command bar - status bar
+	// Available rows: total - NC bar - menu bar - game status bar - command bar - status bar
 	gameH := m.width * 9 / 16
-	chatH := m.height - 4 - gameH
-	minChatH := max(5, (m.height-4)/3)
+	chatH := m.height - 5 - gameH
+	minChatH := max(5, (m.height-5)/3)
 	if chatH < minChatH {
 		chatH = minChatH
 		gameH = m.height - 4 - chatH
@@ -842,7 +871,7 @@ func (m chromeModel) viewPlaying(game common.Game, gameName string, mbStyle, chS
 
 	statusBar := mbStyle.Width(m.width).Align(lipgloss.Right).Render(time.Now().Format("2006-01-02 15:04"))
 
-	return lipgloss.JoinVertical(lipgloss.Left, menuBar, gameStatusBar, gameView, chatView, cmdBar, statusBar)
+	return lipgloss.JoinVertical(lipgloss.Left, menuBar, ncBar, gameStatusBar, gameView, chatView, cmdBar, statusBar)
 }
 
 // renderTeamPanel draws the team list panel for the lobby.
@@ -1050,13 +1079,13 @@ func (m *chromeModel) resizeViewports() {
 	phase := m.app.state.GetGamePhase()
 
 	if !m.inActiveGame || phase == common.PhaseNone {
-		// Lobby — menu bar + input row + status bar = 3 overhead rows.
+		// Lobby — server info + NC bar + input row + status bar = 4 overhead rows.
 		teamW := lobbyTeamPanelW
 		if teamW > m.width-10 {
 			teamW = m.width - 10
 		}
 		chatW := m.width - teamW
-		chatH := m.height - 3
+		chatH := m.height - 4
 		if chatH < 1 {
 			chatH = 1
 		}
@@ -1065,10 +1094,10 @@ func (m *chromeModel) resizeViewports() {
 		m.chat.SetHeight(chatH)
 		m.input.SetWidth(max(1, chatW-2))
 	} else if phase == common.PhasePlaying {
-		// menu bar + game status bar + command bar + status bar = 4 overhead rows.
+		// NC bar + menu bar + game status bar + command bar + status bar = 5 overhead rows.
 		gameH := m.width * 9 / 16
-		chatH := m.height - 4 - gameH
-		minChatH := max(5, (m.height-4)/3)
+		chatH := m.height - 5 - gameH
+		minChatH := max(5, (m.height-5)/3)
 		if chatH < minChatH {
 			chatH = minChatH
 		}
@@ -1080,6 +1109,35 @@ func (m *chromeModel) resizeViewports() {
 		m.chatH = 0
 	}
 	m.input.SetWidth(max(1, m.width-2))
+}
+
+// allMenus returns the full ordered list of menus for the NC action bar:
+// the framework "File" menu followed by any game-registered menus.
+func (m *chromeModel) allMenus() []common.MenuDef {
+	var fileItems []common.MenuItemDef
+	if m.isLocal {
+		fileItems = []common.MenuItemDef{{
+			Label: "Quit",
+			Handler: func(_ string) {
+				// Ctrl+C is the reliable quit path in local mode.
+			},
+		}}
+	} else {
+		fileItems = []common.MenuItemDef{{
+			Label: "Disconnect",
+			Handler: func(playerID string) {
+				go m.app.kickPlayer(playerID)
+			},
+		}}
+	}
+	menus := []common.MenuDef{{Label: "File", Items: fileItems}}
+	m.app.state.mu.RLock()
+	game := m.app.state.ActiveGame
+	m.app.state.mu.RUnlock()
+	if game != nil {
+		menus = append(menus, game.Menus()...)
+	}
+	return menus
 }
 
 func (m *chromeModel) submitInput() {

@@ -23,6 +23,29 @@ type CommandContext struct {
 	ServerLog func(string) // append to server log panel only (never sent to players)
 }
 
+// MenuItemDef describes one item in a game-registered drop-down menu.
+// A Label consisting entirely of "-" characters renders as a separator line.
+type MenuItemDef struct {
+	Label    string
+	Disabled bool
+	Handler  func(playerID string) // nil for separators
+}
+
+// MenuDef describes a top-level menu registered by a game in the NC action bar.
+type MenuDef struct {
+	Label string
+	Items []MenuItemDef
+}
+
+// DialogRequest asks the framework to show a modal dialog to a specific player.
+type DialogRequest struct {
+	Title   string
+	Body    string   // may be multi-line (\n-separated)
+	Buttons []string // button labels; if empty, defaults to ["OK"]
+	// OnClose is called with the pressed button label, or "" if dismissed with Esc.
+	OnClose func(button string)
+}
+
 // Game is the interface every loaded game must satisfy.
 // One game is active at a time and owns the viewport, status bar, and command bar.
 // All methods are implemented by jsRuntime; optional JS hooks return zero values
@@ -39,6 +62,7 @@ type Game interface {
 	StatusBar(playerID string) string  // game-controlled status bar (second row, below menu bar)
 	CommandBar(playerID string) string // game-controlled command bar (above framework status bar)
 	Commands() []Command
+	Menus() []MenuDef
 	Unload()
 }
 

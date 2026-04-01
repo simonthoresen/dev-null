@@ -568,6 +568,16 @@ func (a *Server) kickPlayer(playerID string) error {
 	return sess.Close()
 }
 
+// ShowDialog sends a modal dialog request to the specified player's TUI program.
+func (a *Server) ShowDialog(playerID string, d common.DialogRequest) {
+	a.programsMu.Lock()
+	prog := a.programs[playerID]
+	a.programsMu.Unlock()
+	if prog != nil {
+		prog.Send(showDialogMsg{dialog: d})
+	}
+}
+
 func (a *Server) serverLog(line string) {
 	slog.Info(line)
 	select {
@@ -637,6 +647,9 @@ func (a *Server) loadGame(path string) error {
 	})
 	if err != nil {
 		return err
+	}
+	if jrt, ok := rt.(*jsRuntime); ok {
+		jrt.showDialogFn = a.ShowDialog
 	}
 
 	// Validate team count against game's declared range.

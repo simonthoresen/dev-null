@@ -73,6 +73,9 @@ type jsRuntime struct {
 	gameOverPending bool
 	gameOverResults []common.GameResult // results passed to gameOver()
 	gameOverState   goja.Value          // state argument passed as second arg to gameOver()
+
+	menus        []common.MenuDef
+	showDialogFn func(playerID string, d common.DialogRequest) // injected by server
 }
 
 // LoadGame loads and executes a JS file from games/, extracts the Game object
@@ -227,6 +230,106 @@ func (r *jsRuntime) registerGlobals() {
 
 	r.vm.Set("figlet", func(text string, font string) string {
 		return Figlet(text, font)
+	})
+
+	r.vm.Set("addMenu", func(call goja.FunctionCall) goja.Value {
+		label := ""
+		if v := call.Argument(0); !goja.IsUndefined(v) {
+			label = v.String()
+		}
+		if label == "" {
+			return goja.Undefined()
+		}
+		itemsVal := call.Argument(1)
+		var items []common.MenuItemDef
+		if !goja.IsUndefined(itemsVal) && !goja.IsNull(itemsVal) {
+			arr := itemsVal.ToObject(r.vm)
+			for _, k := range arr.Keys() {
+				el := arr.Get(k)
+				if el == nil || goja.IsUndefined(el) || goja.IsNull(el) {
+					continue
+				}
+				obj := el.ToObject(r.vm)
+				itemLabel := ""
+				if v := obj.Get("label"); v != nil && !goja.IsUndefined(v) {
+					itemLabel = v.String()
+				}
+				disabled := false
+				if v := obj.Get("disabled"); v != nil && !goja.IsUndefined(v) {
+					disabled = v.ToBoolean()
+				}
+				var handler goja.Callable
+				if v := obj.Get("onClick"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+					handler, _ = goja.AssertFunction(v)
+				}
+				var goHandler func(string)
+				if handler != nil {
+					capturedHandler := handler
+					goHandler = func(playerID string) {
+						r.mu.Lock()
+						defer r.mu.Unlock()
+						_, _ = capturedHandler(goja.Undefined(), r.vm.ToValue(playerID))
+					}
+				}
+				items = append(items, common.MenuItemDef{
+					Label:    itemLabel,
+					Disabled: disabled,
+					Handler:  goHandler,
+				})
+			}
+		}
+		r.menus = append(r.menus, common.MenuDef{Label: label, Items: items})
+		return goja.Undefined()
+	})
+
+	r.vm.Set("messageBox", func(call goja.FunctionCall) goja.Value {
+		playerID := ""
+		if v := call.Argument(0); !goja.IsUndefined(v) {
+			playerID = v.String()
+		}
+		optsVal := call.Argument(1)
+		if goja.IsUndefined(optsVal) || goja.IsNull(optsVal) {
+			return goja.Undefined()
+		}
+		opts := optsVal.ToObject(r.vm)
+
+		title := ""
+		if v := opts.Get("title"); v != nil && !goja.IsUndefined(v) {
+			title = v.String()
+		}
+		message := ""
+		if v := opts.Get("message"); v != nil && !goja.IsUndefined(v) {
+			message = v.String()
+		}
+		var buttons []string
+		if v := opts.Get("buttons"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+			arr := v.ToObject(r.vm)
+			for _, k := range arr.Keys() {
+				if el := arr.Get(k); el != nil && !goja.IsUndefined(el) {
+					buttons = append(buttons, el.String())
+				}
+			}
+		}
+		var onClose func(string)
+		if v := opts.Get("onClose"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+			if cb, ok := goja.AssertFunction(v); ok {
+				onClose = func(button string) {
+					r.mu.Lock()
+					defer r.mu.Unlock()
+					_, _ = cb(goja.Undefined(), r.vm.ToValue(button))
+				}
+			}
+		}
+		d := common.DialogRequest{
+			Title:   title,
+			Body:    message,
+			Buttons: buttons,
+			OnClose: onClose,
+		}
+		if r.showDialogFn != nil {
+			go r.showDialogFn(playerID, d)
+		}
+		return goja.Undefined()
 	})
 
 	r.vm.Set("registerCommand", func(call goja.FunctionCall) goja.Value {
@@ -444,6 +547,12 @@ func (r *jsRuntime) Unload() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.vm.Interrupt("game unloaded")
+}
+
+func (r *jsRuntime) Menus() []common.MenuDef {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.menus
 }
 
 // --- Lifecycle methods (part of Game interface) ---
