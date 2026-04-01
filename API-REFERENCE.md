@@ -271,6 +271,8 @@ These are available in both games and plugins.
 | `chat(message)` | Broadcasts a system chat message to all players. `author` will be empty (renders as `[system] message`). |
 | `chatPlayer(playerID, message)` | Sends a private message to one player. |
 | `teams()` | Returns an array of `{ name, color, players: [{id, name}, ...] }`. During a game, returns the game teams snapshot. |
+| `figlet(text)` | Renders `text` as ASCII art using the built-in `"standard"` font. Returns a multi-line string. |
+| `figlet(text, font)` | Same, using the named font. Built-in fonts: `"standard"`, `"larry3d"`. Falls back to `"standard"` for unknown fonts. |
 | `registerCommand(spec)` | Registers a slash command. See below. |
 | `gameOver()` | Signals that the game has ended. Transitions to the game-over screen. |
 | `gameOver(results)` | Same as above, with ranked results displayed on the game-over screen. `results` is an array of `{ name, result }` in ranked order. `name` is the display name (player or team). `result` is a freeform string (e.g. `"4200 pts"`, `"1st"`, `"DNF"`). |

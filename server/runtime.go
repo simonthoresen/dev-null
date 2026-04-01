@@ -225,6 +225,10 @@ func (r *jsRuntime) registerGlobals() {
 		return goja.Undefined()
 	})
 
+	r.vm.Set("figlet", func(text string, font string) string {
+		return Figlet(text, font)
+	})
+
 	r.vm.Set("registerCommand", func(call goja.FunctionCall) goja.Value {
 		specVal := call.Argument(0)
 		specObj := specVal.ToObject(r.vm)

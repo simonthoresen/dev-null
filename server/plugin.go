@@ -92,6 +92,10 @@ func (p *jsPlugin) registerGlobals() {
 		return result
 	})
 
+	p.vm.Set("figlet", func(text string, font string) string {
+		return Figlet(text, font)
+	})
+
 	p.vm.Set("registerCommand", func(call goja.FunctionCall) goja.Value {
 		specVal := call.Argument(0)
 		specObj := specVal.ToObject(p.vm)
