@@ -34,7 +34,7 @@ func main() {
 	fmt.Println("Connected. Starting renderer...")
 
 	fontFace := client.DefaultFontFace()
-	game := client.NewGame(conn, fontFace, 1200, 800)
+	game := client.NewGame(conn, fontFace, 1200, 800, *player)
 
 	ebiten.SetWindowSize(1200, 800)
 	ebiten.SetWindowTitle("null-space")

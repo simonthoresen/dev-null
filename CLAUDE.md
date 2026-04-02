@@ -412,7 +412,8 @@ var Game = {
 | `common/charmap.go` | CharMapDef/CharMapEntry types, PUA constants, JSON loader |
 | `common/osc.go` | OSC escape sequence encoding for charmap/atlas/viewport/frame, bandwidth estimator |
 | `internal/engine/canvas.go` | Headless Canvas2D context (fogleman/gg) exposed to goja |
-| `internal/client/` | SSH connection, ANSI parser, Ebitengine sprite + canvas renderer |
+| `internal/client/` | SSH connection, ANSI parser, Ebitengine renderer, local JS game renderer |
+| `internal/client/localrender.go` | Client-side goja runtime: loads game JS, sets Game.state from server deltas, calls render/renderCanvas locally |
 
 ### Init Files (`~/.null-space/`)
 

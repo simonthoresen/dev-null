@@ -39,10 +39,13 @@ type Game struct {
 	// Canvas frame — rendered image from server-side renderCanvas.
 	canvasFrame *ebiten.Image // latest decoded canvas frame, or nil
 
-	// Local rendering state (received from server for future local-render mode).
+	// Local rendering — runs game JS on the client with server-provided state.
+	localRenderer *LocalRenderer
 	gameSrcFiles  []GameSrcFile // JS source files for the current game
 	gameStateJSON []byte        // latest decompressed game state JSON
 	renderMode    string        // "local" or "remote" (default)
+	localCanvas   *ebiten.Image // locally rendered canvas frame
+	playerID      string        // this client's player ID
 
 	// Read buffer for SSH data.
 	readBuf []byte
@@ -55,7 +58,7 @@ func DefaultFontFace() text.Face {
 }
 
 // NewGame creates a new client game instance.
-func NewGame(conn *SSHConn, fontFace text.Face, width, height int) *Game {
+func NewGame(conn *SSHConn, fontFace text.Face, width, height int, playerID string) *Game {
 	cols := width / cellW
 	rows := height / cellH
 	if cols < 1 {
@@ -66,11 +69,13 @@ func NewGame(conn *SSHConn, fontFace text.Face, width, height int) *Game {
 	}
 
 	g := &Game{
-		conn:        conn,
-		grid:        NewTerminalGrid(cols, rows),
-		fontFace:    fontFace,
-		spriteCache: make(map[rune]*ebiten.Image),
-		readBuf:     make([]byte, 64*1024),
+		conn:          conn,
+		grid:          NewTerminalGrid(cols, rows),
+		fontFace:      fontFace,
+		spriteCache:   make(map[rune]*ebiten.Image),
+		localRenderer: NewLocalRenderer(),
+		playerID:      playerID,
+		readBuf:       make([]byte, 64*1024),
 	}
 
 	// Start reading SSH output in background.
@@ -101,15 +106,19 @@ func (g *Game) readLoop() {
 				g.loadCanvasFrame(g.grid.FrameData)
 				g.grid.FrameData = nil
 			}
-			// Game source files for local rendering.
+			// Game source files — load into local renderer.
 			if len(g.grid.GameSrcFiles) > 0 {
 				g.gameSrcFiles = g.grid.GameSrcFiles
 				g.grid.GameSrcFiles = nil
+				g.localRenderer.LoadGame(g.gameSrcFiles)
 			}
-			// Game state delta.
+			// Game state delta — update local renderer.
 			if g.grid.StateData != nil {
 				g.gameStateJSON = decompressBytes(g.grid.StateData)
 				g.grid.StateData = nil
+				if g.gameStateJSON != nil {
+					g.localRenderer.SetState(g.gameStateJSON)
+				}
 			}
 			// Render mode.
 			if g.grid.RenderMode != "" {
@@ -245,19 +254,29 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	vw := g.grid.ViewportW
 	vh := g.grid.ViewportH
 
-	// Draw canvas frame as the viewport background (if present).
-	if g.canvasFrame != nil && vw > 0 && vh > 0 {
+	// Local canvas rendering: if the local renderer has game JS + state,
+	// render canvas locally at the client's chosen scale (no server bandwidth cost).
+	if vw > 0 && vh > 0 && g.localRenderer.IsLoaded() && g.localRenderer.HasCanvas() && g.gameStateJSON != nil {
+		scale := g.localRenderer.CanvasScale
+		g.localCanvas = g.localRenderer.RenderCanvas(g.playerID, vw*scale, vh*scale)
+	}
+
+	// Draw canvas frame in the viewport (prefer local, fall back to server-sent).
+	canvasImg := g.localCanvas
+	if canvasImg == nil {
+		canvasImg = g.canvasFrame
+	}
+	if canvasImg != nil && vw > 0 && vh > 0 {
 		vpPx := vx * cellW
 		vpPy := vy * cellH
 		vpPw := vw * cellW
 		vpPh := vh * cellH
 		fop := &ebiten.DrawImageOptions{}
-		// Scale canvas frame to fit the viewport pixel area.
-		fw := float64(vpPw) / float64(g.canvasFrame.Bounds().Dx())
-		fh := float64(vpPh) / float64(g.canvasFrame.Bounds().Dy())
+		fw := float64(vpPw) / float64(canvasImg.Bounds().Dx())
+		fh := float64(vpPh) / float64(canvasImg.Bounds().Dy())
 		fop.GeoM.Scale(fw, fh)
 		fop.GeoM.Translate(float64(vpPx), float64(vpPy))
-		screen.DrawImage(g.canvasFrame, fop)
+		screen.DrawImage(canvasImg, fop)
 	}
 
 	for cy := 0; cy < g.grid.Height; cy++ {

@@ -10,21 +10,21 @@ import (
 	"github.com/fogleman/gg"
 )
 
-// jsCanvas wraps a fogleman/gg context and exposes Canvas2D-like methods to JS.
-type jsCanvas struct {
+// JSCanvas wraps a fogleman/gg context and exposes Canvas2D-like methods to JS.
+type JSCanvas struct {
 	dc     *gg.Context
 	width  int
 	height int
 }
 
-// newJSCanvas creates a new headless canvas with the given pixel dimensions.
-func newJSCanvas(width, height int) *jsCanvas {
+// NewJSCanvas creates a new headless canvas with the given pixel dimensions.
+func NewJSCanvas(width, height int) *JSCanvas {
 	dc := gg.NewContext(width, height)
-	return &jsCanvas{dc: dc, width: width, height: height}
+	return &JSCanvas{dc: dc, width: width, height: height}
 }
 
-// toPNG renders the canvas to a PNG byte slice.
-func (c *jsCanvas) toPNG() ([]byte, error) {
+// ToPNG renders the canvas to a PNG byte slice.
+func (c *JSCanvas) ToPNG() ([]byte, error) {
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, c.dc.Image()); err != nil {
 		return nil, err
@@ -32,8 +32,8 @@ func (c *jsCanvas) toPNG() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// toRGBA returns the canvas as an *image.RGBA.
-func (c *jsCanvas) toRGBA() *image.RGBA {
+// ToRGBA returns the canvas as an *image.RGBA.
+func (c *JSCanvas) ToRGBA() *image.RGBA {
 	img := c.dc.Image()
 	if rgba, ok := img.(*image.RGBA); ok {
 		return rgba
@@ -49,8 +49,8 @@ func (c *jsCanvas) toRGBA() *image.RGBA {
 	return rgba
 }
 
-// toJSObject creates a goja-compatible object with Canvas2D methods.
-func (c *jsCanvas) toJSObject(vm *goja.Runtime) map[string]any {
+// ToJSObject creates a goja-compatible object with Canvas2D methods.
+func (c *JSCanvas) ToJSObject(vm *goja.Runtime) map[string]any {
 	return map[string]any{
 		"width":  c.width,
 		"height": c.height,

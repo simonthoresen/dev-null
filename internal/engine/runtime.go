@@ -443,15 +443,15 @@ func (r *JSRuntime) RenderCanvas(playerID string, width, height int) []byte {
 	cancel := WatchdogJS(r.vm, "RenderCanvas")
 	defer cancel()
 
-	canvas := newJSCanvas(width, height)
-	ctx := canvas.toJSObject(r.vm)
+	canvas := NewJSCanvas(width, height)
+	ctx := canvas.ToJSObject(r.vm)
 	_, err := r.renderCanvasFn(goja.Undefined(), r.vm.ToValue(ctx), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
 	if err != nil {
 		slog.Error("JS RenderCanvas error", "error", err)
 		return nil
 	}
 
-	data, err := canvas.toPNG()
+	data, err := canvas.ToPNG()
 	if err != nil {
 		slog.Error("Canvas PNG encoding error", "error", err)
 		return nil
