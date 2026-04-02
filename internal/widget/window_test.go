@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"null-space/common"
+	"null-space/internal/domain"
 	"null-space/internal/theme"
 )
 
@@ -129,8 +129,8 @@ func TestNCWindowBordersASCIITheme(t *testing.T) {
 
 func TestDropdownBordersSingleLineTheme(t *testing.T) {
 	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&New"},
 			{Label: "---"},
 			{Label: "&Quit"},
@@ -158,9 +158,9 @@ func TestDropdownBordersSingleLineTheme(t *testing.T) {
 
 func TestMenuBarSeparatorFromTheme(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
-		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}}},
+		{Label: "&Edit", Items: []domain.MenuItemDef{{Label: "&Copy"}}},
 	}
 
 	// Default theme separator is │.
@@ -182,7 +182,7 @@ func TestMenuBarSeparatorFromTheme(t *testing.T) {
 
 func TestDialogBordersASCIITheme(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
-	o.PushDialog(common.DialogRequest{
+	o.PushDialog(domain.DialogRequest{
 		Title: "Err",
 		Body:  "Oops",
 	})
@@ -313,8 +313,8 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 
 	// Layer 1: Dropdown at depth 1 (Secondary) over the window.
 	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}, {Label: "&Quit"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}, {Label: "&Quit"}}},
 	}
 	ddBox := o.RenderDropdown(menus, 0, th.LayerAt(1))
 	dd, ddCol, ddRow := ddBox.Content, ddBox.Col, ddBox.Row
@@ -338,7 +338,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 
 	// Layer 2: Dialog at depth 2 (Tertiary) over everything.
 	o2 := OverlayState{OpenMenu: -1}
-	o2.PushDialog(common.DialogRequest{
+	o2.PushDialog(domain.DialogRequest{
 		Title:   "Confirm",
 		Body:    "Proceed?",
 		Buttons: []string{"Yes", "No"},
@@ -354,7 +354,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 
 	// Layer 3: Nested dialog at depth 3 → Secondary again.
 	o3 := OverlayState{OpenMenu: -1}
-	o3.PushDialog(common.DialogRequest{Title: "Nested", Body: "Inner"})
+	o3.PushDialog(domain.DialogRequest{Title: "Nested", Body: "Inner"})
 	dlg3Box := o3.RenderDialog(40, 12, th.LayerAt(3))
 	dlg3, dlg3Col, dlg3Row := dlg3Box.Content, dlg3Box.Col, dlg3Box.Row
 	assertHasANSI(t, dlg3, "#002200", "layer 3 nested dialog (Secondary again)")
@@ -374,7 +374,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 
 	// Layer 4: Depth 4 → Tertiary again.
 	o4 := OverlayState{OpenMenu: -1}
-	o4.PushDialog(common.DialogRequest{Title: "Deep", Body: "Very deep"})
+	o4.PushDialog(domain.DialogRequest{Title: "Deep", Body: "Very deep"})
 	dlg4 := o4.RenderDialog(40, 12, th.LayerAt(4)).Content
 	assertHasANSI(t, dlg4, "#000033", "layer 4 (Tertiary again)")
 }
@@ -382,7 +382,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 func TestPaletteDepthWarningBypassesCycle(t *testing.T) {
 	th := distinctPaletteTheme()
 	o := OverlayState{OpenMenu: -1}
-	o.PushDialog(common.DialogRequest{Title: "Error", Body: "Something broke"})
+	o.PushDialog(domain.DialogRequest{Title: "Error", Body: "Something broke"})
 
 	dlg := o.RenderDialog(40, 20, th.WarningLayer()).Content
 	assertHasANSI(t, dlg, "#330000", "warning dialog")
@@ -396,8 +396,8 @@ func TestPaletteDepthWarningBypassesCycle(t *testing.T) {
 func TestNCBarPaletteMatchesDepth(t *testing.T) {
 	th := distinctPaletteTheme()
 	o := OverlayState{OpenMenu: -1}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}}},
 	}
 
 	bar1 := o.RenderMenuBar(30, menus, th.LayerAt(1))
@@ -492,8 +492,8 @@ func TestPerLayerBordersOnNCWindow(t *testing.T) {
 
 func TestPerLayerBordersOnDropdown(t *testing.T) {
 	th := layeredBorderTheme()
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&New"},
 			{Label: "---"},
 			{Label: "&Quit"},
@@ -528,7 +528,7 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 
 	// Depth 2 → Tertiary → ASCII.
 	o2 := OverlayState{OpenMenu: -1}
-	o2.PushDialog(common.DialogRequest{Title: "Test", Body: "Hello"})
+	o2.PushDialog(domain.DialogRequest{Title: "Test", Body: "Hello"})
 	dlg2 := o2.RenderDialog(40, 20, th.LayerAt(2)).Content
 	s2 := newScreen(dlg2)
 	if !strings.HasPrefix(s2.lines[0], "+") || !strings.HasSuffix(s2.lines[0], "+") {
@@ -541,7 +541,7 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 
 	// Depth 1 → Secondary → single-line.
 	o1 := OverlayState{OpenMenu: -1}
-	o1.PushDialog(common.DialogRequest{Title: "Test", Body: "Hello"})
+	o1.PushDialog(domain.DialogRequest{Title: "Test", Body: "Hello"})
 	dlg1 := o1.RenderDialog(40, 20, th.LayerAt(1)).Content
 	s1 := newScreen(dlg1)
 	if !strings.HasPrefix(s1.lines[0], "┌") || !strings.HasSuffix(s1.lines[0], "┐") {
@@ -552,9 +552,9 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 func TestPerLayerBordersOnMenuBar(t *testing.T) {
 	th := layeredBorderTheme()
 	o := OverlayState{OpenMenu: -1}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
-		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}}},
+		{Label: "&Edit", Items: []domain.MenuItemDef{{Label: "&Copy"}}},
 	}
 
 	// Depth 1 → Secondary → "|" separator.
@@ -598,8 +598,8 @@ func TestPerLayerBordersCompositedStack(t *testing.T) {
 
 	// Composite a dropdown at depth 1 (single-line).
 	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}}},
 	}
 	ddBox := o.RenderDropdown(menus, 0, th.LayerAt(1))
 	composited := PlaceOverlay(ddBox.Col, ddBox.Row, ddBox.Content, layer0)

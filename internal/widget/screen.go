@@ -4,7 +4,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -26,7 +26,7 @@ type Screen struct {
 
 // RenderToBuf draws all three sections vertically into buf at (x, y).
 // Menu bar and status bar use secondary layer (depth 1); content window uses primary (depth 0).
-func (s *Screen) RenderToBuf(buf *common.ImageBuffer, x, y, w, h int, t *theme.Theme) {
+func (s *Screen) RenderToBuf(buf *render.ImageBuffer, x, y, w, h int, t *theme.Theme) {
 	s.screenX = x
 	s.screenY = y
 	s.width = w

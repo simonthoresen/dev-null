@@ -6,7 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -19,7 +19,7 @@ type Label struct {
 func (l *Label) Update(_ tea.Msg)    {}
 func (l *Label) Focusable() bool     { return false }
 func (l *Label) MinSize() (int, int) { return ansi.StringWidth(l.Text), 1 }
-func (l *Label) Render(buf *common.ImageBuffer, x, y, w, h int, _ bool, layer *theme.Layer) {
+func (l *Label) Render(buf *render.ImageBuffer, x, y, w, h int, _ bool, layer *theme.Layer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 	text := l.Text
@@ -43,7 +43,7 @@ func (l *Label) Render(buf *common.ImageBuffer, x, y, w, h int, _ bool, layer *t
 			break
 		}
 		if col >= x {
-			buf.SetChar(col, y, r, fg, bg, common.AttrNone)
+			buf.SetChar(col, y, r, fg, bg, render.AttrNone)
 		}
 		col++
 	}

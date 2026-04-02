@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"null-space/common"
+	"null-space/internal/render"
 )
 
 // Cell represents a single terminal cell in the parsed grid.
@@ -14,7 +14,7 @@ type Cell struct {
 	Char rune
 	Fg   color.RGBA
 	Bg   color.RGBA
-	Attr common.PixelAttr
+	Attr render.PixelAttr
 }
 
 // TerminalGrid holds the parsed terminal state.
@@ -36,7 +36,7 @@ type TerminalGrid struct {
 	// Current SGR state for parsing.
 	curFg   color.RGBA
 	curBg   color.RGBA
-	curAttr common.PixelAttr
+	curAttr render.PixelAttr
 }
 
 var defaultFg = color.RGBA{R: 204, G: 204, B: 204, A: 255}
@@ -239,7 +239,7 @@ func (g *TerminalGrid) parseSGR(params string) {
 	if params == "" || params == "0" {
 		g.curFg = defaultFg
 		g.curBg = defaultBg
-		g.curAttr = common.AttrNone
+		g.curAttr = render.AttrNone
 		return
 	}
 
@@ -250,25 +250,25 @@ func (g *TerminalGrid) parseSGR(params string) {
 		case n == 0:
 			g.curFg = defaultFg
 			g.curBg = defaultBg
-			g.curAttr = common.AttrNone
+			g.curAttr = render.AttrNone
 		case n == 1:
-			g.curAttr |= common.AttrBold
+			g.curAttr |= render.AttrBold
 		case n == 2:
-			g.curAttr |= common.AttrFaint
+			g.curAttr |= render.AttrFaint
 		case n == 3:
-			g.curAttr |= common.AttrItalic
+			g.curAttr |= render.AttrItalic
 		case n == 4:
-			g.curAttr |= common.AttrUnderline
+			g.curAttr |= render.AttrUnderline
 		case n == 7:
-			g.curAttr |= common.AttrReverse
+			g.curAttr |= render.AttrReverse
 		case n == 22:
-			g.curAttr &^= common.AttrBold | common.AttrFaint
+			g.curAttr &^= render.AttrBold | render.AttrFaint
 		case n == 23:
-			g.curAttr &^= common.AttrItalic
+			g.curAttr &^= render.AttrItalic
 		case n == 24:
-			g.curAttr &^= common.AttrUnderline
+			g.curAttr &^= render.AttrUnderline
 		case n == 27:
-			g.curAttr &^= common.AttrReverse
+			g.curAttr &^= render.AttrReverse
 		case n == 38: // Foreground: 38;2;R;G;B
 			if i+4 < len(parts) && parts[i+1] == "2" {
 				r, _ := strconv.Atoi(parts[i+2])

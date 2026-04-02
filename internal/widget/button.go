@@ -3,7 +3,7 @@ package widget
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -35,14 +35,14 @@ func (b *Button) Update(msg tea.Msg) {
 		}
 	}
 }
-func (b *Button) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
+func (b *Button) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
-	attr := common.PixelAttr(common.AttrNone)
+	attr := render.PixelAttr(render.AttrNone)
 	if focused {
 		fg = layer.HighlightFgC()
 		bg = layer.HighlightBgC()
-		attr = common.AttrBold
+		attr = render.AttrBold
 	}
 	label := "[ " + b.Label + " ]"
 	col := x

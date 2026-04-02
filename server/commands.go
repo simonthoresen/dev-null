@@ -2,7 +2,7 @@ package server
 
 import (
 	"fmt"
-	"null-space/common"
+	"null-space/internal/domain"
 	"sort"
 	"strings"
 	"sync"
@@ -10,14 +10,14 @@ import (
 
 type commandRegistry struct {
 	mu       sync.RWMutex
-	commands map[string]common.Command
+	commands map[string]domain.Command
 }
 
 func newCommandRegistry() *commandRegistry {
-	return &commandRegistry{commands: make(map[string]common.Command)}
+	return &commandRegistry{commands: make(map[string]domain.Command)}
 }
 
-func (r *commandRegistry) Register(cmd common.Command) {
+func (r *commandRegistry) Register(cmd domain.Command) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.commands[strings.ToLower(cmd.Name)] = cmd
@@ -29,17 +29,17 @@ func (r *commandRegistry) Unregister(name string) {
 	delete(r.commands, strings.ToLower(name))
 }
 
-func (r *commandRegistry) Get(name string) (common.Command, bool) {
+func (r *commandRegistry) Get(name string) (domain.Command, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	cmd, ok := r.commands[strings.ToLower(name)]
 	return cmd, ok
 }
 
-func (r *commandRegistry) All() []common.Command {
+func (r *commandRegistry) All() []domain.Command {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]common.Command, 0, len(r.commands))
+	out := make([]domain.Command, 0, len(r.commands))
 	for _, cmd := range r.commands {
 		out = append(out, cmd)
 	}
@@ -47,7 +47,7 @@ func (r *commandRegistry) All() []common.Command {
 }
 
 // Dispatch parses and runs a slash command. input must start with '/'.
-func (r *commandRegistry) Dispatch(input string, ctx common.CommandContext) {
+func (r *commandRegistry) Dispatch(input string, ctx domain.CommandContext) {
 	input = strings.TrimPrefix(input, "/")
 	parts := strings.Fields(input)
 	if len(parts) == 0 {

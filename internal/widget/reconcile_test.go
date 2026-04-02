@@ -4,12 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"null-space/common"
+	"null-space/internal/domain"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
 func TestReconcileLabel(t *testing.T) {
-	tree := &common.WidgetNode{Type: "label", Text: "Hello"}
+	tree := &domain.WidgetNode{Type: "label", Text: "Hello"}
 	gw := ReconcileGameWindow(nil, tree, nil, nil)
 	if gw == nil || gw.Window == nil {
 		t.Fatal("expected non-nil GameWindow")
@@ -30,10 +31,10 @@ func TestReconcileLabel(t *testing.T) {
 }
 
 func TestReconcilePanel(t *testing.T) {
-	tree := &common.WidgetNode{
+	tree := &domain.WidgetNode{
 		Type:  "panel",
 		Title: "Info",
-		Children: []*common.WidgetNode{
+		Children: []*domain.WidgetNode{
 			{Type: "label", Text: "Line 1"},
 		},
 	}
@@ -50,9 +51,9 @@ func TestReconcilePanel(t *testing.T) {
 }
 
 func TestReconcileHSplit(t *testing.T) {
-	tree := &common.WidgetNode{
+	tree := &domain.WidgetNode{
 		Type: "hsplit",
-		Children: []*common.WidgetNode{
+		Children: []*domain.WidgetNode{
 			{Type: "label", Text: "LEFT", Weight: 1},
 			{Type: "label", Text: "RIGHT", Weight: 1},
 		},
@@ -74,9 +75,9 @@ func TestReconcileHSplit(t *testing.T) {
 }
 
 func TestReconcileVSplit(t *testing.T) {
-	tree := &common.WidgetNode{
+	tree := &domain.WidgetNode{
 		Type: "vsplit",
-		Children: []*common.WidgetNode{
+		Children: []*domain.WidgetNode{
 			{Type: "label", Text: "TOP", Height: 1},
 			{Type: "label", Text: "BOTTOM", Weight: 1},
 		},
@@ -93,12 +94,12 @@ func TestReconcileVSplit(t *testing.T) {
 }
 
 func TestReconcileGameView(t *testing.T) {
-	tree := &common.WidgetNode{Type: "gameview"}
+	tree := &domain.WidgetNode{Type: "gameview"}
 	called := false
 	gw := ReconcileGameWindow(nil, tree,
-		func(buf *common.ImageBuffer, x, y, w, h int) {
+		func(buf *render.ImageBuffer, x, y, w, h int) {
 			called = true
-			buf.WriteString(x, y, "GAME OUTPUT", nil, nil, common.AttrNone)
+			buf.WriteString(x, y, "GAME OUTPUT", nil, nil, render.AttrNone)
 		}, nil)
 	output := gw.Window.Render(0, 0, 20, 3, theme.Default().LayerAt(0))
 	if !called {
@@ -111,7 +112,7 @@ func TestReconcileGameView(t *testing.T) {
 }
 
 func TestReconcileButton(t *testing.T) {
-	tree := &common.WidgetNode{
+	tree := &domain.WidgetNode{
 		Type:   "button",
 		Text:   "Fold",
 		Action: "fold",
@@ -144,9 +145,9 @@ func TestReconcileButton(t *testing.T) {
 }
 
 func TestReconcilePreservesState(t *testing.T) {
-	tree := &common.WidgetNode{
+	tree := &domain.WidgetNode{
 		Type: "vsplit",
-		Children: []*common.WidgetNode{
+		Children: []*domain.WidgetNode{
 			{Type: "textview", Lines: []string{"line1", "line2", "line3", "line4", "line5"}},
 			{Type: "label", Text: "footer", Height: 1},
 		},
@@ -161,9 +162,9 @@ func TestReconcilePreservesState(t *testing.T) {
 	}
 
 	// Second reconcile — same tree. Should reuse the textview and preserve scroll.
-	tree2 := &common.WidgetNode{
+	tree2 := &domain.WidgetNode{
 		Type: "vsplit",
-		Children: []*common.WidgetNode{
+		Children: []*domain.WidgetNode{
 			{Type: "textview", Lines: []string{"line1", "line2", "line3", "line4", "line5"}},
 			{Type: "label", Text: "footer", Height: 1},
 		},
@@ -180,7 +181,7 @@ func TestReconcilePreservesState(t *testing.T) {
 }
 
 func TestReconcileTable(t *testing.T) {
-	tree := &common.WidgetNode{
+	tree := &domain.WidgetNode{
 		Type: "table",
 		Rows: [][]string{
 			{"Name", "Score"},
@@ -197,10 +198,10 @@ func TestReconcileTable(t *testing.T) {
 }
 
 func TestReconcileCacheSkipsStaticSubtree(t *testing.T) {
-	tree := &common.WidgetNode{
+	tree := &domain.WidgetNode{
 		Type: "hsplit",
-		Children: []*common.WidgetNode{
-			{Type: "panel", Title: "Stats", Width: 12, Children: []*common.WidgetNode{
+		Children: []*domain.WidgetNode{
+			{Type: "panel", Title: "Stats", Width: 12, Children: []*domain.WidgetNode{
 				{Type: "label", Text: "HP: 100"},
 			}},
 			{Type: "gameview", Weight: 1},
@@ -208,9 +209,9 @@ func TestReconcileCacheSkipsStaticSubtree(t *testing.T) {
 	}
 
 	viewCallCount := 0
-	viewFn := func(buf *common.ImageBuffer, x, y, w, h int) {
+	viewFn := func(buf *render.ImageBuffer, x, y, w, h int) {
 		viewCallCount++
-		buf.WriteString(x, y, "frame", nil, nil, common.AttrNone)
+		buf.WriteString(x, y, "frame", nil, nil, render.AttrNone)
 	}
 
 	gw1 := ReconcileGameWindow(nil, tree, viewFn, nil)
@@ -226,10 +227,10 @@ func TestReconcileCacheSkipsStaticSubtree(t *testing.T) {
 	}
 
 	// Second reconcile with same tree — static panel should be reused.
-	tree2 := &common.WidgetNode{
+	tree2 := &domain.WidgetNode{
 		Type: "hsplit",
-		Children: []*common.WidgetNode{
-			{Type: "panel", Title: "Stats", Width: 12, Children: []*common.WidgetNode{
+		Children: []*domain.WidgetNode{
+			{Type: "panel", Title: "Stats", Width: 12, Children: []*domain.WidgetNode{
 				{Type: "label", Text: "HP: 100"},
 			}},
 			{Type: "gameview", Weight: 1},
@@ -256,26 +257,26 @@ func TestReconcileCacheSkipsStaticSubtree(t *testing.T) {
 }
 
 func TestReconcileCacheInvalidatesOnChange(t *testing.T) {
-	tree1 := &common.WidgetNode{
+	tree1 := &domain.WidgetNode{
 		Type: "hsplit",
-		Children: []*common.WidgetNode{
+		Children: []*domain.WidgetNode{
 			{Type: "label", Text: "v1", Width: 10},
 			{Type: "gameview", Weight: 1},
 		},
 	}
 
-	gw1 := ReconcileGameWindow(nil, tree1, func(buf *common.ImageBuffer, x, y, w, h int) {}, nil)
+	gw1 := ReconcileGameWindow(nil, tree1, func(buf *render.ImageBuffer, x, y, w, h int) {}, nil)
 
 	// Change the label text — hash should differ, so it gets rebuilt.
-	tree2 := &common.WidgetNode{
+	tree2 := &domain.WidgetNode{
 		Type: "hsplit",
-		Children: []*common.WidgetNode{
+		Children: []*domain.WidgetNode{
 			{Type: "label", Text: "v2", Width: 10},
 			{Type: "gameview", Weight: 1},
 		},
 	}
 
-	gw2 := ReconcileGameWindow(gw1, tree2, func(buf *common.ImageBuffer, x, y, w, h int) {}, nil)
+	gw2 := ReconcileGameWindow(gw1, tree2, func(buf *render.ImageBuffer, x, y, w, h int) {}, nil)
 
 	cached1 := gw1.Controls["0.0"]
 	cached2 := gw2.Controls["0.0"]

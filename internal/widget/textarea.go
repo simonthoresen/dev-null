@@ -3,7 +3,7 @@ package widget
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -99,7 +99,7 @@ func (a *TextArea) Update(msg tea.Msg) {
 	}
 }
 
-func (a *TextArea) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
+func (a *TextArea) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
 	a.height = height
 	fieldW := max(1, width-2) // -2 for "[" and "]"
 	baseFg := layer.FgC()
@@ -125,8 +125,8 @@ func (a *TextArea) Render(buf *common.ImageBuffer, x, y, width, height int, focu
 		row := y + i
 
 		// Brackets.
-		buf.SetChar(x, row, '[', baseFg, baseBg, common.AttrNone)
-		buf.SetChar(x+width-1, row, ']', baseFg, baseBg, common.AttrNone)
+		buf.SetChar(x, row, '[', baseFg, baseBg, render.AttrNone)
+		buf.SetChar(x+width-1, row, ']', baseFg, baseBg, render.AttrNone)
 
 		var lineContent string
 		if lineIdx < len(a.Lines) {
@@ -139,17 +139,17 @@ func (a *TextArea) Render(buf *common.ImageBuffer, x, y, width, height int, focu
 				if col >= fieldW {
 					break
 				}
-				buf.SetChar(x+1+col, row, r, inputFg, inputBg, common.AttrNone)
+				buf.SetChar(x+1+col, row, r, inputFg, inputBg, render.AttrNone)
 				col++
 			}
 			// Dots for remaining.
 			for col < fieldW {
-				buf.SetChar(x+1+col, row, '·', inputFg, inputBg, common.AttrFaint)
+				buf.SetChar(x+1+col, row, '·', inputFg, inputBg, render.AttrFaint)
 				col++
 			}
 		} else {
 			for col := 0; col < fieldW; col++ {
-				buf.SetChar(x+1+col, row, '·', inputFg, inputBg, common.AttrFaint)
+				buf.SetChar(x+1+col, row, '·', inputFg, inputBg, render.AttrFaint)
 			}
 		}
 	}

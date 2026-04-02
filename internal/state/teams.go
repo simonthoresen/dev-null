@@ -1,7 +1,7 @@
 package state
 
 import (
-	"null-space/common"
+	"null-space/internal/domain"
 	"sort"
 	"strings"
 )
@@ -18,12 +18,12 @@ var TeamColors = []string{
 	"#aa55ff", // purple
 }
 
-func (s *CentralState) GetTeams() []common.Team {
+func (s *CentralState) GetTeams() []domain.Team {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	teams := make([]common.Team, len(s.Teams))
+	teams := make([]domain.Team, len(s.Teams))
 	for i, t := range s.Teams {
-		teams[i] = common.Team{
+		teams[i] = domain.Team{
 			Name:    t.Name,
 			Color:   t.Color,
 			Players: append([]string(nil), t.Players...),
@@ -90,7 +90,7 @@ func (s *CentralState) MovePlayerToTeam(playerID string, teamIndex int) {
 		if p != nil {
 			name = "Team " + p.Name
 		}
-		s.Teams = append(s.Teams, common.Team{
+		s.Teams = append(s.Teams, domain.Team{
 			Name:    name,
 			Color:   s.nextAvailableColor(),
 			Players: []string{playerID},

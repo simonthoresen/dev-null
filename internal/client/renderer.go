@@ -14,7 +14,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/hajimehoshi/bitmapfont/v4"
 
-	"null-space/common"
+	"null-space/internal/render"
 )
 
 // cellW and cellH are the pixel dimensions of a single terminal cell.
@@ -32,7 +32,7 @@ type Game struct {
 	fontFace text.Face
 
 	// Charmap state.
-	charmapDef  *common.CharMapDef
+	charmapDef  *render.CharMapDef
 	atlasImage  *ebiten.Image
 	spriteCache map[rune]*ebiten.Image // PUA codepoint → cropped sprite
 
@@ -105,7 +105,7 @@ func (g *Game) readLoop() {
 }
 
 func (g *Game) loadCharmap(jsonData []byte) {
-	var def common.CharMapDef
+	var def render.CharMapDef
 	if err := json.Unmarshal(jsonData, &def); err != nil {
 		return
 	}
@@ -248,7 +248,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				cx >= vx && cx < vx+vw &&
 				cy >= vy && cy < vy+vh
 
-			if inViewport && common.IsPUA(cell.Char) {
+			if inViewport && render.IsPUA(cell.Char) {
 				// Render sprite from charmap.
 				sprite := g.getSprite(cell.Char)
 				if sprite != nil {

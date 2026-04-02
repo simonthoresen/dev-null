@@ -3,7 +3,7 @@ package widget
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -14,7 +14,7 @@ type Control interface {
 	// Render writes the control's content into buf at position (x, y)
 	// within the given (width × height) region. focused is true when this
 	// control currently has keyboard focus.
-	Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer)
+	Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer)
 	// Update handles a tea.Msg. Only called when this control has focus.
 	Update(msg tea.Msg)
 	// MinSize returns the minimum (width, height) this control needs.

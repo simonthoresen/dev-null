@@ -5,7 +5,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/domain"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -14,7 +15,7 @@ import (
 // which menu title to highlight. It does NOT handle keyboard input — that
 // stays in OverlayState.HandleKey.
 type MenuBar struct {
-	Menus   []common.MenuDef
+	Menus   []domain.MenuDef
 	Overlay *OverlayState
 }
 
@@ -23,7 +24,7 @@ func (m *MenuBar) MinSize() (int, int)  { return 1, 1 }
 func (m *MenuBar) Update(_ tea.Msg)     {}
 
 // Render writes the menu bar directly into buf at (x, y) within (width × height).
-func (m *MenuBar) Render(buf *common.ImageBuffer, x, y, width, height int, _ bool, layer *theme.Layer) {
+func (m *MenuBar) Render(buf *render.ImageBuffer, x, y, width, height int, _ bool, layer *theme.Layer) {
 	if width <= 0 || height <= 0 {
 		return
 	}
@@ -35,7 +36,7 @@ func (m *MenuBar) Render(buf *common.ImageBuffer, x, y, width, height int, _ boo
 	hlBg := layer.HighlightBgC()
 
 	// Fill the entire bar with the base background.
-	buf.Fill(x, y, width, 1, ' ', fg, bg, common.AttrNone)
+	buf.Fill(x, y, width, 1, ' ', fg, bg, render.AttrNone)
 
 	col := x
 	for i, menu := range m.Menus {
@@ -47,7 +48,7 @@ func (m *MenuBar) Render(buf *common.ImageBuffer, x, y, width, height int, _ boo
 		if i > 0 {
 			sep := layer.Sep()
 			if sep != "" {
-				buf.WriteString(col, y, sep, fg, bg, common.AttrNone)
+				buf.WriteString(col, y, sep, fg, bg, render.AttrNone)
 				col++
 			}
 		}
@@ -57,7 +58,7 @@ func (m *MenuBar) Render(buf *common.ImageBuffer, x, y, width, height int, _ boo
 		// Leading space.
 		if col < x+width {
 			if focused {
-				buf.SetChar(col, y, ' ', hlFg, hlBg, common.AttrNone)
+				buf.SetChar(col, y, ' ', hlFg, hlBg, render.AttrNone)
 			}
 			col++
 		}
@@ -76,15 +77,15 @@ func (m *MenuBar) Render(buf *common.ImageBuffer, x, y, width, height int, _ boo
 			isShortcut := ampIdx >= 0 && ci == ampIdx
 			if focused {
 				if isShortcut {
-					buf.SetChar(col, y, ch, accentFg, hlBg, common.AttrBold|common.AttrUnderline)
+					buf.SetChar(col, y, ch, accentFg, hlBg, render.AttrBold|render.AttrUnderline)
 				} else {
-					buf.SetChar(col, y, ch, hlFg, hlBg, common.AttrBold)
+					buf.SetChar(col, y, ch, hlFg, hlBg, render.AttrBold)
 				}
 			} else {
 				if isShortcut {
-					buf.SetChar(col, y, ch, accentFg, bg, common.AttrUnderline)
+					buf.SetChar(col, y, ch, accentFg, bg, render.AttrUnderline)
 				} else {
-					buf.SetChar(col, y, ch, fg, bg, common.AttrNone)
+					buf.SetChar(col, y, ch, fg, bg, render.AttrNone)
 				}
 			}
 			col++
@@ -93,7 +94,7 @@ func (m *MenuBar) Render(buf *common.ImageBuffer, x, y, width, height int, _ boo
 		// Trailing space.
 		if col < x+width {
 			if focused {
-				buf.SetChar(col, y, ' ', hlFg, hlBg, common.AttrNone)
+				buf.SetChar(col, y, ' ', hlFg, hlBg, render.AttrNone)
 			}
 			col++
 		}

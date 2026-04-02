@@ -6,15 +6,15 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/common"
+	"null-space/internal/domain"
 )
 
 // ─── Menu bar render tests ───────────────────────────────────────────────────
 
 func TestRenderNCBarSingleMenu(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}}},
 	}
 	pal := testTheme().LayerAt(1)
 	output := o.RenderMenuBar(20, menus, pal)
@@ -38,10 +38,10 @@ func TestRenderNCBarSingleMenu(t *testing.T) {
 
 func TestRenderNCBarMultipleMenus(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
-		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
-		{Label: "&Help", Items: []common.MenuItemDef{{Label: "&About"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}}},
+		{Label: "&Edit", Items: []domain.MenuItemDef{{Label: "&Copy"}}},
+		{Label: "&Help", Items: []domain.MenuItemDef{{Label: "&About"}}},
 	}
 	pal := testTheme().LayerAt(1)
 	output := o.RenderMenuBar(40, menus, pal)
@@ -61,9 +61,9 @@ func TestRenderNCBarMultipleMenus(t *testing.T) {
 
 func TestRenderNCBarFocusedMenu(t *testing.T) {
 	o := OverlayState{MenuFocused: true, MenuCursor: 1, OpenMenu: -1}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
-		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}}},
+		{Label: "&Edit", Items: []domain.MenuItemDef{{Label: "&Copy"}}},
 	}
 	pal := testTheme().LayerAt(1)
 	output := o.RenderMenuBar(30, menus, pal)
@@ -82,8 +82,8 @@ func TestRenderNCBarFocusedMenu(t *testing.T) {
 
 func TestRenderDropdownBasic(t *testing.T) {
 	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&New"},
 			{Label: "&Open"},
 			{Label: "&Save"},
@@ -135,8 +135,8 @@ func TestRenderDropdownBasic(t *testing.T) {
 
 func TestRenderDropdownWithSeparator(t *testing.T) {
 	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&New"},
 			{Label: "---"}, // separator
 			{Label: "&Quit"},
@@ -166,8 +166,8 @@ func TestRenderDropdownWithSeparator(t *testing.T) {
 
 func TestRenderDropdownWithHotkey(t *testing.T) {
 	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&Quit", Hotkey: "ctrl+q"},
 		}},
 	}
@@ -183,8 +183,8 @@ func TestRenderDropdownWithHotkey(t *testing.T) {
 
 func TestRenderDropdownWithToggles(t *testing.T) {
 	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
-	menus := []common.MenuDef{
-		{Label: "&View", Items: []common.MenuItemDef{
+	menus := []domain.MenuDef{
+		{Label: "&View", Items: []domain.MenuItemDef{
 			{Label: "&Sidebar", Toggle: true, Checked: func() bool { return true }},
 			{Label: "&Toolbar", Toggle: true, Checked: func() bool { return false }},
 		}},
@@ -213,9 +213,9 @@ func TestRenderDropdownWithToggles(t *testing.T) {
 
 func TestRenderDropdownSecondMenu(t *testing.T) {
 	o := OverlayState{MenuFocused: true, MenuCursor: 1, OpenMenu: 1, DropCursor: 0}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
-		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}, {Label: "&Paste"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}}},
+		{Label: "&Edit", Items: []domain.MenuItemDef{{Label: "&Copy"}, {Label: "&Paste"}}},
 	}
 	pal := testTheme().LayerAt(1)
 	box := o.RenderDropdown(menus, 0, pal)
@@ -248,12 +248,12 @@ func TestRenderDropdownSecondMenu(t *testing.T) {
 
 func TestDropdownOnBar(t *testing.T) {
 	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&New"},
 			{Label: "&Open"},
 		}},
-		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
+		{Label: "&Edit", Items: []domain.MenuItemDef{{Label: "&Copy"}}},
 	}
 	pal := testTheme().LayerAt(1)
 
@@ -310,7 +310,7 @@ func TestDropdownOnBar(t *testing.T) {
 
 func TestRenderDialogBasic(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
-	o.PushDialog(common.DialogRequest{
+	o.PushDialog(domain.DialogRequest{
 		Title: "Confirm",
 		Body:  "Are you sure?",
 	})
@@ -357,7 +357,7 @@ func TestRenderDialogBasic(t *testing.T) {
 
 func TestRenderDialogMultipleButtons(t *testing.T) {
 	o := OverlayState{OpenMenu: -1, DialogFocus: 1}
-	o.PushDialog(common.DialogRequest{
+	o.PushDialog(domain.DialogRequest{
 		Title:   "Save?",
 		Body:    "Unsaved changes.",
 		Buttons: []string{"Yes", "No", "Cancel"},
@@ -391,7 +391,7 @@ func TestRenderDialogMultipleButtons(t *testing.T) {
 
 func TestRenderDialogMultilineBody(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
-	o.PushDialog(common.DialogRequest{
+	o.PushDialog(domain.DialogRequest{
 		Title: "Info",
 		Body:  "Line one\nLine two\nLine three",
 	})
@@ -417,7 +417,7 @@ func TestRenderDialogMultilineBody(t *testing.T) {
 
 func TestRenderDialogCentered(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
-	o.PushDialog(common.DialogRequest{
+	o.PushDialog(domain.DialogRequest{
 		Title: "Test",
 		Body:  "Hi",
 	})
@@ -438,7 +438,7 @@ func TestRenderDialogCentered(t *testing.T) {
 
 func TestDialogOnBackground(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
-	o.PushDialog(common.DialogRequest{
+	o.PushDialog(domain.DialogRequest{
 		Title: "OK?",
 		Body:  "Sure?",
 	})

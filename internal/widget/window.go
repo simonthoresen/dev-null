@@ -4,7 +4,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -30,13 +30,13 @@ type Window struct {
 // Returns the string representation for backward compatibility with callers
 // that have not yet been migrated to use ImageBuffer directly.
 func (w *Window) Render(x, y, width, height int, layer *theme.Layer) string {
-	buf := common.NewImageBuffer(width, height)
+	buf := render.NewImageBuffer(width, height)
 	w.RenderToBuf(buf, x, y, width, height, layer)
 	return buf.ToString()
 }
 
 // RenderToBuf draws the window into the given buffer at absolute position (x, y).
-func (w *Window) RenderToBuf(buf *common.ImageBuffer, x, y, width, height int, layer *theme.Layer) {
+func (w *Window) RenderToBuf(buf *render.ImageBuffer, x, y, width, height int, layer *theme.Layer) {
 	w.screenX = x
 	w.screenY = y
 	w.width = width
@@ -54,40 +54,40 @@ func (w *Window) RenderToBuf(buf *common.ImageBuffer, x, y, width, height int, l
 	hlBg := layer.HighlightBgC()
 
 	// Fill inner area with base bg.
-	buf.Fill(x, y, width, height, ' ', fg, bg, common.AttrNone)
+	buf.Fill(x, y, width, height, ' ', fg, bg, render.AttrNone)
 
 	// Top border row (skipped when NoTopBorder).
 	if !w.NoTopBorder {
-		buf.SetChar(x, y, common.RuneOf(layer.OTL()), fg, bg, common.AttrNone)
-		buf.SetChar(x+width-1, y, common.RuneOf(layer.OTR()), fg, bg, common.AttrNone)
+		buf.SetChar(x, y, render.RuneOf(layer.OTL()), fg, bg, render.AttrNone)
+		buf.SetChar(x+width-1, y, render.RuneOf(layer.OTR()), fg, bg, render.AttrNone)
 		if w.Title != "" {
 			titleText := " " + w.Title + " "
-			buf.SetChar(x+1, y, common.RuneOf(layer.IH()), fg, bg, common.AttrNone)
-			n := buf.WriteString(x+2, y, titleText, hlFg, hlBg, common.AttrBold)
+			buf.SetChar(x+1, y, render.RuneOf(layer.IH()), fg, bg, render.AttrNone)
+			n := buf.WriteString(x+2, y, titleText, hlFg, hlBg, render.AttrBold)
 			for col := x + 2 + n; col < x+width-1; col++ {
-				buf.SetChar(col, y, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
+				buf.SetChar(col, y, render.RuneOf(layer.OH()), fg, bg, render.AttrNone)
 			}
 		} else {
 			for col := x + 1; col < x+width-1; col++ {
-				buf.SetChar(col, y, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
+				buf.SetChar(col, y, render.RuneOf(layer.OH()), fg, bg, render.AttrNone)
 			}
 		}
 	}
 
 	// Bottom border row.
 	boty := y + height - 1
-	buf.SetChar(x, boty, common.RuneOf(layer.OBL()), fg, bg, common.AttrNone)
-	buf.SetChar(x+width-1, boty, common.RuneOf(layer.OBR()), fg, bg, common.AttrNone)
+	buf.SetChar(x, boty, render.RuneOf(layer.OBL()), fg, bg, render.AttrNone)
+	buf.SetChar(x+width-1, boty, render.RuneOf(layer.OBR()), fg, bg, render.AttrNone)
 	for col := x + 1; col < x+width-1; col++ {
-		buf.SetChar(col, boty, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
+		buf.SetChar(col, boty, render.RuneOf(layer.OH()), fg, bg, render.AttrNone)
 	}
 
 	// Left and right border columns.
-	vr := common.RuneOf(layer.OV())
+	vr := render.RuneOf(layer.OV())
 	startRow := y + topRows
 	for row := startRow; row < boty; row++ {
-		buf.SetChar(x, row, vr, fg, bg, common.AttrNone)
-		buf.SetChar(x+width-1, row, vr, fg, bg, common.AttrNone)
+		buf.SetChar(x, row, vr, fg, bg, render.AttrNone)
+		buf.SetChar(x+width-1, row, vr, fg, bg, render.AttrNone)
 	}
 
 	// Compute grid layout.
@@ -112,15 +112,15 @@ func (w *Window) RenderToBuf(buf *common.ImageBuffer, x, y, width, height int, l
 		switch child.Control.(type) {
 		case *HDivider:
 			if child.Control.(*HDivider).Connected {
-				buf.SetChar(x, cy, common.RuneOf(layer.XL()), fg, bg, common.AttrNone)
-				buf.SetChar(x+width-1, cy, common.RuneOf(layer.XR()), fg, bg, common.AttrNone)
+				buf.SetChar(x, cy, render.RuneOf(layer.XL()), fg, bg, render.AttrNone)
+				buf.SetChar(x+width-1, cy, render.RuneOf(layer.XR()), fg, bg, render.AttrNone)
 			}
 		case *VDivider:
 			if child.Control.(*VDivider).Connected {
 				if !w.NoTopBorder {
-					buf.SetChar(cx, y, common.RuneOf(layer.XT()), fg, bg, common.AttrNone)
+					buf.SetChar(cx, y, render.RuneOf(layer.XT()), fg, bg, render.AttrNone)
 				}
-				buf.SetChar(cx, boty, common.RuneOf(layer.XB()), fg, bg, common.AttrNone)
+				buf.SetChar(cx, boty, render.RuneOf(layer.XB()), fg, bg, render.AttrNone)
 			}
 		}
 	}

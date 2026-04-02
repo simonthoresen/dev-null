@@ -1,4 +1,6 @@
-package common
+package domain
+
+import "null-space/internal/render"
 
 // Command is a registered slash command.
 type Command struct {
@@ -9,8 +11,8 @@ type Command struct {
 	// Complete returns all valid candidates for the next arg given what was
 	// already typed. TabComplete calls this, filters by partial, and cycles.
 	// If nil and FirstArgIsPlayer is false, no tab completion is offered.
-	Complete         func(before []string) []string
-	Handler          func(ctx CommandContext, args []string)
+	Complete func(before []string) []string
+	Handler  func(ctx CommandContext, args []string)
 }
 
 // CommandContext is passed to command handlers.
@@ -56,7 +58,7 @@ type DialogRequest struct {
 type Shader interface {
 	Name() string
 	Update(dt float64)
-	Process(buf *ImageBuffer)
+	Process(buf *render.ImageBuffer)
 	Unload()
 }
 
@@ -65,20 +67,20 @@ type Shader interface {
 // All methods are implemented by jsRuntime; optional JS hooks return zero values
 // when not defined by the game script.
 type Game interface {
-	GameName() string   // display name (fallback: filename stem)
+	GameName() string     // display name (fallback: filename stem)
 	TeamRange() TeamRange // supported team count range (zero = no constraint)
 	Init(savedState any)  // called before splash with persisted state (or nil)
 	Start()               // called at splash→playing transition
 	Update(dt float64)    // called once per tick with seconds since last update
 	OnPlayerLeave(playerID string)
 	OnInput(playerID, key string)
-	Render(buf *ImageBuffer, playerID string, x, y, width, height int)
+	Render(buf *render.ImageBuffer, playerID string, x, y, width, height int)
 	// RenderSplash renders a custom splash screen into buf. Returns false to
 	// use the framework's default figlet-based splash screen.
-	RenderSplash(buf *ImageBuffer, playerID string, x, y, width, height int) bool
+	RenderSplash(buf *render.ImageBuffer, playerID string, x, y, width, height int) bool
 	// RenderGameOver renders a custom game-over screen into buf. Returns false
 	// to use the framework's default game-over screen with figlet title + results.
-	RenderGameOver(buf *ImageBuffer, playerID string, x, y, width, height int, results []GameResult) bool
+	RenderGameOver(buf *render.ImageBuffer, playerID string, x, y, width, height int, results []GameResult) bool
 	// RenderNC returns a declarative widget tree for the game viewport.
 	// If it returns nil, the framework falls back to wrapping Render() in a
 	// default gameview node. Games can mix NC panels with raw Render() output
@@ -88,7 +90,7 @@ type Game interface {
 	CommandBar(playerID string) string // game-controlled command bar (above framework status bar)
 	Commands() []Command
 	Menus() []MenuDef
-	CharMap() *CharMapDef // returns nil if the game doesn't use a charmap
+	CharMap() *render.CharMapDef // returns nil if the game doesn't use a charmap
 	// RenderCanvas calls the game's renderCanvas(ctx, w, h) hook if defined.
 	// Returns the rendered image as PNG bytes, or nil if the game has no canvas hook.
 	// The canvas dimensions are viewport cells × canvasScale pixels per cell.
@@ -101,4 +103,3 @@ type Game interface {
 	Suspend() any            // called on suspend; returns session state to persist
 	Resume(sessionState any) // called on resume; nil sessionState = warm resume (runtime still alive)
 }
-

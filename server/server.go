@@ -23,7 +23,8 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/ssh"
 
-	"null-space/common"
+	"null-space/internal/domain"
+	"null-space/internal/render"
 	"null-space/internal/chrome"
 	"null-space/internal/console"
 	"null-space/internal/engine"
@@ -37,7 +38,7 @@ type Server struct {
 	registry *commandRegistry
 	dataDir  string // root of games/, logs/
 	port     string // SSH listen port, e.g. "23234"
-	clock    common.Clock // central server clock (mockable in tests)
+	clock    domain.Clock // central server clock (mockable in tests)
 
 	programs   map[string]*tea.Program // key = playerID
 	programsMu sync.Mutex
@@ -47,7 +48,7 @@ type Server struct {
 
 	// channels for communicating events to the console
 	logCh   chan string         // server log lines (legacy, used by serverLog)
-	chatCh  chan common.Message // new chat messages
+	chatCh  chan domain.Message // new chat messages
 	slogCh  chan console.SlogLine // slog records routed to console
 
 	chatLogFile *os.File // persistent chat log (timestamp-chat.log)
@@ -71,11 +72,11 @@ func New(address, password, dataDir string) (*Server, error) {
 		state:    state.New(password),
 		registry: newCommandRegistry(),
 		dataDir:  dataDir,
-		clock:    common.RealClock{},
+		clock:    domain.RealClock{},
 		programs: make(map[string]*tea.Program),
 		sessions: make(map[string]ssh.Session),
 		logCh:    make(chan string, 256),
-		chatCh:   make(chan common.Message, 256),
+		chatCh:   make(chan domain.Message, 256),
 		slogCh:   make(chan console.SlogLine, 256),
 	}
 
@@ -109,18 +110,18 @@ func (a *Server) LogCh() <-chan string {
 }
 
 func (a *Server) SlogCh() <-chan console.SlogLine { return a.slogCh }
-func (a *Server) ChatCh() <-chan common.Message {
+func (a *Server) ChatCh() <-chan domain.Message {
 	return a.chatCh
 }
 
 // --- Interface methods for chrome.ServerAPI and console.ServerAPI ---
 
 func (a *Server) State() *state.CentralState { return a.state }
-func (a *Server) Clock() common.Clock         { return a.clock }
+func (a *Server) Clock() domain.Clock         { return a.clock }
 func (a *Server) DataDir() string             { return a.dataDir }
 func (a *Server) Uptime() string              { return a.uptime() }
 
-func (a *Server) BroadcastChat(msg common.Message) { a.broadcastChat(msg) }
+func (a *Server) BroadcastChat(msg domain.Message) { a.broadcastChat(msg) }
 func (a *Server) BroadcastMsg(msg tea.Msg)          { a.broadcastMsg(msg) }
 func (a *Server) SendToPlayer(playerID string, msg tea.Msg) { a.sendToPlayer(playerID, msg) }
 func (a *Server) ServerLog(text string)              { a.serverLog(text) }
@@ -129,7 +130,7 @@ func (a *Server) KickPlayer(playerID string) error   { return a.kickPlayer(playe
 func (a *Server) TabCandidates(input string, playerNames []string) (string, []string) {
 	return a.registry.TabCandidates(input, playerNames)
 }
-func (a *Server) DispatchCommand(input string, ctx common.CommandContext) {
+func (a *Server) DispatchCommand(input string, ctx domain.CommandContext) {
 	a.registry.Dispatch(input, ctx)
 }
 func (a *Server) SetConsoleWidth(w int) { a.consoleWidth = w }
@@ -346,10 +347,10 @@ func (a *Server) LogGameList() {
 	gamesDir := filepath.Join(a.dataDir, "games")
 	available := engine.ListGames(gamesDir)
 	if len(available) == 0 {
-		a.broadcastChat(common.Message{Text: "No games found in games/"})
+		a.broadcastChat(domain.Message{Text: "No games found in games/"})
 		return
 	}
-	a.broadcastChat(common.Message{Text: a.formatGameList(gamesDir, available)})
+	a.broadcastChat(domain.Message{Text: a.formatGameList(gamesDir, available)})
 }
 
 func (a *Server) sessionMiddleware() wish.Middleware {
@@ -421,8 +422,8 @@ func (a *Server) sessionProgramOptions(sess ssh.Session) []tea.ProgramOption {
 	return opts
 }
 
-func (a *Server) registerSession(sess ssh.Session) *common.Player {
-	player := &common.Player{
+func (a *Server) registerSession(sess ssh.Session) *domain.Player {
+	player := &domain.Player{
 		ID:   sess.Context().SessionID(),
 		Name: a.uniqueName(sess.User()),
 	}
@@ -434,14 +435,14 @@ func (a *Server) registerSession(sess ssh.Session) *common.Player {
 	a.state.AddPlayer(player)
 	slog.Info("player joined", "player_id", player.ID, "name", player.Name)
 
-	joinMsg := common.Message{
+	joinMsg := domain.Message{
 		Author: "",
 		Text:   fmt.Sprintf("%s joined.", player.Name),
 	}
 	a.broadcastChat(joinMsg)
-	a.broadcastMsg(common.PlayerJoinedMsg{Player: player})
+	a.broadcastMsg(domain.PlayerJoinedMsg{Player: player})
 
-	a.broadcastMsg(common.TeamUpdatedMsg{})
+	a.broadcastMsg(domain.TeamUpdatedMsg{})
 
 	// Check if this player was disconnected from a running game.
 	a.state.Lock()
@@ -466,7 +467,7 @@ func (a *Server) unregisterSession(playerID string) {
 	player := a.state.GetPlayer(playerID)
 	if player != nil {
 		slog.Info("player left", "player_id", playerID, "name", player.Name)
-		a.broadcastChat(common.Message{
+		a.broadcastChat(domain.Message{
 			Text: fmt.Sprintf("%s left.", player.Name),
 		})
 	}
@@ -483,7 +484,7 @@ func (a *Server) unregisterSession(playerID string) {
 
 	// Always clean up lobby teams (game teams are a separate snapshot).
 	a.state.RemovePlayerFromTeams(playerID)
-	a.broadcastMsg(common.TeamUpdatedMsg{})
+	a.broadcastMsg(domain.TeamUpdatedMsg{})
 
 	a.state.RemovePlayer(playerID)
 
@@ -495,7 +496,7 @@ func (a *Server) unregisterSession(playerID string) {
 	delete(a.sessions, playerID)
 	a.sessionsMu.Unlock()
 
-	a.broadcastMsg(common.PlayerLeftMsg{PlayerID: playerID})
+	a.broadcastMsg(domain.PlayerLeftMsg{PlayerID: playerID})
 }
 
 func (a *Server) runTicker(ctx context.Context) {
@@ -515,14 +516,14 @@ func (a *Server) runTicker(ctx context.Context) {
 
 			// Call Update(dt) once per tick — before broadcast so game
 			// state is fresh when players render.
-			if game != nil && phase == common.PhasePlaying {
+			if game != nil && phase == domain.PhasePlaying {
 				now := a.clock.Now()
 				dt := now.Sub(a.lastUpdate).Seconds()
 				a.lastUpdate = now
 				game.Update(dt)
 			}
 
-			a.broadcastMsg(common.TickMsg{N: n})
+			a.broadcastMsg(domain.TickMsg{N: n})
 
 			// Check if JS called gameOver().
 			a.checkGameOver()
@@ -537,7 +538,7 @@ func (a *Server) checkGameOver() {
 	phase := a.state.GamePhase
 	a.state.RUnlock()
 
-	if game == nil || phase != common.PhasePlaying {
+	if game == nil || phase != domain.PhasePlaying {
 		return
 	}
 	rt, ok := game.(*engine.JSRuntime)
@@ -560,13 +561,13 @@ func (a *Server) checkGameOver() {
 		}
 	}
 
-	a.state.SetGamePhase(common.PhaseGameOver)
+	a.state.SetGamePhase(domain.PhaseGameOver)
 	a.state.Lock()
 	a.state.GameOverResults = rt.GameOverResults()
 	a.state.Unlock()
 
-	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhaseGameOver})
-	a.broadcastChat(common.Message{Text: "Game over!"})
+	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhaseGameOver})
+	a.broadcastChat(domain.Message{Text: "Game over!"})
 	a.serverLog("game over — waiting for players to acknowledge")
 
 	// Start 15s timeout for game-over acknowledgment.
@@ -580,7 +581,7 @@ func (a *Server) gameOverTimeout() {
 	case <-a.gameOverTimer:
 	}
 	// Only unload if still in game-over phase.
-	if a.state.GetGamePhase() == common.PhaseGameOver {
+	if a.state.GetGamePhase() == domain.PhaseGameOver {
 		a.unloadGame()
 	}
 }
@@ -617,7 +618,7 @@ func (a *Server) broadcastMsg(msg tea.Msg) {
 	}
 }
 
-func (a *Server) broadcastChat(msg common.Message) {
+func (a *Server) broadcastChat(msg domain.Message) {
 	start := time.Now()
 	a.state.AddChat(msg)
 
@@ -641,7 +642,7 @@ func (a *Server) broadcastChat(msg common.Message) {
 	default:
 	}
 
-	a.broadcastMsg(common.ChatMsg{Msg: msg})
+	a.broadcastMsg(domain.ChatMsg{Msg: msg})
 	if dur := time.Since(start); dur > 100*time.Millisecond {
 		slog.Warn("broadcastChat slow", "duration", dur, "text", msg.Text)
 	}
@@ -667,7 +668,7 @@ func (a *Server) kickPlayer(playerID string) error {
 }
 
 // ShowDialog sends a modal dialog request to the specified player's TUI program.
-func (a *Server) ShowDialog(playerID string, d common.DialogRequest) {
+func (a *Server) ShowDialog(playerID string, d domain.DialogRequest) {
 	a.programsMu.Lock()
 	prog := a.programs[playerID]
 	a.programsMu.Unlock()
@@ -759,7 +760,7 @@ func (a *Server) loadGame(path string) error {
 	}
 
 	// Create a buffered channel for JS→server chat; drained by a goroutine below.
-	gameChatCh := make(chan common.Message, 64)
+	gameChatCh := make(chan domain.Message, 64)
 
 	rt, err := engine.LoadGame(path, a.serverLog, gameChatCh, a.clock, a.dataDir)
 	if err != nil {
@@ -789,7 +790,7 @@ func (a *Server) loadGame(path string) error {
 	a.state.GameDisconnected = make(map[string]string)
 	a.state.ActiveGame = rt
 	a.state.GameName = name
-	a.state.GamePhase = common.PhaseSplash
+	a.state.GamePhase = domain.PhaseSplash
 	a.state.Unlock()
 
 	// Populate the teams cache so JS teams() returns correct data.
@@ -816,9 +817,9 @@ func (a *Server) loadGame(path string) error {
 		a.registry.Register(cmd)
 	}
 
-	a.broadcastMsg(common.GameLoadedMsg{Name: name})
-	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhaseSplash})
-	a.broadcastChat(common.Message{Text: fmt.Sprintf("Game loaded: %s", name)})
+	a.broadcastMsg(domain.GameLoadedMsg{Name: name})
+	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhaseSplash})
+	a.broadcastChat(domain.Message{Text: fmt.Sprintf("Game loaded: %s", name)})
 	a.serverLog(fmt.Sprintf("game loaded: %s (splash)", name))
 
 	// Start splash goroutine: waits up to 10s or until admin triggers start.
@@ -835,17 +836,17 @@ func (a *Server) splashTimer() {
 	}
 	// Only transition if still in splash phase.
 	a.state.Lock()
-	if a.state.GamePhase != common.PhaseSplash {
+	if a.state.GamePhase != domain.PhaseSplash {
 		a.state.Unlock()
 		return
 	}
 
-	a.state.GamePhase = common.PhasePlaying
+	a.state.GamePhase = domain.PhasePlaying
 	game := a.state.ActiveGame
 	a.state.Unlock()
 
 	a.lastUpdate = a.clock.Now()
-	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhasePlaying})
+	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhasePlaying})
 	a.serverLog("game started (playing)")
 
 	if game != nil {
@@ -888,7 +889,7 @@ func (a *Server) unloadGame() {
 	}
 	a.state.ActiveGame = nil
 	a.state.GameName = ""
-	a.state.GamePhase = common.PhaseNone
+	a.state.GamePhase = domain.PhaseNone
 	a.state.GameOverReady = nil
 	a.state.Unlock()
 
@@ -902,9 +903,9 @@ func (a *Server) unloadGame() {
 		close(jrt.ChatCh)
 	}
 
-	a.broadcastMsg(common.GameUnloadedMsg{})
-	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhaseNone})
-	a.broadcastChat(common.Message{Text: "Game unloaded."})
+	a.broadcastMsg(domain.GameUnloadedMsg{})
+	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhaseNone})
+	a.broadcastChat(domain.Message{Text: "Game unloaded."})
 	a.serverLog("game unloaded")
 }
 
@@ -916,7 +917,7 @@ func (a *Server) suspendGame(saveName string) error {
 	gameName := a.state.GameName
 	a.state.RUnlock()
 
-	if game == nil || phase != common.PhasePlaying {
+	if game == nil || phase != domain.PhasePlaying {
 		return fmt.Errorf("no game is currently playing")
 	}
 	if !game.CanSuspend() {
@@ -928,9 +929,9 @@ func (a *Server) suspendGame(saveName string) error {
 
 	// Build the save.
 	a.state.RLock()
-	teams := make([]common.Team, len(a.state.GameTeams))
+	teams := make([]domain.Team, len(a.state.GameTeams))
 	for i, t := range a.state.GameTeams {
-		teams[i] = common.Team{
+		teams[i] = domain.Team{
 			Name:    t.Name,
 			Color:   t.Color,
 			Players: append([]string(nil), t.Players...),
@@ -961,12 +962,12 @@ func (a *Server) suspendGame(saveName string) error {
 
 	// Transition to suspended phase — runtime stays alive.
 	a.state.Lock()
-	a.state.GamePhase = common.PhaseSuspended
+	a.state.GamePhase = domain.PhaseSuspended
 	a.state.Unlock()
 
-	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhaseSuspended})
-	a.broadcastMsg(common.GameSuspendedMsg{Name: gameName})
-	a.broadcastChat(common.Message{Text: fmt.Sprintf("Game suspended: %s (save: %s)", gameName, saveName)})
+	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhaseSuspended})
+	a.broadcastMsg(domain.GameSuspendedMsg{Name: gameName})
+	a.broadcastChat(domain.Message{Text: fmt.Sprintf("Game suspended: %s (save: %s)", gameName, saveName)})
 	a.serverLog(fmt.Sprintf("game suspended: %s/%s", gameName, saveName))
 	return nil
 }
@@ -988,7 +989,7 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 	currentPhase := a.state.GamePhase
 	a.state.RUnlock()
 
-	isWarm := currentGame != nil && currentName == gameName && currentPhase == common.PhaseSuspended
+	isWarm := currentGame != nil && currentName == gameName && currentPhase == domain.PhaseSuspended
 
 	if isWarm {
 		// Warm resume — runtime is alive, just unpause.
@@ -1000,13 +1001,13 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 		currentGame.Resume(nil)
 
 		a.state.Lock()
-		a.state.GamePhase = common.PhasePlaying
+		a.state.GamePhase = domain.PhasePlaying
 		a.state.Unlock()
 
 		a.lastUpdate = a.clock.Now()
-		a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhasePlaying})
-		a.broadcastMsg(common.GameResumedMsg{Name: gameName})
-		a.broadcastChat(common.Message{Text: fmt.Sprintf("Game resumed: %s", gameName)})
+		a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhasePlaying})
+		a.broadcastMsg(domain.GameResumedMsg{Name: gameName})
+		a.broadcastChat(domain.Message{Text: fmt.Sprintf("Game resumed: %s", gameName)})
 		a.serverLog(fmt.Sprintf("game resumed (warm): %s/%s", gameName, saveName))
 		return nil
 	}
@@ -1017,13 +1018,13 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 	}
 
 	// Validate team count.
-	tr := common.TeamRange{} // will be updated after loading
+	tr := domain.TeamRange{} // will be updated after loading
 	_ = tr
 
 	gamesDir := filepath.Join(a.dataDir, "games")
 	path := engine.ResolveGamePath(gamesDir, gameName)
 
-	gameChatCh := make(chan common.Message, 64)
+	gameChatCh := make(chan domain.Message, 64)
 	rt, err := engine.LoadGame(path, a.serverLog, gameChatCh, a.clock, a.dataDir)
 	if err != nil {
 		close(gameChatCh)
@@ -1054,7 +1055,7 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 	}
 	a.state.ActiveGame = rt
 	a.state.GameName = gameName
-	a.state.GamePhase = common.PhasePlaying // skip splash
+	a.state.GamePhase = domain.PhasePlaying // skip splash
 	a.state.Unlock()
 
 	// Populate teams cache.
@@ -1084,10 +1085,10 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 	}
 
 	a.lastUpdate = a.clock.Now()
-	a.broadcastMsg(common.GameLoadedMsg{Name: gameName})
-	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhasePlaying})
-	a.broadcastMsg(common.GameResumedMsg{Name: gameName})
-	a.broadcastChat(common.Message{Text: fmt.Sprintf("Game resumed: %s (from save: %s)", gameName, saveName)})
+	a.broadcastMsg(domain.GameLoadedMsg{Name: gameName})
+	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhasePlaying})
+	a.broadcastMsg(domain.GameResumedMsg{Name: gameName})
+	a.broadcastChat(domain.Message{Text: fmt.Sprintf("Game resumed: %s (from save: %s)", gameName, saveName)})
 	a.serverLog(fmt.Sprintf("game resumed (cold): %s/%s", gameName, saveName))
 
 	// Clean up the suspend save after successful resume.
@@ -1139,15 +1140,15 @@ func (a *Server) SetConsoleProgram(p *tea.Program) {
 }
 
 func (a *Server) registerBuiltins() {
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "invite",
 		Description: "Show the shareable join command for this server",
-		Handler: func(ctx common.CommandContext, args []string) {
+		Handler: func(ctx domain.CommandContext, args []string) {
 			ctx.Reply(a.inviteCommand())
 		},
 	})
 
-	helpHandler := func(ctx common.CommandContext, args []string) {
+	helpHandler := func(ctx domain.CommandContext, args []string) {
 		cmds := a.registry.All()
 		sort.Slice(cmds, func(i, j int) bool { return cmds[i].Name < cmds[j].Name })
 		var lines []string
@@ -1160,19 +1161,19 @@ func (a *Server) registerBuiltins() {
 		ctx.Reply(strings.Join(lines, "\n"))
 	}
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "help",
 		Description: "List available commands",
 		Handler:     helpHandler,
 	})
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "commands",
 		Description: "List available commands (alias for /help)",
 		Handler:     helpHandler,
 	})
 
-	exitHandler := func(ctx common.CommandContext, args []string) {
+	exitHandler := func(ctx domain.CommandContext, args []string) {
 		if ctx.IsConsole {
 			// Server console: shut down the server
 			if a.shutdownFn != nil {
@@ -1194,22 +1195,22 @@ func (a *Server) registerBuiltins() {
 		}
 	}
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "exit",
 		Description: "Disconnect from the server (stops server if used from console)",
 		Handler:     exitHandler,
 	})
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "quit",
 		Description: "Disconnect from the server (stops server if used from console)",
 		Handler:     exitHandler,
 	})
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "who",
 		Description: "List online players",
-		Handler: func(ctx common.CommandContext, args []string) {
+		Handler: func(ctx domain.CommandContext, args []string) {
 			players := a.state.ListPlayers()
 			names := make([]string, 0, len(players))
 			for _, p := range players {
@@ -1224,10 +1225,10 @@ func (a *Server) registerBuiltins() {
 		},
 	})
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "admin",
 		Description: "Elevate to admin (/admin <password>)",
-		Handler: func(ctx common.CommandContext, args []string) {
+		Handler: func(ctx domain.CommandContext, args []string) {
 			if len(args) != 1 {
 				ctx.Reply("Usage: /admin <password>")
 				return
@@ -1250,11 +1251,11 @@ func (a *Server) registerBuiltins() {
 		},
 	})
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "password",
 		Description: "Change admin password (admin only)",
 		AdminOnly:   true,
-		Handler: func(ctx common.CommandContext, args []string) {
+		Handler: func(ctx domain.CommandContext, args []string) {
 			if len(args) != 1 {
 				ctx.Reply("Usage: /password <new>")
 				return
@@ -1266,12 +1267,12 @@ func (a *Server) registerBuiltins() {
 		},
 	})
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:             "kick",
 		Description:      "Kick a player (admin only)",
 		AdminOnly:        true,
 		FirstArgIsPlayer: true,
-		Handler: func(ctx common.CommandContext, args []string) {
+		Handler: func(ctx domain.CommandContext, args []string) {
 			if len(args) < 1 {
 				ctx.Reply("Usage: /kick <player>")
 				return
@@ -1289,7 +1290,7 @@ func (a *Server) registerBuiltins() {
 		},
 	})
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "canvas",
 		Description: "Canvas rendering. /canvas scale <n> | /canvas off | /canvas info",
 		AdminOnly:   true,
@@ -1299,7 +1300,7 @@ func (a *Server) registerBuiltins() {
 			}
 			return nil
 		},
-		Handler: func(ctx common.CommandContext, args []string) {
+		Handler: func(ctx domain.CommandContext, args []string) {
 			if len(args) == 0 {
 				args = []string{"info"}
 			}
@@ -1320,7 +1321,7 @@ func (a *Server) registerBuiltins() {
 				// Estimate bandwidth for the console's dimensions.
 				viewW := 120 // typical console width
 				viewH := viewW * 9 / 16
-				bw := common.CanvasBandwidthMbps(viewW, viewH, n, 10)
+				bw := render.CanvasBandwidthMbps(viewW, viewH, n, 10)
 				ctx.Reply(fmt.Sprintf("Canvas scale set to %d (%dx%d px). ~%.1f Mbps/user at %dx%d viewport.",
 					n, viewW*n, viewH*n, bw, viewW, viewH))
 			case "off":
@@ -1340,7 +1341,7 @@ func (a *Server) registerBuiltins() {
 				hasCanvas := game != nil && game.HasCanvasMode()
 				viewW := 120
 				viewH := viewW * 9 / 16
-				bw := common.CanvasBandwidthMbps(viewW, viewH, scale, 10)
+				bw := render.CanvasBandwidthMbps(viewW, viewH, scale, 10)
 				status := "no game loaded"
 				if game != nil {
 					if hasCanvas {
@@ -1357,7 +1358,7 @@ func (a *Server) registerBuiltins() {
 		},
 	})
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "game",
 		Description: "Game management. /game list|load|unload|suspend|resume",
 		Complete: func(before []string) []string {
@@ -1381,7 +1382,7 @@ func (a *Server) registerBuiltins() {
 			}
 			return nil
 		},
-		Handler: func(ctx common.CommandContext, args []string) {
+		Handler: func(ctx domain.CommandContext, args []string) {
 			gamesDir := filepath.Join(a.dataDir, "games")
 			if len(args) == 0 {
 				available := engine.ListGames(gamesDir)
@@ -1488,14 +1489,14 @@ func (a *Server) registerBuiltins() {
 	})
 
 	// /games → /game list, /load <name> → /game load <name>
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "games",
 		Description: "Alias for /game (list available games)",
-		Handler: func(ctx common.CommandContext, args []string) {
+		Handler: func(ctx domain.CommandContext, args []string) {
 			a.registry.Dispatch("/game "+strings.Join(args, " "), ctx)
 		},
 	})
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:        "load",
 		Description: "Alias for /game load <name>",
 		AdminOnly:   true,
@@ -1505,16 +1506,16 @@ func (a *Server) registerBuiltins() {
 			}
 			return nil
 		},
-		Handler: func(ctx common.CommandContext, args []string) {
+		Handler: func(ctx domain.CommandContext, args []string) {
 			a.registry.Dispatch("/game load "+strings.Join(args, " "), ctx)
 		},
 	})
 
-	a.registry.Register(common.Command{
+	a.registry.Register(domain.Command{
 		Name:             "msg",
 		Description:      "Send a private message to a player",
 		FirstArgIsPlayer: true,
-		Handler: func(ctx common.CommandContext, args []string) {
+		Handler: func(ctx domain.CommandContext, args []string) {
 			if len(args) < 2 {
 				ctx.Reply("Usage: /msg <player> <text>")
 				return
@@ -1531,7 +1532,7 @@ func (a *Server) registerBuiltins() {
 					fromName = p.Name
 				}
 			}
-			pm := common.Message{
+			pm := domain.Message{
 				Author:    fromName,
 				Text:      text,
 				IsPrivate: true,
@@ -1539,7 +1540,7 @@ func (a *Server) registerBuiltins() {
 				FromID:    ctx.PlayerID,
 			}
 			// Send to recipient
-			a.sendToPlayer(target.ID, common.ChatMsg{Msg: pm})
+			a.sendToPlayer(target.ID, domain.ChatMsg{Msg: pm})
 			// Confirm to sender
 			ctx.Reply(fmt.Sprintf("[PM to %s] %s", target.Name, text))
 			// Log to console

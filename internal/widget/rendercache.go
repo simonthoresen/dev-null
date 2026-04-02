@@ -3,7 +3,7 @@ package widget
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -13,7 +13,7 @@ import (
 type RenderCached struct {
 	Inner   Control
 	Hash    uint64
-	cached  *common.ImageBuffer
+	cached  *render.ImageBuffer
 	cachedW int
 	cachedH int
 	prevHash uint64
@@ -31,7 +31,7 @@ func (rc *RenderCached) TabWant() (bool, bool) {
 	return false, false
 }
 
-func (rc *RenderCached) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
+func (rc *RenderCached) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
 	// Cache hit: hash matches, size matches, not focused (focus changes appearance).
 	if rc.Hash != 0 && rc.Hash == rc.prevHash && !focused &&
 		rc.cached != nil && rc.cachedW == width && rc.cachedH == height {
@@ -41,7 +41,7 @@ func (rc *RenderCached) Render(buf *common.ImageBuffer, x, y, width, height int,
 
 	// Cache miss: render into a sub-buffer, then blit to main buffer and cache.
 	if rc.Hash != 0 && !focused {
-		sub := common.NewImageBuffer(width, height)
+		sub := render.NewImageBuffer(width, height)
 		rc.Inner.Render(sub, 0, 0, width, height, false, layer)
 		buf.Blit(x, y, sub)
 		rc.cached = sub

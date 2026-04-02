@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -25,7 +25,7 @@ func newTestTextInput() *textinput.Model {
 
 // renderControl is a test helper that renders a control into a ImageBuffer and returns the string.
 func renderControl(ctrl Control, w, h int, focused bool, layer *theme.Layer) string {
-	buf := common.NewImageBuffer(w, h)
+	buf := render.NewImageBuffer(w, h)
 	ctrl.Render(buf, 0, 0, w, h, focused, layer)
 	return buf.ToString()
 }

@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -18,7 +18,7 @@ func (t *Table) Update(_ tea.Msg)    {}
 func (t *Table) Focusable() bool     { return false }
 func (t *Table) MinSize() (int, int) { return 1, len(t.Rows) }
 
-func (t *Table) Render(buf *common.ImageBuffer, x, y, width, height int, _ bool, layer *theme.Layer) {
+func (t *Table) Render(buf *render.ImageBuffer, x, y, width, height int, _ bool, layer *theme.Layer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 
@@ -54,14 +54,14 @@ func (t *Table) Render(buf *common.ImageBuffer, x, y, width, height int, _ bool,
 			if c < len(dataRow) {
 				cell = dataRow[c]
 			}
-			n := buf.WriteString(col, row, cell, fg, bg, common.AttrNone)
+			n := buf.WriteString(col, row, cell, fg, bg, render.AttrNone)
 			// Pad to column width.
 			for i := n; i < colWidths[c]; i++ {
-				buf.SetChar(col+i, row, ' ', fg, bg, common.AttrNone)
+				buf.SetChar(col+i, row, ' ', fg, bg, render.AttrNone)
 			}
 			col += colWidths[c]
 			if c < numCols-1 {
-				buf.SetChar(col, row, ' ', fg, bg, common.AttrNone)
+				buf.SetChar(col, row, ' ', fg, bg, render.AttrNone)
 				col++
 			}
 		}

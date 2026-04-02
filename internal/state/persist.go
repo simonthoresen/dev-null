@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"null-space/common"
+	"null-space/internal/domain"
 )
 
 // LoadGameState reads the saved state for a game from dist/state/<gameName>.json.
@@ -39,7 +39,7 @@ type SuspendSave struct {
 	GameName     string        `json:"gameName"`
 	SaveName     string        `json:"saveName"`
 	SavedAt      time.Time     `json:"savedAt"`
-	Teams        []common.Team `json:"teams"`
+	Teams        []domain.Team `json:"teams"`
 	Disconnected map[string]string `json:"disconnected,omitempty"`
 	GameState    any           `json:"gameState,omitempty"`
 }

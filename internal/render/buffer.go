@@ -1,4 +1,4 @@
-package common
+package render
 
 import (
 	"fmt"
@@ -37,7 +37,7 @@ type Pixel struct {
 // directly, and ToString() serializes it to an ANSI string at the end.
 type ImageBuffer struct {
 	Width, Height int
-	Pixels         []Pixel // row-major: Pixels[y*Width + x]
+	Pixels        []Pixel // row-major: Pixels[y*Width + x]
 }
 
 // NewImageBuffer creates a buffer filled with spaces and nil colors.
@@ -138,7 +138,7 @@ func (b *ImageBuffer) RecolorRect(x, y, w, h int, fg, bg color.Color, attr Pixel
 	}
 }
 
-// blitShadow renders an L-shaped drop shadow around a box in the buffer.
+// BlitShadow renders an L-shaped drop shadow around a box in the buffer.
 // Right strip: 1 cell wide. Bottom strip: boxW cells wide, offset by 1.
 func BlitShadow(buf *ImageBuffer, boxCol, boxRow, boxW, boxH int, shadowFg, shadowBg color.Color) {
 	// Right strip (skip first row to offset).

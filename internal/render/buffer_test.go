@@ -1,4 +1,4 @@
-package common
+package render
 
 import (
 	"image/color"
@@ -255,11 +255,11 @@ func TestToStringPlain(t *testing.T) {
 		t.Fatalf("expected 2 lines, got %d", len(lines))
 	}
 	// Strip ANSI to check chars.
-	if cellbufStripANSI(lines[0]) != "ABC" {
-		t.Errorf("row 0: expected 'ABC', got %q", cellbufStripANSI(lines[0]))
+	if stripANSI(lines[0]) != "ABC" {
+		t.Errorf("row 0: expected 'ABC', got %q", stripANSI(lines[0]))
 	}
-	if cellbufStripANSI(lines[1]) != "DEF" {
-		t.Errorf("row 1: expected 'DEF', got %q", cellbufStripANSI(lines[1]))
+	if stripANSI(lines[1]) != "DEF" {
+		t.Errorf("row 1: expected 'DEF', got %q", stripANSI(lines[1]))
 	}
 }
 
@@ -311,8 +311,8 @@ func TestAnsi256Color(t *testing.T) {
 	}
 }
 
-// cellbufStripANSI removes all ANSI escape sequences from a string.
-func cellbufStripANSI(s string) string {
+// stripANSI removes all ANSI escape sequences from a string.
+func stripANSI(s string) string {
 	var sb strings.Builder
 	i := 0
 	for i < len(s) {

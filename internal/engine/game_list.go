@@ -9,15 +9,15 @@ import (
 
 	"github.com/dop251/goja"
 
-	"null-space/common"
+	"null-space/internal/domain"
 )
 
 // ProbeGameTeamRange reads a game JS file and extracts the Game.teamRange property
 // without fully initializing the runtime. Returns zero TeamRange if not defined.
-func ProbeGameTeamRange(path string) common.TeamRange {
+func ProbeGameTeamRange(path string) domain.TeamRange {
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return common.TeamRange{}
+		return domain.TeamRange{}
 	}
 	vm := goja.New()
 	// Register stub globals so scripts using include/log/etc. don't crash.
@@ -47,25 +47,25 @@ func ProbeGameTeamRange(path string) common.TeamRange {
 	}
 	_, err = vm.RunScript(path, string(src))
 	if err != nil {
-		return common.TeamRange{}
+		return domain.TeamRange{}
 	}
 	gameVal := vm.Get("Game")
 	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
-		return common.TeamRange{}
+		return domain.TeamRange{}
 	}
 	gameObj := gameVal.ToObject(vm)
 	if gameObj == nil {
-		return common.TeamRange{}
+		return domain.TeamRange{}
 	}
 	v := gameObj.Get("teamRange")
 	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
-		return common.TeamRange{}
+		return domain.TeamRange{}
 	}
 	obj := v.ToObject(vm)
 	if obj == nil {
-		return common.TeamRange{}
+		return domain.TeamRange{}
 	}
-	var tr common.TeamRange
+	var tr domain.TeamRange
 	if mv := obj.Get("min"); mv != nil && !goja.IsUndefined(mv) {
 		tr.Min = int(mv.ToInteger())
 	}

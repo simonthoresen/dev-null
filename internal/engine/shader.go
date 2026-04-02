@@ -11,7 +11,8 @@ import (
 
 	"github.com/dop251/goja"
 
-	"null-space/common"
+	"null-space/internal/domain"
+	"null-space/internal/render"
 	"null-space/internal/network"
 )
 
@@ -29,7 +30,7 @@ type JSShader struct {
 }
 
 // LoadShader reads and executes a JS shader file, extracting the Shader.process hook.
-func LoadShader(path string, clock common.Clock) (*JSShader, error) {
+func LoadShader(path string, clock domain.Clock) (*JSShader, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read shader file: %w", err)
@@ -49,12 +50,12 @@ func LoadShader(path string, clock common.Clock) (*JSShader, error) {
 	})
 
 	// Pixel attribute constants.
-	s.vm.Set("ATTR_NONE", int(common.AttrNone))
-	s.vm.Set("ATTR_BOLD", int(common.AttrBold))
-	s.vm.Set("ATTR_FAINT", int(common.AttrFaint))
-	s.vm.Set("ATTR_ITALIC", int(common.AttrItalic))
-	s.vm.Set("ATTR_UNDERLINE", int(common.AttrUnderline))
-	s.vm.Set("ATTR_REVERSE", int(common.AttrReverse))
+	s.vm.Set("ATTR_NONE", int(render.AttrNone))
+	s.vm.Set("ATTR_BOLD", int(render.AttrBold))
+	s.vm.Set("ATTR_FAINT", int(render.AttrFaint))
+	s.vm.Set("ATTR_ITALIC", int(render.AttrItalic))
+	s.vm.Set("ATTR_UNDERLINE", int(render.AttrUnderline))
+	s.vm.Set("ATTR_REVERSE", int(render.AttrReverse))
 
 	if _, err := s.vm.RunScript(path, string(src)); err != nil {
 		return nil, fmt.Errorf("execute shader script: %w", err)
@@ -122,7 +123,7 @@ func (s *JSShader) Update(dt float64) {
 }
 
 // Process calls the JS process(buf) hook with a buffer wrapper.
-func (s *JSShader) Process(buf *common.ImageBuffer) {
+func (s *JSShader) Process(buf *render.ImageBuffer) {
 	if s.processFn == nil {
 		return
 	}
@@ -167,7 +168,7 @@ func (s *JSShader) Unload() {
 // newJSShaderBuffer creates a JS-friendly wrapper for the full ImageBuffer.
 // Unlike the game render buffer, shaders see the entire screen (no offset clipping).
 // Includes getPixel() for reading, plus all the standard write methods.
-func newJSShaderBuffer(vm *goja.Runtime, buf *common.ImageBuffer) map[string]any {
+func newJSShaderBuffer(vm *goja.Runtime, buf *render.ImageBuffer) map[string]any {
 	return map[string]any{
 		"width":  buf.Width,
 		"height": buf.Height,
@@ -268,14 +269,14 @@ func ResolveShaderPath(nameOrURL, dataDir string) (name, path string, err error)
 }
 
 // UpdateShaders calls Update(dt) on all shaders so they can evolve over time.
-func UpdateShaders(shaders []common.Shader, dt float64) {
+func UpdateShaders(shaders []domain.Shader, dt float64) {
 	for _, s := range shaders {
 		s.Update(dt)
 	}
 }
 
 // ApplyShaders runs all shaders in sequence on the given buffer.
-func ApplyShaders(shaders []common.Shader, buf *common.ImageBuffer) {
+func ApplyShaders(shaders []domain.Shader, buf *render.ImageBuffer) {
 	for _, s := range shaders {
 		s.Process(buf)
 	}

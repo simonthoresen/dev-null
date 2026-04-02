@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -80,7 +80,7 @@ func (v *TextView) clampScroll() {
 	}
 }
 
-func (v *TextView) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
+func (v *TextView) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 	v.height = height
@@ -95,7 +95,7 @@ func (v *TextView) Render(buf *common.ImageBuffer, x, y, width, height int, focu
 	}
 
 	// Fill background.
-	buf.Fill(x, y, width, height, ' ', fg, bg, common.AttrNone)
+	buf.Fill(x, y, width, height, ' ', fg, bg, render.AttrNone)
 
 	// Determine visible slice.
 	var visibleLines []string
@@ -127,13 +127,13 @@ func (v *TextView) Render(buf *common.ImageBuffer, x, y, width, height int, focu
 }
 
 // RenderScrollbarBuf writes a scrollbar track directly into the buffer.
-func RenderScrollbarBuf(buf *common.ImageBuffer, x, y, total, visible, offset int, fg, bg color.Color) {
+func RenderScrollbarBuf(buf *render.ImageBuffer, x, y, total, visible, offset int, fg, bg color.Color) {
 	if visible <= 0 {
 		return
 	}
 	if total <= visible {
 		for i := 0; i < visible; i++ {
-			buf.SetChar(x, y+i, ' ', fg, bg, common.AttrNone)
+			buf.SetChar(x, y+i, ' ', fg, bg, render.AttrNone)
 		}
 		return
 	}
@@ -152,7 +152,7 @@ func RenderScrollbarBuf(buf *common.ImageBuffer, x, y, total, visible, offset in
 		if i >= thumbPos && i < thumbPos+thumbSize {
 			ch = '█'
 		}
-		buf.SetChar(x, y+i, ch, fg, bg, common.AttrNone)
+		buf.SetChar(x, y+i, ch, fg, bg, render.AttrNone)
 	}
 }
 

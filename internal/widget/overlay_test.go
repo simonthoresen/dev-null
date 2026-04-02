@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"null-space/common"
+	"null-space/internal/domain"
 	"null-space/internal/engine"
 )
 
@@ -34,9 +34,9 @@ func TestHotkeyDisplayFunc(t *testing.T) {
 
 func TestOverlayMenuNavigation(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}, {Label: "&Open"}}},
-		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}, {Label: "&Open"}}},
+		{Label: "&Edit", Items: []domain.MenuItemDef{{Label: "&Copy"}}},
 	}
 
 	// F10 activates menu bar.
@@ -78,8 +78,8 @@ func TestOverlayMenuNavigation(t *testing.T) {
 func TestOverlayHotkey(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
 	triggered := false
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&Quit", Hotkey: "ctrl+q", Handler: func(_ string) { triggered = true }},
 		}},
 	}
@@ -94,9 +94,9 @@ func TestOverlayHotkey(t *testing.T) {
 
 func TestOverlayAltActivation(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
-	menus := []common.MenuDef{
-		{Label: "&File", Items: []common.MenuItemDef{{Label: "Item"}}},
-		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "Item"}}},
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{{Label: "Item"}}},
+		{Label: "&Edit", Items: []domain.MenuItemDef{{Label: "Item"}}},
 	}
 
 	o.HandleKey("alt+e", menus, "")
@@ -112,8 +112,8 @@ func TestOverlayDialogStack(t *testing.T) {
 		t.Error("should have no dialog initially")
 	}
 
-	o.PushDialog(common.DialogRequest{Title: "First", Body: "A"})
-	o.PushDialog(common.DialogRequest{Title: "Second", Body: "B"})
+	o.PushDialog(domain.DialogRequest{Title: "First", Body: "A"})
+	o.PushDialog(domain.DialogRequest{Title: "Second", Body: "B"})
 
 	if !o.HasDialog() {
 		t.Error("should have dialogs")
@@ -225,7 +225,7 @@ func TestRenderScrollbarNoScroll(t *testing.T) {
 func TestAboutDialogClickDetection(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
 	body := engine.AboutLogo()
-	o.PushDialog(common.DialogRequest{
+	o.PushDialog(domain.DialogRequest{
 		Title:   "About",
 		Body:    body,
 		Buttons: []string{"OK"},
@@ -281,7 +281,7 @@ func TestAboutDialogClickDetection(t *testing.T) {
 func TestDialogClickMultiButton(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
 	var clicked string
-	o.PushDialog(common.DialogRequest{
+	o.PushDialog(domain.DialogRequest{
 		Title:   "Confirm",
 		Body:    "Are you sure?",
 		Buttons: []string{"Yes", "No", "Cancel"},
@@ -328,7 +328,7 @@ func TestDialogClickMultiButton(t *testing.T) {
 func TestAboutDialogKeyDismiss(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
 	body := engine.AboutLogo()
-	o.PushDialog(common.DialogRequest{
+	o.PushDialog(domain.DialogRequest{
 		Title:   "About",
 		Body:    body,
 		Buttons: []string{"OK"},

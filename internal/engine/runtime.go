@@ -12,7 +12,8 @@ import (
 
 	"github.com/dop251/goja"
 
-	"null-space/common"
+	"null-space/internal/domain"
+	"null-space/internal/render"
 )
 
 // JSCallTimeout is how long a JS method can run before being interrupted.
@@ -64,18 +65,18 @@ func WatchdogJS(vm *goja.Runtime, method string) func() {
 // Callers (server.go, chrome.go) must release state.mu BEFORE calling
 // any JSRuntime Game method (Init, Start, View, OnInput, etc.).
 
-// JSRuntime wraps a goja JS runtime and implements common.Game.
+// JSRuntime wraps a goja JS runtime and implements domain.Game.
 type JSRuntime struct {
 	mu      sync.Mutex
 	vm      *goja.Runtime
 	baseDir string       // directory containing the game file (for include() resolution)
 	dataDir string       // root data directory (for resolving charmaps, etc.)
-	clock   common.Clock // server clock exposed to JS as now()
+	clock   domain.Clock // server clock exposed to JS as now()
 
-	commands    []common.Command
+	commands    []domain.Command
 	cachedTeams []map[string]any   // snapshot set by server; read by JS teams()
 	logFn       func(string)
-	ChatCh      chan common.Message // drained by server goroutine; closed on unload
+	ChatCh      chan domain.Message // drained by server goroutine; closed on unload
 
 	// game object methods (nil if not defined)
 	updateFn        goja.Callable
@@ -91,7 +92,7 @@ type JSRuntime struct {
 
 	// lifecycle
 	gameNameProp  string
-	teamRangeProp common.TeamRange
+	teamRangeProp domain.TeamRange
 	initFn           goja.Callable
 	startFn          goja.Callable
 
@@ -102,19 +103,19 @@ type JSRuntime struct {
 
 	// gameOver() callback state — set by JS, detected by tick loop
 	gameOverPending bool
-	gameOverResults []common.GameResult // results passed to gameOver()
+	gameOverResults []domain.GameResult // results passed to gameOver()
 	gameOverState   goja.Value          // state argument passed as second arg to gameOver()
 
-	menus        []common.MenuDef
-	ShowDialogFn func(playerID string, d common.DialogRequest) // injected by server
+	menus        []domain.MenuDef
+	ShowDialogFn func(playerID string, d domain.DialogRequest) // injected by server
 
-	charmapDef *common.CharMapDef // loaded from dist/charmaps/<name>/charmap.json; nil if no charmap
+	charmapDef *render.CharMapDef // loaded from dist/charmaps/<name>/charmap.json; nil if no charmap
 }
 
 // LoadGame loads and executes a JS file from games/, extracts the Game object
-// methods, and returns a common.Game. Init() is NOT called here — the server
+// methods, and returns a domain.Game. Init() is NOT called here — the server
 // calls it at the splash→playing transition when GamePlayerIDs are set.
-func LoadGame(path string, logFn func(string), chatCh chan common.Message, clock common.Clock, dataDir string) (common.Game, error) {
+func LoadGame(path string, logFn func(string), chatCh chan domain.Message, clock domain.Clock, dataDir string) (domain.Game, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read game file: %w", err)
@@ -181,16 +182,16 @@ func (r *JSRuntime) Start() {
 
 func (r *JSRuntime) registerGlobals() {
 	// Pixel attribute constants for buf.setChar/writeString/fill.
-	r.vm.Set("ATTR_NONE", int(common.AttrNone))
-	r.vm.Set("ATTR_BOLD", int(common.AttrBold))
-	r.vm.Set("ATTR_FAINT", int(common.AttrFaint))
-	r.vm.Set("ATTR_ITALIC", int(common.AttrItalic))
-	r.vm.Set("ATTR_UNDERLINE", int(common.AttrUnderline))
-	r.vm.Set("ATTR_REVERSE", int(common.AttrReverse))
+	r.vm.Set("ATTR_NONE", int(render.AttrNone))
+	r.vm.Set("ATTR_BOLD", int(render.AttrBold))
+	r.vm.Set("ATTR_FAINT", int(render.AttrFaint))
+	r.vm.Set("ATTR_ITALIC", int(render.AttrItalic))
+	r.vm.Set("ATTR_UNDERLINE", int(render.AttrUnderline))
+	r.vm.Set("ATTR_REVERSE", int(render.AttrReverse))
 
 	// PUA codepoint range constants for charmap-based sprite rendering.
-	r.vm.Set("PUA_START", int(common.PUAStart))
-	r.vm.Set("PUA_END", int(common.PUAEnd))
+	r.vm.Set("PUA_START", int(render.PUAStart))
+	r.vm.Set("PUA_END", int(render.PUAEnd))
 
 	r.vm.Set("log", func(msg string) {
 		if r.logFn != nil {
@@ -201,7 +202,7 @@ func (r *JSRuntime) registerGlobals() {
 	r.vm.Set("chat", func(msg string) {
 		if r.ChatCh != nil {
 			select {
-			case r.ChatCh <- common.Message{Text: msg}:
+			case r.ChatCh <- domain.Message{Text: msg}:
 			default:
 				slog.Warn("JS chat channel full, dropping message", "text", msg)
 			}
@@ -211,7 +212,7 @@ func (r *JSRuntime) registerGlobals() {
 	r.vm.Set("chatPlayer", func(playerID, msg string) {
 		if r.ChatCh != nil {
 			select {
-			case r.ChatCh <- common.Message{Text: msg, IsPrivate: true, ToID: playerID}:
+			case r.ChatCh <- domain.Message{Text: msg, IsPrivate: true, ToID: playerID}:
 			default:
 				slog.Warn("JS chatPlayer channel full, dropping message")
 			}
@@ -269,7 +270,7 @@ func (r *JSRuntime) registerGlobals() {
 						if itemObj == nil {
 							continue
 						}
-						entry := common.GameResult{}
+						entry := domain.GameResult{}
 						if v := itemObj.Get("name"); v != nil && !goja.IsUndefined(v) {
 							entry.Name = v.String()
 						}
@@ -303,7 +304,7 @@ func (r *JSRuntime) registerGlobals() {
 			return goja.Undefined()
 		}
 		itemsVal := call.Argument(1)
-		var items []common.MenuItemDef
+		var items []domain.MenuItemDef
 		if !goja.IsUndefined(itemsVal) && !goja.IsNull(itemsVal) {
 			arr := itemsVal.ToObject(r.vm)
 			for _, k := range arr.Keys() {
@@ -333,14 +334,14 @@ func (r *JSRuntime) registerGlobals() {
 						_, _ = capturedHandler(goja.Undefined(), r.vm.ToValue(playerID))
 					}
 				}
-				items = append(items, common.MenuItemDef{
+				items = append(items, domain.MenuItemDef{
 					Label:    itemLabel,
 					Disabled: disabled,
 					Handler:  goHandler,
 				})
 			}
 		}
-		r.menus = append(r.menus, common.MenuDef{Label: label, Items: items})
+		r.menus = append(r.menus, domain.MenuDef{Label: label, Items: items})
 		return goja.Undefined()
 	})
 
@@ -382,7 +383,7 @@ func (r *JSRuntime) registerGlobals() {
 				}
 			}
 		}
-		d := common.DialogRequest{
+		d := domain.DialogRequest{
 			Title:   title,
 			Body:    message,
 			Buttons: buttons,
@@ -421,12 +422,12 @@ func (r *JSRuntime) registerGlobals() {
 			return goja.Undefined()
 		}
 
-		cmd := common.Command{
+		cmd := domain.Command{
 			Name:             name,
 			Description:      desc,
 			AdminOnly:        adminOnly,
 			FirstArgIsPlayer: firstArgIsPlayer,
-			Handler: func(ctx common.CommandContext, args []string) {
+			Handler: func(ctx domain.CommandContext, args []string) {
 				r.mu.Lock()
 				defer r.mu.Unlock()
 
@@ -544,7 +545,7 @@ func (r *JSRuntime) extractGameObject() error {
 		name := v.String()
 		if name != "" && r.dataDir != "" {
 			jsonPath := filepath.Join(r.dataDir, "charmaps", name, "charmap.json")
-			def, err := common.LoadCharMapDef(jsonPath)
+			def, err := render.LoadCharMapDef(jsonPath)
 			if err != nil {
 				slog.Warn("failed to load charmap", "name", name, "error", err)
 			} else {
@@ -569,7 +570,7 @@ func extractCallable(obj *goja.Object, name string) goja.Callable {
 	return fn
 }
 
-// Implement common.Game
+// Implement domain.Game
 
 func (r *JSRuntime) OnPlayerLeave(playerID string) {
 	if r.onPlayerLeave == nil {
@@ -610,7 +611,7 @@ func (r *JSRuntime) Update(dt float64) {
 	_, _ = r.updateFn(goja.Undefined(), r.vm.ToValue(dt))
 }
 
-func (r *JSRuntime) Render(buf *common.ImageBuffer, playerID string, x, y, width, height int) {
+func (r *JSRuntime) Render(buf *render.ImageBuffer, playerID string, x, y, width, height int) {
 	if r.renderFn == nil {
 		return
 	}
@@ -630,7 +631,7 @@ func (r *JSRuntime) Render(buf *common.ImageBuffer, playerID string, x, y, width
 // newJSImageBuffer creates a JS-friendly wrapper around an ImageBuffer region.
 // JS games call buf.setChar(x, y, ch, fg, bg), buf.writeString(x, y, text, fg, bg),
 // buf.fill(x, y, w, h, ch, fg, bg) to write directly into the buffer.
-func (r *JSRuntime) newJSImageBuffer(buf *common.ImageBuffer, ox, oy, w, h int) map[string]any {
+func (r *JSRuntime) newJSImageBuffer(buf *render.ImageBuffer, ox, oy, w, h int) map[string]any {
 	return map[string]any{
 		"width":  w,
 		"height": h,
@@ -710,14 +711,14 @@ func hexNibble(c byte) uint8 {
 
 // ParseJSAttr converts a JS value to a PixelAttr.
 // Accepts: null/undefined → AttrNone, number → PixelAttr bitmask.
-func ParseJSAttr(v goja.Value) common.PixelAttr {
+func ParseJSAttr(v goja.Value) render.PixelAttr {
 	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
-		return common.AttrNone
+		return render.AttrNone
 	}
-	return common.PixelAttr(v.ToInteger())
+	return render.PixelAttr(v.ToInteger())
 }
 
-func (r *JSRuntime) RenderNC(playerID string, width, height int) *common.WidgetNode {
+func (r *JSRuntime) RenderNC(playerID string, width, height int) *domain.WidgetNode {
 	if r.renderNCFn == nil {
 		return nil // framework will fall back to wrapping Render() in a gameview node
 	}
@@ -739,7 +740,7 @@ func (r *JSRuntime) RenderNC(playerID string, width, height int) *common.WidgetN
 }
 
 // gojaToWidgetNode recursively converts a goja JS object into a WidgetNode tree.
-func gojaToWidgetNode(vm *goja.Runtime, val goja.Value) *common.WidgetNode {
+func gojaToWidgetNode(vm *goja.Runtime, val goja.Value) *domain.WidgetNode {
 	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
 		return nil
 	}
@@ -748,7 +749,7 @@ func gojaToWidgetNode(vm *goja.Runtime, val goja.Value) *common.WidgetNode {
 		return nil
 	}
 
-	node := &common.WidgetNode{}
+	node := &domain.WidgetNode{}
 
 	if v := obj.Get("type"); v != nil && !goja.IsUndefined(v) {
 		node.Type = v.String()
@@ -868,10 +869,10 @@ func (r *JSRuntime) CommandBar(playerID string) string {
 	return val.String()
 }
 
-func (r *JSRuntime) Commands() []common.Command {
+func (r *JSRuntime) Commands() []domain.Command {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	result := make([]common.Command, len(r.commands))
+	result := make([]domain.Command, len(r.commands))
 	copy(result, r.commands)
 	return result
 }
@@ -882,7 +883,7 @@ func (r *JSRuntime) Unload() {
 	r.vm.Interrupt("game unloaded")
 }
 
-func (r *JSRuntime) Menus() []common.MenuDef {
+func (r *JSRuntime) Menus() []domain.MenuDef {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.menus
@@ -902,11 +903,11 @@ func (r *JSRuntime) GameName() string {
 	return r.gameNameProp
 }
 
-func (r *JSRuntime) TeamRange() common.TeamRange {
+func (r *JSRuntime) TeamRange() domain.TeamRange {
 	return r.teamRangeProp
 }
 
-func (r *JSRuntime) CharMap() *common.CharMapDef {
+func (r *JSRuntime) CharMap() *render.CharMapDef {
 	return r.charmapDef
 }
 
@@ -941,7 +942,7 @@ func (r *JSRuntime) RenderCanvas(playerID string, width, height int) []byte {
 	return data
 }
 
-func (r *JSRuntime) RenderSplash(buf *common.ImageBuffer, playerID string, x, y, width, height int) bool {
+func (r *JSRuntime) RenderSplash(buf *render.ImageBuffer, playerID string, x, y, width, height int) bool {
 	if r.renderSplashFn == nil {
 		return false
 	}
@@ -960,7 +961,7 @@ func (r *JSRuntime) RenderSplash(buf *common.ImageBuffer, playerID string, x, y,
 	return true
 }
 
-func (r *JSRuntime) RenderGameOver(buf *common.ImageBuffer, playerID string, x, y, width, height int, results []common.GameResult) bool {
+func (r *JSRuntime) RenderGameOver(buf *render.ImageBuffer, playerID string, x, y, width, height int, results []domain.GameResult) bool {
 	if r.renderGameOverFn == nil {
 		return false
 	}
@@ -996,7 +997,7 @@ func (r *JSRuntime) IsGameOverPending() bool {
 }
 
 // GameOverResults returns the results array passed to gameOver().
-func (r *JSRuntime) GameOverResults() []common.GameResult {
+func (r *JSRuntime) GameOverResults() []domain.GameResult {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.gameOverResults

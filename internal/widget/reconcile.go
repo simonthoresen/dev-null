@@ -5,7 +5,8 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 
-	"null-space/common"
+	"null-space/internal/domain"
+	"null-space/internal/render"
 )
 
 // GameWindow wraps a Window built from a WidgetNode tree.
@@ -15,7 +16,7 @@ import (
 type GameWindow struct {
 	Window   *Window
 	Controls map[string]CachedControl // keyed by tree path for reuse
-	renderFn func(buf *common.ImageBuffer, x, y, w, h int) // game's Render() function
+	renderFn func(buf *render.ImageBuffer, x, y, w, h int) // game's Render() function
 	onInput  func(action string)        // bound to game.OnInput(playerID, ...)
 	rootHash uint64                     // hash of the root WidgetNode at build time
 }
@@ -46,8 +47,8 @@ func (gw *GameWindow) HasFocusable() bool {
 // preserve state (focus, cursor, scroll offset).
 func ReconcileGameWindow(
 	prev *GameWindow,
-	tree *common.WidgetNode,
-	renderFn func(buf *common.ImageBuffer, x, y, w, h int),
+	tree *domain.WidgetNode,
+	renderFn func(buf *render.ImageBuffer, x, y, w, h int),
 	onInput func(action string),
 ) *GameWindow {
 	// Fast path: if the entire tree is unchanged (root hash matches and is
@@ -104,7 +105,7 @@ func ReconcileGameWindow(
 // buildControl returns the Control. It populates gw.Controls with entries for
 // this node and all descendants. Each CachedControl stores ChildPaths for
 // efficient subtree reuse on cache hit.
-func (gw *GameWindow) buildControl(node *common.WidgetNode, path string, prev map[string]CachedControl) Control {
+func (gw *GameWindow) buildControl(node *domain.WidgetNode, path string, prev map[string]CachedControl) Control {
 	if node == nil {
 		return &Label{Text: ""}
 	}
@@ -128,7 +129,7 @@ func (gw *GameWindow) buildControl(node *common.WidgetNode, path string, prev ma
 	var ctrl Control
 	var childPaths []string
 
-	buildChild := func(child *common.WidgetNode, i int) Control {
+	buildChild := func(child *domain.WidgetNode, i int) Control {
 		childPath := fmt.Sprintf("%s.%d", path, i)
 		childPaths = append(childPaths, childPath)
 		c := gw.buildControl(child, childPath, prev)
@@ -188,11 +189,11 @@ func (gw *GameWindow) buildControl(node *common.WidgetNode, path string, prev ma
 	return ctrl
 }
 
-func (gw *GameWindow) buildLabel(node *common.WidgetNode) *Label {
+func (gw *GameWindow) buildLabel(node *domain.WidgetNode) *Label {
 	return &Label{Text: node.Text, Align: node.Align}
 }
 
-func (gw *GameWindow) buildPanelWith(node *common.WidgetNode, buildChild func(*common.WidgetNode, int) Control) *Panel {
+func (gw *GameWindow) buildPanelWith(node *domain.WidgetNode, buildChild func(*domain.WidgetNode, int) Control) *Panel {
 	panel := &Panel{Title: node.Title}
 
 	for i, child := range node.Children {
@@ -215,7 +216,7 @@ func (gw *GameWindow) buildPanelWith(node *common.WidgetNode, buildChild func(*c
 	return panel
 }
 
-func (gw *GameWindow) buildButton(node *common.WidgetNode, path string, prev map[string]CachedControl) *Button {
+func (gw *GameWindow) buildButton(node *domain.WidgetNode, path string, prev map[string]CachedControl) *Button {
 	// Reuse existing button if same type at same path.
 	if cached, ok := prev[path]; ok && cached.NodeType == "button" {
 		btn := cached.Control.(*Button)
@@ -233,7 +234,7 @@ func (gw *GameWindow) buildButton(node *common.WidgetNode, path string, prev map
 	}
 }
 
-func (gw *GameWindow) buildTextInput(node *common.WidgetNode, path string, prev map[string]CachedControl) *TextInput {
+func (gw *GameWindow) buildTextInput(node *domain.WidgetNode, path string, prev map[string]CachedControl) *TextInput {
 	// Reuse existing text input to preserve cursor/content state.
 	if cached, ok := prev[path]; ok && cached.NodeType == "textinput" {
 		ti := cached.Control.(*TextInput)
@@ -257,7 +258,7 @@ func (gw *GameWindow) buildTextInput(node *common.WidgetNode, path string, prev 
 	return ti
 }
 
-func (gw *GameWindow) buildCheckbox(node *common.WidgetNode, path string, prev map[string]CachedControl) *Checkbox {
+func (gw *GameWindow) buildCheckbox(node *domain.WidgetNode, path string, prev map[string]CachedControl) *Checkbox {
 	if cached, ok := prev[path]; ok && cached.NodeType == "checkbox" {
 		cb := cached.Control.(*Checkbox)
 		cb.Label = node.Text
@@ -281,7 +282,7 @@ func (gw *GameWindow) buildCheckbox(node *common.WidgetNode, path string, prev m
 	}
 }
 
-func (gw *GameWindow) buildTextView(node *common.WidgetNode, path string, prev map[string]CachedControl) *TextView {
+func (gw *GameWindow) buildTextView(node *domain.WidgetNode, path string, prev map[string]CachedControl) *TextView {
 	// Reuse existing textview to preserve scroll position.
 	if cached, ok := prev[path]; ok && cached.NodeType == "textview" {
 		tv := cached.Control.(*TextView)
@@ -295,7 +296,7 @@ func (gw *GameWindow) buildTextView(node *common.WidgetNode, path string, prev m
 	}
 }
 
-func (gw *GameWindow) buildGameView(node *common.WidgetNode) *GameView {
+func (gw *GameWindow) buildGameView(node *domain.WidgetNode) *GameView {
 	return &GameView{
 		RenderFn:  gw.renderFn,
 		OnKey:     gw.onInput,
@@ -303,7 +304,7 @@ func (gw *GameWindow) buildGameView(node *common.WidgetNode) *GameView {
 	}
 }
 
-func (gw *GameWindow) buildContainerWith(node *common.WidgetNode, horizontal bool, buildChild func(*common.WidgetNode, int) Control) *Container {
+func (gw *GameWindow) buildContainerWith(node *domain.WidgetNode, horizontal bool, buildChild func(*domain.WidgetNode, int) Control) *Container {
 	container := &Container{Horizontal: horizontal}
 
 	for i, child := range node.Children {

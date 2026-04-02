@@ -6,7 +6,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/common"
+	"null-space/internal/domain"
 	"null-space/internal/theme"
 )
 
@@ -40,13 +40,13 @@ func RenderLabel(label string, base, accent lipgloss.Style) string {
 }
 
 // MenuShortcut returns the shortcut rune for a MenuDef (from its Label).
-func MenuShortcut(m common.MenuDef) rune {
+func MenuShortcut(m domain.MenuDef) rune {
 	_, r := StripAmpersand(m.Label)
 	return r
 }
 
 // ItemShortcut returns the shortcut rune for a MenuItemDef (from its Label).
-func ItemShortcut(it common.MenuItemDef) rune {
+func ItemShortcut(it domain.MenuItemDef) rune {
 	_, r := StripAmpersand(it.Label)
 	return r
 }
@@ -83,23 +83,23 @@ type OverlayState struct {
 	OpenMenu    int  // index of open dropdown (-1 = none)
 	DropCursor  int  // focused item index in open dropdown
 
-	Dialogs     []common.DialogRequest
+	Dialogs     []domain.DialogRequest
 	DialogFocus int // focused button in top dialog
 }
 
 // ShowDialogMsg is sent to a player's Bubble Tea program to push a dialog.
-type ShowDialogMsg struct{ Dialog common.DialogRequest }
+type ShowDialogMsg struct{ Dialog domain.DialogRequest }
 
 func (o *OverlayState) HasDialog() bool { return len(o.Dialogs) > 0 }
 
-func (o *OverlayState) TopDialog() *common.DialogRequest {
+func (o *OverlayState) TopDialog() *domain.DialogRequest {
 	if len(o.Dialogs) == 0 {
 		return nil
 	}
 	return &o.Dialogs[len(o.Dialogs)-1]
 }
 
-func (o *OverlayState) PushDialog(d common.DialogRequest) {
+func (o *OverlayState) PushDialog(d domain.DialogRequest) {
 	o.Dialogs = append(o.Dialogs, d)
 	o.DialogFocus = 0
 }
@@ -120,7 +120,7 @@ func (o *OverlayState) IsActive() bool {
 
 // HandleKey routes a key press through the overlay state machine.
 // Returns true if the key was consumed and normal chrome should not process it.
-func (o *OverlayState) HandleKey(key string, menus []common.MenuDef, playerID string) bool {
+func (o *OverlayState) HandleKey(key string, menus []domain.MenuDef, playerID string) bool {
 	// Global hotkeys: check all menu items for matching hotkey bindings.
 	for _, m := range menus {
 		for _, it := range m.Items {
@@ -169,7 +169,7 @@ func (o *OverlayState) HandleKey(key string, menus []common.MenuDef, playerID st
 	return false
 }
 
-func (o *OverlayState) handleMenuBarKey(key string, menus []common.MenuDef) bool {
+func (o *OverlayState) handleMenuBarKey(key string, menus []domain.MenuDef) bool {
 	n := len(menus)
 	if n == 0 {
 		return true
@@ -205,7 +205,7 @@ func (o *OverlayState) handleMenuBarKey(key string, menus []common.MenuDef) bool
 	return true // consume all keys while menu bar is focused
 }
 
-func (o *OverlayState) handleDropdownKey(key string, menus []common.MenuDef, playerID string) bool {
+func (o *OverlayState) handleDropdownKey(key string, menus []domain.MenuDef, playerID string) bool {
 	if o.OpenMenu >= len(menus) {
 		return false
 	}
@@ -302,7 +302,7 @@ func (o *OverlayState) HandleDialogKey(key string) bool {
 // HandleClick processes a left mouse click at screen position (x, y).
 // ncBarRow is the screen row of the action bar. screenW/screenH are for dialog centering.
 // Returns true if the click was consumed by the overlay.
-func (o *OverlayState) HandleClick(x, y, ncBarRow, screenW, screenH int, menus []common.MenuDef, playerID string) bool {
+func (o *OverlayState) HandleClick(x, y, ncBarRow, screenW, screenH int, menus []domain.MenuDef, playerID string) bool {
 	// Priority 1: dialog (topmost overlay)
 	if o.HasDialog() {
 		return o.HandleDialogClick(x, y, screenW, screenH)
@@ -342,7 +342,7 @@ func (o *OverlayState) HandleClick(x, y, ncBarRow, screenW, screenH int, menus [
 	return false
 }
 
-func (o *OverlayState) handleDropdownClick(x, y, ncBarRow int, menus []common.MenuDef, playerID string) bool {
+func (o *OverlayState) handleDropdownClick(x, y, ncBarRow int, menus []domain.MenuDef, playerID string) bool {
 	items := menus[o.OpenMenu].Items
 	if len(items) == 0 {
 		return false
@@ -471,11 +471,11 @@ func (o *OverlayState) HandleDialogClick(x, y, screenW, screenH int) bool {
 
 // ─── Selectable-item helpers ───────────────────────────────────────────────────
 
-func IsSeparator(item common.MenuItemDef) bool {
+func IsSeparator(item domain.MenuItemDef) bool {
 	return strings.TrimLeft(item.Label, "-") == ""
 }
 
-func FirstSelectable(items []common.MenuItemDef) int {
+func FirstSelectable(items []domain.MenuItemDef) int {
 	for i, it := range items {
 		if !IsSeparator(it) && !it.Disabled {
 			return i
@@ -484,7 +484,7 @@ func FirstSelectable(items []common.MenuItemDef) int {
 	return 0
 }
 
-func NextSelectable(items []common.MenuItemDef, cur int) int {
+func NextSelectable(items []domain.MenuItemDef, cur int) int {
 	for i := cur + 1; i < len(items); i++ {
 		if !IsSeparator(items[i]) && !items[i].Disabled {
 			return i
@@ -493,7 +493,7 @@ func NextSelectable(items []common.MenuItemDef, cur int) int {
 	return cur
 }
 
-func PrevSelectable(items []common.MenuItemDef, cur int) int {
+func PrevSelectable(items []domain.MenuItemDef, cur int) int {
 	for i := cur - 1; i >= 0; i-- {
 		if !IsSeparator(items[i]) && !items[i].Disabled {
 			return i
@@ -515,7 +515,7 @@ type OverlayBox struct {
 // ─── Menu bar rendering ────────────────────────────────────────────────────────
 
 // RenderMenuBar renders the NC-style action bar row (full terminal width).
-func (o *OverlayState) RenderMenuBar(width int, menus []common.MenuDef, layer *theme.Layer) string {
+func (o *OverlayState) RenderMenuBar(width int, menus []domain.MenuDef, layer *theme.Layer) string {
 	barStyle     := layer.BaseStyle()
 	activeStyle  := layer.HighlightStyle()
 	barAccent    := layer.AccentStyle()
@@ -546,7 +546,7 @@ func (o *OverlayState) RenderMenuBar(width int, menus []common.MenuDef, layer *t
 }
 
 // MenuBarPositions returns the starting x column of each menu title in the bar.
-func MenuBarPositions(menus []common.MenuDef) []int {
+func MenuBarPositions(menus []domain.MenuDef) []int {
 	pos := make([]int, len(menus))
 	x := 0
 	for i, m := range menus {
@@ -564,7 +564,7 @@ func MenuBarPositions(menus []common.MenuDef) []int {
 
 // RenderDropdown returns an OverlayBox for PlaceOverlay.
 // ncBarRow is the screen row (0-based) of the NC action bar.
-func (o *OverlayState) RenderDropdown(menus []common.MenuDef, ncBarRow int, layer *theme.Layer) OverlayBox {
+func (o *OverlayState) RenderDropdown(menus []domain.MenuDef, ncBarRow int, layer *theme.Layer) OverlayBox {
 	if o.OpenMenu < 0 || o.OpenMenu >= len(menus) {
 		return OverlayBox{}
 	}

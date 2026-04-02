@@ -11,7 +11,8 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/domain"
+	"null-space/internal/render"
 	"null-space/internal/engine"
 	"null-space/internal/state"
 	"null-space/internal/theme"
@@ -21,18 +22,18 @@ import (
 // ServerAPI is the interface that the console model uses to interact with the server.
 type ServerAPI interface {
 	State() *state.CentralState
-	Clock() common.Clock
+	Clock() domain.Clock
 	DataDir() string
 	Uptime() string
 
 	// Communication
-	BroadcastChat(msg common.Message)
-	ChatCh() <-chan common.Message
+	BroadcastChat(msg domain.Message)
+	ChatCh() <-chan domain.Message
 	SlogCh() <-chan SlogLine
 
 	// Commands
 	TabCandidates(input string, playerNames []string) (prefix string, candidates []string)
-	DispatchCommand(input string, ctx common.CommandContext)
+	DispatchCommand(input string, ctx domain.CommandContext)
 
 	// Console-specific
 	SetConsoleWidth(w int)
@@ -81,15 +82,15 @@ type Model struct {
 	pluginNames []string
 
 	// Per-console shaders (post-processing, run in order)
-	shaders     []common.Shader
+	shaders     []domain.Shader
 	shaderNames []string
 }
 
 // tea.Msg types for channel-based updates.
-type chatLineMsg common.Message
+type chatLineMsg domain.Message
 type slogLineMsg SlogLine
 
-func listenForEvents(chatCh <-chan common.Message, slogCh <-chan SlogLine) tea.Cmd {
+func listenForEvents(chatCh <-chan domain.Message, slogCh <-chan SlogLine) tea.Cmd {
 	return func() tea.Msg {
 		select {
 		case msg, ok := <-chatCh:
@@ -189,7 +190,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resize()
 		return m, nil
 
-	case common.TickMsg:
+	case domain.TickMsg:
 		// Dispatch init commands from ~/.null-space/server.txt on the first tick
 		// (after the console UI is fully running).
 		if len(m.initCommands) > 0 {
@@ -206,7 +207,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, listenForEvents(m.api.ChatCh(), m.api.SlogCh())
 
 	case chatLineMsg:
-		chatMsg := common.Message(msg)
+		chatMsg := domain.Message(msg)
 		var line string
 		switch {
 		case chatMsg.IsReply:
@@ -243,7 +244,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, listenForEvents(m.api.ChatCh(), m.api.SlogCh())
 
-	case common.GamePhaseMsg, common.GameLoadedMsg, common.GameUnloadedMsg, common.TeamUpdatedMsg, common.PlayerJoinedMsg, common.PlayerLeftMsg:
+	case domain.GamePhaseMsg, domain.GameLoadedMsg, domain.GameUnloadedMsg, domain.TeamUpdatedMsg, domain.PlayerJoinedMsg, domain.PlayerLeftMsg:
 		return m, nil
 
 	case widget.ShowDialogMsg:
@@ -286,18 +287,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *Model) consoleMenus() []common.MenuDef {
-	return []common.MenuDef{
+func (m *Model) consoleMenus() []domain.MenuDef {
+	return []domain.MenuDef{
 		{
 			Label: "&File",
-			Items: []common.MenuItemDef{
+			Items: []domain.MenuItemDef{
 				{Label: "&Themes...", Handler: func(_ string) { m.showListDialog("Themes", "themes", ".json") }},
 				{Label: "&Plugins...", Handler: func(_ string) { m.showListDialog("Plugins", "plugins", ".js") }},
 				{Label: "&Shaders...", Handler: func(_ string) { m.showShaderDialog() }},
 				{Label: "&Games...", Handler: func(_ string) { m.showListDialog("Games", "games", ".js") }},
 				{Label: "---"},
 				{Label: "E&xit", Hotkey: "ctrl+q", Handler: func(_ string) {
-					m.overlay.PushDialog(common.DialogRequest{
+					m.overlay.PushDialog(domain.DialogRequest{
 						Title:   "Exit",
 						Body:    "Are you sure you want to shut down the server?",
 						Buttons: []string{"Yes", "No"},
@@ -312,7 +313,7 @@ func (m *Model) consoleMenus() []common.MenuDef {
 		},
 		{
 			Label: "&View",
-			Items: []common.MenuItemDef{
+			Items: []domain.MenuItemDef{
 				{Label: "&Debug", Toggle: true, Checked: func() bool { return m.filter[CatDebug] }, Handler: func(_ string) {
 					m.filter[CatDebug] = !m.filter[CatDebug]; m.rebuildVisibleLines()
 				}},
@@ -336,9 +337,9 @@ func (m *Model) consoleMenus() []common.MenuDef {
 		},
 		{
 			Label: "&Help",
-			Items: []common.MenuItemDef{
+			Items: []domain.MenuItemDef{
 				{Label: "&About...", Handler: func(_ string) {
-					m.overlay.PushDialog(common.DialogRequest{
+					m.overlay.PushDialog(domain.DialogRequest{
 						Title:   "About",
 						Body:    engine.AboutLogo(),
 						Buttons: []string{"OK"},
@@ -380,7 +381,7 @@ func (m *Model) showShaderDialog() {
 	lines = append(lines, "")
 	lines = append(lines, "Use /shader load|unload|up|down <name>")
 
-	m.overlay.PushDialog(common.DialogRequest{
+	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   "Shaders",
 		Body:    strings.Join(lines, "\n"),
 		Buttons: []string{"Close"},
@@ -398,7 +399,7 @@ func (m *Model) showListDialog(title, subdir, ext string) {
 		}
 		body = strings.Join(lines, "\n")
 	}
-	m.overlay.PushDialog(common.DialogRequest{
+	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   title,
 		Body:    body,
 		Buttons: []string{"Add", "Remove", "Close"},
@@ -416,7 +417,7 @@ func (m *Model) showListDialog(title, subdir, ext string) {
 // showAddDialog asks for a URL or filename to add.
 func (m *Model) showAddDialog(title, subdir, ext string) {
 	// Use the command input to get user input — chain back via a command.
-	m.overlay.PushDialog(common.DialogRequest{
+	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   "Add " + title[:len(title)-1], // "Themes" -> "Theme"
 		Body:    "Type a /command to add:\n\n  For games:   /game load <name or url>\n  For plugins: /plugin load <name or url>\n  For themes:  /theme <name>",
 		Buttons: []string{"OK"},
@@ -429,7 +430,7 @@ func (m *Model) showAddDialog(title, subdir, ext string) {
 // showRemoveDialog asks which item to remove and confirms.
 func (m *Model) showRemoveDialog(title, subdir, ext string, items []string) {
 	if len(items) == 0 {
-		m.overlay.PushDialog(common.DialogRequest{
+		m.overlay.PushDialog(domain.DialogRequest{
 			Title:   "Remove",
 			Body:    "No items to remove.",
 			Buttons: []string{"OK"},
@@ -445,7 +446,7 @@ func (m *Model) showRemoveDialog(title, subdir, ext string, items []string) {
 	}
 	body += "\n\nType the number in the command bar, or press Close."
 
-	m.overlay.PushDialog(common.DialogRequest{
+	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   "Remove " + title[:len(title)-1],
 		Body:    body,
 		Buttons: []string{"Close"},
@@ -469,7 +470,7 @@ func (m *Model) View() tea.View {
 	t := m.theme
 	secondary := t.LayerAt(1) // menus, status bar
 
-	buf := common.NewImageBuffer(m.width, m.height)
+	buf := render.NewImageBuffer(m.width, m.height)
 
 	// Update menu bar and status bar before render.
 	menus := m.consoleMenus()
@@ -483,11 +484,11 @@ func (m *Model) View() tea.View {
 	if gameName != "" {
 		gameLabel = gameName
 		switch phase {
-		case common.PhaseSplash:
+		case domain.PhaseSplash:
 			gameLabel += " [splash]"
-		case common.PhasePlaying:
+		case domain.PhasePlaying:
 			gameLabel += " [playing]"
-		case common.PhaseGameOver:
+		case domain.PhaseGameOver:
 			gameLabel += " [game over]"
 		}
 	}
@@ -504,19 +505,19 @@ func (m *Model) View() tea.View {
 	shadowBg := t.ShadowBgC()
 	if m.overlay.OpenMenu >= 0 {
 		if dd := m.overlay.RenderDropdown(menus, 0, secondary); dd.Content != "" {
-			sub := common.NewImageBuffer(dd.Width, dd.Height)
+			sub := render.NewImageBuffer(dd.Width, dd.Height)
 			sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, secondary.FgC(), secondary.BgC())
 			buf.Blit(dd.Col, dd.Row, sub)
-			common.BlitShadow(buf, dd.Col, dd.Row, dd.Width, dd.Height, shadowFg, shadowBg)
+			render.BlitShadow(buf, dd.Col, dd.Row, dd.Width, dd.Height, shadowFg, shadowBg)
 		}
 	}
 	if m.overlay.HasDialog() {
 		if dlg := m.overlay.RenderDialog(m.width, m.height, t.LayerAt(2)); dlg.Content != "" {
-			sub := common.NewImageBuffer(dlg.Width, dlg.Height)
+			sub := render.NewImageBuffer(dlg.Width, dlg.Height)
 			dlgLayer := t.LayerAt(2)
 			sub.PaintANSI(0, 0, dlg.Width, dlg.Height, dlg.Content, dlgLayer.FgC(), dlgLayer.BgC())
 			buf.Blit(dlg.Col, dlg.Row, sub)
-			common.BlitShadow(buf, dlg.Col, dlg.Row, dlg.Width, dlg.Height, shadowFg, shadowBg)
+			render.BlitShadow(buf, dlg.Col, dlg.Row, dlg.Width, dlg.Height, shadowFg, shadowBg)
 		}
 	}
 
@@ -609,7 +610,7 @@ func (m *Model) submitInput(text string) {
 		m.handleShaderCommand(text)
 		return
 	}
-	ctx := common.CommandContext{
+	ctx := domain.CommandContext{
 		PlayerID:  "",
 		IsConsole: true,
 		IsAdmin:   true,
@@ -617,7 +618,7 @@ func (m *Model) submitInput(text string) {
 			m.appendLog(s)
 		},
 		Broadcast: func(s string) {
-			m.api.BroadcastChat(common.Message{Text: s})
+			m.api.BroadcastChat(domain.Message{Text: s})
 		},
 		ServerLog: func(s string) {
 			m.appendLog(s)
@@ -744,7 +745,7 @@ func (m *Model) dispatchPluginReply(text string) {
 		return
 	}
 	if strings.HasPrefix(text, "/") {
-		ctx := common.CommandContext{
+		ctx := domain.CommandContext{
 			PlayerID:  "",
 			IsConsole: true,
 			IsAdmin:   true,
@@ -752,7 +753,7 @@ func (m *Model) dispatchPluginReply(text string) {
 				m.appendLog(s)
 			},
 			Broadcast: func(s string) {
-				m.api.BroadcastChat(common.Message{Text: s, IsFromPlugin: true})
+				m.api.BroadcastChat(domain.Message{Text: s, IsFromPlugin: true})
 			},
 			ServerLog: func(s string) {
 				m.appendLog(s)
@@ -762,7 +763,7 @@ func (m *Model) dispatchPluginReply(text string) {
 		return
 	}
 	// Plain text from console plugin -> broadcast as admin chat.
-	m.api.BroadcastChat(common.Message{Author: "admin", Text: text, IsFromPlugin: true})
+	m.api.BroadcastChat(domain.Message{Author: "admin", Text: text, IsFromPlugin: true})
 }
 
 func (m *Model) handleShaderCommand(input string) {

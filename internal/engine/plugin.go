@@ -10,7 +10,7 @@ import (
 
 	"github.com/dop251/goja"
 
-	"null-space/common"
+	"null-space/internal/domain"
 	"null-space/internal/network"
 )
 
@@ -25,7 +25,7 @@ type JSPlugin struct {
 }
 
 // LoadPlugin reads and executes a JS plugin file, extracting the Plugin.onMessage hook.
-func LoadPlugin(path string, clock common.Clock) (*JSPlugin, error) {
+func LoadPlugin(path string, clock domain.Clock) (*JSPlugin, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read plugin file: %w", err)

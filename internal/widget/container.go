@@ -4,7 +4,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -177,7 +177,7 @@ func (c *Container) CursorPosition(bx, by int, sizes []int) (cx, cy int, visible
 	return cx, cy, true
 }
 
-func (c *Container) Render(buf *common.ImageBuffer, bx, by, width, height int, focused bool, layer *theme.Layer) {
+func (c *Container) Render(buf *render.ImageBuffer, bx, by, width, height int, focused bool, layer *theme.Layer) {
 	if len(c.Children) == 0 {
 		return
 	}

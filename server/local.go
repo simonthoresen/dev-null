@@ -10,7 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
 
-	"null-space/common"
+	"null-space/internal/domain"
 	"null-space/internal/chrome"
 	"null-space/internal/console"
 	"null-space/internal/engine"
@@ -30,7 +30,7 @@ func NewLocal(dataDir string) *Server {
 		// map reads against a nil map are safe (return zero value).
 		logCh:  make(chan string, 256),
 		slogCh: make(chan console.SlogLine, 256),
-		chatCh: make(chan common.Message, 256),
+		chatCh: make(chan domain.Message, 256),
 	}
 	app.registerBuiltins()
 	engine.LoadFigletFonts(dataDir)
@@ -43,7 +43,7 @@ func NewLocal(dataDir string) *Server {
 func (a *Server) RunLocal(ctx context.Context, playerName, gameName string) error {
 	const playerID = "local"
 
-	player := &common.Player{
+	player := &domain.Player{
 		ID:      playerID,
 		Name:    playerName,
 		IsAdmin: true,

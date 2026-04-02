@@ -12,7 +12,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/common"
+	"null-space/internal/domain"
+	"null-space/internal/render"
 	"null-space/internal/console"
 	"null-space/internal/engine"
 	"null-space/internal/state"
@@ -23,19 +24,19 @@ import (
 // ServerAPI is the interface that the chrome model uses to interact with the server.
 type ServerAPI interface {
 	State() *state.CentralState
-	Clock() common.Clock
+	Clock() domain.Clock
 	DataDir() string
 	Uptime() string
 
 	// Communication
-	BroadcastChat(msg common.Message)
+	BroadcastChat(msg domain.Message)
 	BroadcastMsg(msg tea.Msg)
 	SendToPlayer(playerID string, msg tea.Msg)
 	ServerLog(text string)
 
 	// Commands
 	TabCandidates(input string, playerNames []string) (prefix string, candidates []string)
-	DispatchCommand(input string, ctx common.CommandContext)
+	DispatchCommand(input string, ctx domain.CommandContext)
 
 	// Game lifecycle
 	StartGame()
@@ -113,7 +114,7 @@ type Model struct {
 	pluginNames []string // parallel to plugins; display names
 
 	// Per-player shaders (post-processing, run in order)
-	shaders     []common.Shader
+	shaders     []domain.Shader
 	shaderNames []string // parallel to shaders; display names
 
 	// Enhanced client protocol (null-space-client with charmap support).
@@ -141,8 +142,8 @@ type Model struct {
 	playingInput     *widget.CommandInput
 
 	// Cached menu tree — rebuilt only on invalidation.
-	menuCache     []common.MenuDef
-	menuCacheGame common.Game // game pointer when cache was built (nil = no game)
+	menuCache     []domain.MenuDef
+	menuCacheGame domain.Game // game pointer when cache was built (nil = no game)
 
 	// Game NC window — built from WidgetNode tree via reconciler.
 	// Preserves interactive control state (focus, cursor, scroll) across frames.
@@ -287,16 +288,16 @@ func NewModel(api ServerAPI, playerID string) Model {
 	// Wire team panel callbacks.
 	lobbyTeamPanel.OnMoveToTeam = func(teamIdx int) {
 		m.api.State().MovePlayerToTeam(m.playerID, teamIdx)
-		m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+		m.api.BroadcastMsg(domain.TeamUpdatedMsg{})
 	}
 	lobbyTeamPanel.OnCreateTeam = func() {
 		m.api.State().MovePlayerToTeam(m.playerID, m.api.State().TeamCount())
-		m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+		m.api.BroadcastMsg(domain.TeamUpdatedMsg{})
 	}
 	lobbyTeamPanel.OnCycleColor = func(direction int) {
 		idx := m.api.State().PlayerTeamIndex(m.playerID)
 		m.api.State().NextTeamColor(idx, direction)
-		m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+		m.api.BroadcastMsg(domain.TeamUpdatedMsg{})
 	}
 	lobbyTeamPanel.OnStartRename = func() {
 		idx := m.api.State().PlayerTeamIndex(m.playerID)
@@ -333,7 +334,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncChat()
 		return m, nil
 
-	case common.TickMsg:
+	case domain.TickMsg:
 		// Dispatch init commands from ~/.null-space/client.txt on the first tick
 		// (after the TUI is fully running and the player is registered).
 		if len(m.InitCommands) > 0 {
@@ -351,7 +352,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		engine.UpdateShaders(m.shaders, 0.1)
 		return m, nil
 
-	case common.ChatMsg:
+	case domain.ChatMsg:
 		chatMsg := msg.Msg
 		if chatMsg.IsPrivate {
 			if chatMsg.ToID != m.playerID && chatMsg.FromID != m.playerID {
@@ -396,17 +397,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case common.PlayerJoinedMsg, common.PlayerLeftMsg:
+	case domain.PlayerJoinedMsg, domain.PlayerLeftMsg:
 		m.syncChat()
 		return m, nil
 
-	case common.TeamUpdatedMsg:
+	case domain.TeamUpdatedMsg:
 		// ClearScreen forces a full redraw. The ultraviolet renderer's
 		// partial-update optimizer uses CR+LF cursor movement that
 		// mispositions team panel content over SSH.
 		return m, tea.ClearScreen
 
-	case common.GameLoadedMsg:
+	case domain.GameLoadedMsg:
 		// This player was connected when the game loaded — they're in the game.
 		m.inActiveGame = true
 		m.charmapSent = false
@@ -417,7 +418,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeViewports()
 		return m, nil
 
-	case common.GameUnloadedMsg:
+	case domain.GameUnloadedMsg:
 		m.inActiveGame = false
 		m.invalidateMenuCache()
 		m.lobbyWindow.FocusIdx = 4 // lobbyInput
@@ -426,18 +427,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeViewports()
 		return m, cmd
 
-	case common.GamePhaseMsg:
-		if msg.Phase == common.PhaseGameOver {
+	case domain.GamePhaseMsg:
+		if msg.Phase == domain.PhaseGameOver {
 			m.gameOverStart = time.Now()
 		}
-		if msg.Phase == common.PhaseNone {
+		if msg.Phase == domain.PhaseNone {
 			m.inActiveGame = false
 			m.lobbyWindow.FocusIdx = 4
 			cmd := m.lobbyInput.Model.Focus()
 			m.resizeViewports()
 			return m, cmd
 		}
-		if msg.Phase == common.PhaseSuspended {
+		if msg.Phase == domain.PhaseSuspended {
 			// Return to lobby view but keep inActiveGame true so resume works.
 			m.lobbyWindow.FocusIdx = 4
 			cmd := m.lobbyInput.Model.Focus()
@@ -559,7 +560,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Splash phase — admin can press Enter to start, others wait.
-	if m.inActiveGame && phase == common.PhaseSplash {
+	if m.inActiveGame && phase == domain.PhaseSplash {
 		switch msg.String() {
 		case "enter":
 			player := m.api.State().GetPlayer(m.playerID)
@@ -571,7 +572,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Game-over phase — Enter acknowledges.
-	if m.inActiveGame && phase == common.PhaseGameOver {
+	if m.inActiveGame && phase == domain.PhaseGameOver {
 		switch msg.String() {
 		case "enter":
 			m.api.AcknowledgeGameOver(m.playerID)
@@ -596,7 +597,7 @@ func (m Model) handleTeamEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if name != "" {
 			idx := m.api.State().PlayerTeamIndex(m.playerID)
 			if m.api.State().RenameTeam(idx, name) {
-				m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+				m.api.BroadcastMsg(domain.TeamUpdatedMsg{})
 			}
 		}
 		m.teamEditing = false
@@ -627,7 +628,7 @@ func (m *Model) handleTeamPanelClick(panelX, contentY int) string {
 	if contentY == row {
 		if m.api.State().PlayerTeamIndex(m.playerID) >= 0 {
 			m.api.State().MovePlayerToTeam(m.playerID, -1)
-			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+			m.api.BroadcastMsg(domain.TeamUpdatedMsg{})
 		}
 		return ""
 	}
@@ -660,7 +661,7 @@ func (m *Model) handleTeamPanelClick(panelX, contentY int) string {
 				if panelX >= 1 && panelX <= 2 {
 					// Clicked on color swatch — cycle color.
 					m.api.State().NextTeamColor(i, 1)
-					m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+					m.api.BroadcastMsg(domain.TeamUpdatedMsg{})
 				} else {
 					// Clicked on team name — enter rename mode.
 					m.teamEditing = true
@@ -670,7 +671,7 @@ func (m *Model) handleTeamPanelClick(panelX, contentY int) string {
 				}
 			} else if myIdx != i {
 				m.api.State().MovePlayerToTeam(m.playerID, i)
-				m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+				m.api.BroadcastMsg(domain.TeamUpdatedMsg{})
 			}
 			return ""
 		}
@@ -690,7 +691,7 @@ func (m *Model) handleTeamPanelClick(panelX, contentY int) string {
 	row++ // blank line
 	if contentY == row && !m.api.State().IsSoleMemberOfTeam(m.playerID) {
 		m.api.State().MovePlayerToTeam(m.playerID, len(teams))
-		m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+		m.api.BroadcastMsg(domain.TeamUpdatedMsg{})
 	}
 	return ""
 }
@@ -735,16 +736,16 @@ func (m Model) View() tea.View {
 	phase := m.api.State().GamePhase
 	m.api.State().RUnlock()
 
-	if (!m.inActiveGame || phase == common.PhaseNone || phase == common.PhaseSuspended) && m.teamEditing {
+	if (!m.inActiveGame || phase == domain.PhaseNone || phase == domain.PhaseSuspended) && m.teamEditing {
 		SetInputStyle(&m.teamEditInput, m.theme.LayerAt(0).InputBgC(), m.theme.LayerAt(0).InputFgC())
 	}
 
 	// Build menus once per frame — passed to sub-views and overlay rendering.
 	menus := m.cachedMenus()
 
-	buf := common.NewImageBuffer(m.width, m.height)
+	buf := render.NewImageBuffer(m.width, m.height)
 
-	if !m.inActiveGame || phase == common.PhaseNone || phase == common.PhaseSuspended {
+	if !m.inActiveGame || phase == domain.PhaseNone || phase == domain.PhaseSuspended {
 		m.renderLobby(buf, menus)
 	} else {
 		m.renderPlaying(buf, menus, game, gameName, phase)
@@ -759,19 +760,19 @@ func (m Model) View() tea.View {
 	if m.overlay.OpenMenu >= 0 {
 		menuLayer := m.theme.LayerAt(1)
 		if dd := m.overlay.RenderDropdown(menus, 0, menuLayer); dd.Content != "" {
-			sub := common.NewImageBuffer(dd.Width, dd.Height)
+			sub := render.NewImageBuffer(dd.Width, dd.Height)
 			sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, menuLayer.FgC(), menuLayer.BgC())
 			buf.Blit(dd.Col, dd.Row, sub)
-			common.BlitShadow(buf, dd.Col, dd.Row, dd.Width, dd.Height, shadowFg, shadowBg)
+			render.BlitShadow(buf, dd.Col, dd.Row, dd.Width, dd.Height, shadowFg, shadowBg)
 		}
 	}
 	if m.overlay.HasDialog() {
 		dlgLayer := m.theme.LayerAt(2)
 		if dlg := m.overlay.RenderDialog(m.width, m.height, dlgLayer); dlg.Content != "" {
-			sub := common.NewImageBuffer(dlg.Width, dlg.Height)
+			sub := render.NewImageBuffer(dlg.Width, dlg.Height)
 			sub.PaintANSI(0, 0, dlg.Width, dlg.Height, dlg.Content, dlgLayer.FgC(), dlgLayer.BgC())
 			buf.Blit(dlg.Col, dlg.Row, sub)
-			common.BlitShadow(buf, dlg.Col, dlg.Row, dlg.Width, dlg.Height, shadowFg, shadowBg)
+			render.BlitShadow(buf, dlg.Col, dlg.Row, dlg.Width, dlg.Height, shadowFg, shadowBg)
 		}
 	}
 
@@ -780,26 +781,26 @@ func (m Model) View() tea.View {
 	if m.IsEnhancedClient && m.inActiveGame && game != nil {
 		if !m.charmapSent {
 			if cm := game.CharMap(); cm != nil {
-				oscPrefix += common.EncodeCharmapOSC(cm)
+				oscPrefix += render.EncodeCharmapOSC(cm)
 				if cm.Atlas != "" {
 					atlasPath := filepath.Join(m.api.DataDir(), "charmaps", cm.Name, cm.Atlas)
-					oscPrefix += common.EncodeAtlasOSC(atlasPath)
+					oscPrefix += render.EncodeAtlasOSC(atlasPath)
 				}
 			}
 			m.charmapSent = true
 		}
 		if m.viewportW > 0 && m.viewportH > 0 {
-			oscPrefix += common.EncodeViewportOSC(m.viewportX, m.viewportY, m.viewportW, m.viewportH)
+			oscPrefix += render.EncodeViewportOSC(m.viewportX, m.viewportY, m.viewportW, m.viewportH)
 
 			// Canvas frame: render and send if game has renderCanvas and scale > 0.
 			m.api.State().RLock()
 			canvasScale := m.api.State().CanvasScale
 			m.api.State().RUnlock()
-			if canvasScale > 0 && game.HasCanvasMode() && phase == common.PhasePlaying {
+			if canvasScale > 0 && game.HasCanvasMode() && phase == domain.PhasePlaying {
 				pixelW := m.viewportW * canvasScale
 				pixelH := m.viewportH * canvasScale
 				pngData := game.RenderCanvas(m.playerID, pixelW, pixelH)
-				oscPrefix += common.EncodeFrameOSC(pngData)
+				oscPrefix += render.EncodeFrameOSC(pngData)
 			}
 		}
 	}
@@ -808,7 +809,7 @@ func (m Model) View() tea.View {
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
 
-	isLobby := !m.inActiveGame || phase == common.PhaseNone || phase == common.PhaseSuspended
+	isLobby := !m.inActiveGame || phase == domain.PhaseNone || phase == domain.PhaseSuspended
 
 	if isLobby && m.lobbyWindow.FocusIdx == 4 {
 		if cx, cy, visible := m.lobbyWindow.CursorPosition(); visible {
@@ -857,7 +858,7 @@ func (m Model) View() tea.View {
 
 // renderLobby renders the lobby view using NC controls directly into the buffer.
 // Layout: row 0 = NCMenuBar, rows 1..H-2 = NCWindow (chat + teams + cmd bar), row H-1 = NCStatusBar.
-func (m Model) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef) {
+func (m Model) renderLobby(buf *render.ImageBuffer, menus []domain.MenuDef) {
 	// Update menu bar.
 	m.lobbyMenuBar.Menus = menus
 
@@ -888,7 +889,7 @@ func (m Model) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef) {
 	suspPhase := m.api.State().GamePhase
 	suspName := m.api.State().GameName
 	m.api.State().RUnlock()
-	if suspPhase == common.PhaseSuspended && suspName != "" {
+	if suspPhase == domain.PhaseSuspended && suspName != "" {
 		statusLeft += fmt.Sprintf(" | suspended: %s", suspName)
 	}
 	m.lobbyStatusBar.LeftText = statusLeft
@@ -902,7 +903,7 @@ func (m Model) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef) {
 }
 
 
-func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, game common.Game, gameName string, phase common.GamePhase) {
+func (m Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, game domain.Game, gameName string, phase domain.GamePhase) {
 	// Compute game viewport height (16:9 aspect ratio with min chat height).
 	// Window interior = total - menuBar(1) - statusBar(1) - topBorder(1) - bottomBorder(1) = height - 4
 	// Interior rows: gameView + divider(1) + chat + divider(1) + cmdInput(1) = gameH + chatH + 3
@@ -928,18 +929,18 @@ func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, ga
 
 	// Wire gameview rendering based on phase.
 	switch phase {
-	case common.PhaseSplash:
-		m.playingGameView.RenderFn = func(gbuf *common.ImageBuffer, x, y, w, h int) {
+	case domain.PhaseSplash:
+		m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
 			if !game.RenderSplash(gbuf, m.playerID, x, y, w, h) {
 				m.defaultRenderSplash(gbuf, displayName, x, y, w, h)
 			}
 		}
 		m.playingGameView.OnKey = nil // splash ignores game keys
-	case common.PhaseGameOver:
+	case domain.PhaseGameOver:
 		m.api.State().RLock()
 		results := m.api.State().GameOverResults
 		m.api.State().RUnlock()
-		m.playingGameView.RenderFn = func(gbuf *common.ImageBuffer, x, y, w, h int) {
+		m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
 			if !game.RenderGameOver(gbuf, m.playerID, x, y, w, h, results) {
 				m.defaultRenderGameOver(gbuf, results, x, y, w, h)
 			}
@@ -949,9 +950,9 @@ func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, ga
 		if ncTree := game.RenderNC(m.playerID, m.width, gameH); ncTree != nil {
 			// NC-tree game: reconcile into a GameWindow and render/route through it.
 			m.gameWindow = widget.ReconcileGameWindow(m.gameWindow, ncTree,
-				func(gbuf *common.ImageBuffer, bx, by, bw, bh int) { game.Render(gbuf, m.playerID, bx, by, bw, bh) },
+				func(gbuf *render.ImageBuffer, bx, by, bw, bh int) { game.Render(gbuf, m.playerID, bx, by, bw, bh) },
 				func(action string) { game.OnInput(m.playerID, action) })
-			m.playingGameView.RenderFn = func(gbuf *common.ImageBuffer, x, y, w, h int) {
+			m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
 				m.gameWindow.Window.RenderToBuf(gbuf, x, y, w, h, m.theme.LayerAt(0))
 			}
 			// Route keys to the reconciled window's focused control.
@@ -960,7 +961,7 @@ func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, ga
 			}
 		} else {
 			m.gameWindow = nil
-			m.playingGameView.RenderFn = func(gbuf *common.ImageBuffer, x, y, w, h int) {
+			m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
 				game.Render(gbuf, m.playerID, x, y, w, h)
 			}
 			m.playingGameView.OnKey = func(key string) {
@@ -972,7 +973,7 @@ func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, ga
 	// Capture viewport bounds for enhanced client OSC (wraps the render function).
 	if m.IsEnhancedClient && m.playingGameView.RenderFn != nil {
 		inner := m.playingGameView.RenderFn
-		m.playingGameView.RenderFn = func(gbuf *common.ImageBuffer, x, y, w, h int) {
+		m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
 			m.viewportX, m.viewportY, m.viewportW, m.viewportH = x, y, w, h
 			inner(gbuf, x, y, w, h)
 		}
@@ -985,7 +986,7 @@ func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, ga
 	// Update menu bar and status bar.
 	m.playingMenuBar.Menus = menus
 	switch phase {
-	case common.PhaseSplash:
+	case domain.PhaseSplash:
 		player := m.api.State().GetPlayer(m.playerID)
 		isAdmin := player != nil && player.IsAdmin
 		if isAdmin {
@@ -993,7 +994,7 @@ func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, ga
 		} else {
 			m.playingStatusBar.LeftText = " Waiting for host to start..."
 		}
-	case common.PhaseGameOver:
+	case domain.PhaseGameOver:
 		remaining := 15 - int(time.Since(m.gameOverStart).Seconds())
 		if remaining < 0 {
 			remaining = 0
@@ -1012,7 +1013,7 @@ func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, ga
 }
 
 // defaultRenderSplash renders a figlet game name centered in the viewport.
-func (m Model) defaultRenderSplash(buf *common.ImageBuffer, name string, x, y, w, h int) {
+func (m Model) defaultRenderSplash(buf *render.ImageBuffer, name string, x, y, w, h int) {
 	figletTitle := strings.TrimRight(engine.Figlet(name, ""), "\n")
 	var lines []string
 	if figletTitle != "" {
@@ -1045,12 +1046,12 @@ func (m Model) defaultRenderSplash(buf *common.ImageBuffer, name string, x, y, w
 		if col < x {
 			col = x
 		}
-		buf.WriteString(col, row, line, nil, nil, common.AttrNone)
+		buf.WriteString(col, row, line, nil, nil, render.AttrNone)
 	}
 }
 
 // defaultRenderGameOver renders a figlet "GAME OVER" title with ranked results.
-func (m Model) defaultRenderGameOver(buf *common.ImageBuffer, results []common.GameResult, x, y, w, h int) {
+func (m Model) defaultRenderGameOver(buf *render.ImageBuffer, results []domain.GameResult, x, y, w, h int) {
 	var lines []string
 
 	// Figlet title.
@@ -1098,7 +1099,7 @@ func (m Model) defaultRenderGameOver(buf *common.ImageBuffer, results []common.G
 		if col < x {
 			col = x
 		}
-		buf.WriteString(col, row, line, nil, nil, common.AttrNone)
+		buf.WriteString(col, row, line, nil, nil, render.AttrNone)
 	}
 }
 
@@ -1141,12 +1142,12 @@ func (m *Model) syncChat() {
 func (m *Model) resizeViewports() {
 	phase := m.api.State().GetGamePhase()
 
-	if !m.inActiveGame || phase == common.PhaseNone || phase == common.PhaseSuspended {
+	if !m.inActiveGame || phase == domain.PhaseNone || phase == domain.PhaseSuspended {
 		// Lobby — chatH for scroll math.
 		windowH := m.height - 2 // minus menu bar and status bar
 		chatH := max(1, windowH-4) // approx: borders + divider + cmd bar
 		m.chatH = chatH
-	} else if phase == common.PhasePlaying {
+	} else if phase == domain.PhasePlaying {
 		// Playing — Screen (menu bar + status bar = 2), window borders (2), dividers (2), cmd bar (1) = 7 overhead.
 		interiorH := m.height - 4
 		gameH := m.width * 9 / 16
@@ -1169,7 +1170,7 @@ func (m *Model) invalidateMenuCache() {
 }
 
 // cachedMenus returns the menu tree, rebuilding only when the active game has changed.
-func (m *Model) cachedMenus() []common.MenuDef {
+func (m *Model) cachedMenus() []domain.MenuDef {
 	m.api.State().RLock()
 	game := m.api.State().ActiveGame
 	m.api.State().RUnlock()
@@ -1178,7 +1179,7 @@ func (m *Model) cachedMenus() []common.MenuDef {
 		return m.menuCache
 	}
 
-	fileItems := []common.MenuItemDef{
+	fileItems := []domain.MenuItemDef{
 		{Label: "&Resume Game...", Handler: func(_ string) { m.showResumeGameDialog() }},
 		{Label: "---"},
 		{Label: "&Themes...", Handler: func(_ string) { m.showPlayerListDialog("Themes", "themes", ".json") }},
@@ -1187,29 +1188,29 @@ func (m *Model) cachedMenus() []common.MenuDef {
 		{Label: "---"},
 	}
 	if m.IsLocal {
-		fileItems = append(fileItems, common.MenuItemDef{
+		fileItems = append(fileItems, domain.MenuItemDef{
 			Label: "&Quit",
 			Handler: func(_ string) {
 				// Ctrl+C is the reliable quit path in local mode.
 			},
 		})
 	} else {
-		fileItems = append(fileItems, common.MenuItemDef{
+		fileItems = append(fileItems, domain.MenuItemDef{
 			Label: "&Disconnect",
 			Handler: func(playerID string) {
 				go m.api.KickPlayer(playerID)
 			},
 		})
 	}
-	menus := []common.MenuDef{{Label: "&File", Items: fileItems}}
+	menus := []domain.MenuDef{{Label: "&File", Items: fileItems}}
 	if game != nil {
 		menus = append(menus, game.Menus()...)
 	}
-	menus = append(menus, common.MenuDef{
+	menus = append(menus, domain.MenuDef{
 		Label: "&Help",
-		Items: []common.MenuItemDef{
+		Items: []domain.MenuItemDef{
 			{Label: "&About...", Handler: func(_ string) {
-				m.overlay.PushDialog(common.DialogRequest{
+				m.overlay.PushDialog(domain.DialogRequest{
 					Title:   "About",
 					Body:    engine.AboutLogo(),
 					Buttons: []string{"OK"},
@@ -1225,7 +1226,7 @@ func (m *Model) cachedMenus() []common.MenuDef {
 func (m *Model) showResumeGameDialog() {
 	saves := m.api.ListSuspends()
 	if len(saves) == 0 {
-		m.overlay.PushDialog(common.DialogRequest{
+		m.overlay.PushDialog(domain.DialogRequest{
 			Title:   "Resume Game",
 			Body:    "No suspended games found.",
 			Buttons: []string{"OK"},
@@ -1255,7 +1256,7 @@ func (m *Model) showResumeGameDialog() {
 
 	// Capture saves slice for the OnClose callback.
 	capturedSaves := saves
-	m.overlay.PushDialog(common.DialogRequest{
+	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   "Resume Game",
 		Body:    body,
 		Buttons: buttons,
@@ -1270,7 +1271,7 @@ func (m *Model) showResumeGameDialog() {
 			}
 			s := capturedSaves[idx-1]
 			if err := m.api.ResumeGame(s.GameName, s.SaveName); err != nil {
-				m.overlay.PushDialog(common.DialogRequest{
+				m.overlay.PushDialog(domain.DialogRequest{
 					Title:   "Resume Failed",
 					Body:    err.Error(),
 					Buttons: []string{"OK"},
@@ -1291,7 +1292,7 @@ func (m *Model) showPlayerListDialog(title, subdir, ext string) {
 		}
 		body = strings.Join(lines, "\n")
 	}
-	m.overlay.PushDialog(common.DialogRequest{
+	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   title,
 		Body:    body,
 		Buttons: []string{"Close"},
@@ -1328,7 +1329,7 @@ func (m *Model) showShaderDialog() {
 	lines = append(lines, "")
 	lines = append(lines, "Use /shader load|unload|up|down <name>")
 
-	m.overlay.PushDialog(common.DialogRequest{
+	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   "Shaders",
 		Body:    strings.Join(lines, "\n"),
 		Buttons: []string{"Close"},
@@ -1357,15 +1358,15 @@ func (m *Model) dispatchInput(text string) {
 	if strings.HasPrefix(text, "/") {
 		player := m.api.State().GetPlayer(m.playerID)
 		isAdmin := player != nil && player.IsAdmin
-		ctx := common.CommandContext{
+		ctx := domain.CommandContext{
 			PlayerID: m.playerID,
 			IsAdmin:  isAdmin,
 			Reply: func(s string) {
-				msg := common.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: s}
-				m.api.SendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
+				msg := domain.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: s}
+				m.api.SendToPlayer(m.playerID, domain.ChatMsg{Msg: msg})
 			},
 			Broadcast: func(s string) {
-				m.api.BroadcastChat(common.Message{Text: s})
+				m.api.BroadcastChat(domain.Message{Text: s})
 			},
 			ServerLog: func(s string) {
 				m.api.ServerLog(s)
@@ -1379,7 +1380,7 @@ func (m *Model) dispatchInput(text string) {
 	if p := m.api.State().GetPlayer(m.playerID); p != nil {
 		playerName = p.Name
 	}
-	m.api.BroadcastChat(common.Message{Author: playerName, Text: text})
+	m.api.BroadcastChat(domain.Message{Author: playerName, Text: text})
 }
 
 // lobbyTabComplete provides tab completion for the lobby command input.
@@ -1431,8 +1432,8 @@ func (m *Model) handleThemeCommand(input string) {
 }
 
 func (m *Model) pluginReply(text string) {
-	msg := common.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: text}
-	m.api.SendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
+	msg := domain.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: text}
+	m.api.SendToPlayer(m.playerID, domain.ChatMsg{Msg: msg})
 }
 
 func (m *Model) handlePluginCommand(input string) {
@@ -1527,15 +1528,15 @@ func (m *Model) dispatchPluginReply(text string) {
 	if strings.HasPrefix(text, "/") {
 		player := m.api.State().GetPlayer(m.playerID)
 		isAdmin := player != nil && player.IsAdmin
-		ctx := common.CommandContext{
+		ctx := domain.CommandContext{
 			PlayerID: m.playerID,
 			IsAdmin:  isAdmin,
 			Reply: func(s string) {
-				msg := common.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: s}
-				m.api.SendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
+				msg := domain.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: s}
+				m.api.SendToPlayer(m.playerID, domain.ChatMsg{Msg: msg})
 			},
 			Broadcast: func(s string) {
-				m.api.BroadcastChat(common.Message{Text: s, IsFromPlugin: true})
+				m.api.BroadcastChat(domain.Message{Text: s, IsFromPlugin: true})
 			},
 			ServerLog: func(s string) {
 				m.api.ServerLog(s)
@@ -1548,7 +1549,7 @@ func (m *Model) dispatchPluginReply(text string) {
 	if p := m.api.State().GetPlayer(m.playerID); p != nil {
 		playerName = p.Name
 	}
-	m.api.BroadcastChat(common.Message{Author: playerName, Text: text, IsFromPlugin: true})
+	m.api.BroadcastChat(domain.Message{Author: playerName, Text: text, IsFromPlugin: true})
 }
 
 func (m *Model) handleShaderCommand(input string) {

@@ -1,7 +1,7 @@
 package state
 
 import (
-	"null-space/common"
+	"null-space/internal/domain"
 	"strings"
 	"sync"
 	"time"
@@ -28,13 +28,13 @@ type CentralState struct {
 	StartTime     time.Time
 	TickN         int // increments every 100ms; SpinnerFrame = TickN/10
 
-	ActiveGame common.Game
+	ActiveGame domain.Game
 	GameName   string
-	GamePhase  common.GamePhase
+	GamePhase  domain.GamePhase
 
 	// GameTeams is a snapshot of the teams at game load time.
 	// Separate from lobby Teams so the lobby stays editable during a game.
-	GameTeams []common.Team
+	GameTeams []domain.Team
 
 	// GameDisconnected maps player name → game player ID for players who
 	// disconnected mid-game. Used to rejoin them on reconnect.
@@ -42,13 +42,13 @@ type CentralState struct {
 
 	// GameOverReady tracks which players have acknowledged the game-over screen.
 	GameOverReady   map[string]bool
-	GameOverResults []common.GameResult // ranked results from gameOver()
+	GameOverResults []domain.GameResult // ranked results from gameOver()
 
 	// Teams configured in the lobby before a game starts.
-	Teams []common.Team
+	Teams []domain.Team
 
-	Players     map[string]*common.Player
-	ChatHistory []common.Message
+	Players     map[string]*domain.Player
+	ChatHistory []domain.Message
 
 	Net NetworkInfo
 
@@ -62,7 +62,7 @@ func New(password string) *CentralState {
 	return &CentralState{
 		AdminPassword: password,
 		StartTime:     time.Now(),
-		Players:       make(map[string]*common.Player),
+		Players:       make(map[string]*domain.Player),
 	}
 }
 
@@ -83,7 +83,7 @@ func (s *CentralState) SpinnerChar() rune {
 	return spinnerFrames[frame]
 }
 
-func (s *CentralState) AddChat(msg common.Message) {
+func (s *CentralState) AddChat(msg domain.Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ChatHistory = append(s.ChatHistory, msg)
@@ -92,15 +92,15 @@ func (s *CentralState) AddChat(msg common.Message) {
 	}
 }
 
-func (s *CentralState) GetChatHistory() []common.Message {
+func (s *CentralState) GetChatHistory() []domain.Message {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	result := make([]common.Message, len(s.ChatHistory))
+	result := make([]domain.Message, len(s.ChatHistory))
 	copy(result, s.ChatHistory)
 	return result
 }
 
-func (s *CentralState) AddPlayer(player *common.Player) {
+func (s *CentralState) AddPlayer(player *domain.Player) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Players[player.ID] = player
@@ -112,7 +112,7 @@ func (s *CentralState) RemovePlayer(playerID string) {
 	delete(s.Players, playerID)
 }
 
-func (s *CentralState) GetPlayer(playerID string) *common.Player {
+func (s *CentralState) GetPlayer(playerID string) *domain.Player {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.Players[playerID]
@@ -126,7 +126,7 @@ func (s *CentralState) SetPlayerAdmin(playerID string, isAdmin bool) {
 	}
 }
 
-func (s *CentralState) PlayerByName(name string) *common.Player {
+func (s *CentralState) PlayerByName(name string) *domain.Player {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.Players {
@@ -147,10 +147,10 @@ func (s *CentralState) PlayerNames() []string {
 	return names
 }
 
-func (s *CentralState) ListPlayers() []*common.Player {
+func (s *CentralState) ListPlayers() []*domain.Player {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	players := make([]*common.Player, 0, len(s.Players))
+	players := make([]*domain.Player, 0, len(s.Players))
 	for _, p := range s.Players {
 		players = append(players, p)
 	}
@@ -165,23 +165,23 @@ func (s *CentralState) PlayerCount() int {
 
 // --- Game phase helpers ---
 
-func (s *CentralState) SetGamePhase(phase common.GamePhase) {
+func (s *CentralState) SetGamePhase(phase domain.GamePhase) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.GamePhase = phase
-	if phase == common.PhaseGameOver {
+	if phase == domain.PhaseGameOver {
 		s.GameOverReady = make(map[string]bool)
 	} else {
 		s.GameOverReady = nil
 		s.GameOverResults = nil
 	}
-	if phase == common.PhaseNone {
+	if phase == domain.PhaseNone {
 		s.GameTeams = nil
 		s.GameDisconnected = nil
 	}
 }
 
-func (s *CentralState) GetGamePhase() common.GamePhase {
+func (s *CentralState) GetGamePhase() domain.GamePhase {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.GamePhase
@@ -228,12 +228,12 @@ func (s *CentralState) IsGamePlayer(playerID string) bool {
 }
 
 // GetGameTeams returns a deep copy of the game teams snapshot.
-func (s *CentralState) GetGameTeams() []common.Team {
+func (s *CentralState) GetGameTeams() []domain.Team {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	teams := make([]common.Team, len(s.GameTeams))
+	teams := make([]domain.Team, len(s.GameTeams))
 	for i, t := range s.GameTeams {
-		teams[i] = common.Team{
+		teams[i] = domain.Team{
 			Name:    t.Name,
 			Color:   t.Color,
 			Players: append([]string(nil), t.Players...),

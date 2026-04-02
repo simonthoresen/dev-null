@@ -3,7 +3,7 @@ package widget
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -27,7 +27,7 @@ func (p *Panel) Focusable() bool     { return false } // panels aren't directly 
 func (p *Panel) MinSize() (int, int) { return 4, 3 }  // min border box
 func (p *Panel) Update(msg tea.Msg)  {}               // updates go to children directly
 
-func (p *Panel) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
+func (p *Panel) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
 	p.innerW = max(1, width-2)
 	p.innerH = max(1, height-2)
 	p.screenX = x
@@ -39,37 +39,37 @@ func (p *Panel) Render(buf *common.ImageBuffer, x, y, width, height int, focused
 	hlBg := layer.HighlightBgC()
 
 	// Fill with background.
-	buf.Fill(x, y, width, height, ' ', fg, bg, common.AttrNone)
+	buf.Fill(x, y, width, height, ' ', fg, bg, render.AttrNone)
 
 	// Top border with optional title (same pattern as Window).
-	buf.SetChar(x, y, common.RuneOf(layer.OTL()), fg, bg, common.AttrNone)
-	buf.SetChar(x+width-1, y, common.RuneOf(layer.OTR()), fg, bg, common.AttrNone)
+	buf.SetChar(x, y, render.RuneOf(layer.OTL()), fg, bg, render.AttrNone)
+	buf.SetChar(x+width-1, y, render.RuneOf(layer.OTR()), fg, bg, render.AttrNone)
 	if p.Title != "" {
 		titleText := " " + p.Title + " "
-		buf.SetChar(x+1, y, common.RuneOf(layer.IH()), fg, bg, common.AttrNone)
-		n := buf.WriteString(x+2, y, titleText, hlFg, hlBg, common.AttrBold)
+		buf.SetChar(x+1, y, render.RuneOf(layer.IH()), fg, bg, render.AttrNone)
+		n := buf.WriteString(x+2, y, titleText, hlFg, hlBg, render.AttrBold)
 		for col := x + 2 + n; col < x+width-1; col++ {
-			buf.SetChar(col, y, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
+			buf.SetChar(col, y, render.RuneOf(layer.OH()), fg, bg, render.AttrNone)
 		}
 	} else {
 		for col := x + 1; col < x+width-1; col++ {
-			buf.SetChar(col, y, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
+			buf.SetChar(col, y, render.RuneOf(layer.OH()), fg, bg, render.AttrNone)
 		}
 	}
 
 	// Bottom border.
 	boty := y + height - 1
-	buf.SetChar(x, boty, common.RuneOf(layer.OBL()), fg, bg, common.AttrNone)
-	buf.SetChar(x+width-1, boty, common.RuneOf(layer.OBR()), fg, bg, common.AttrNone)
+	buf.SetChar(x, boty, render.RuneOf(layer.OBL()), fg, bg, render.AttrNone)
+	buf.SetChar(x+width-1, boty, render.RuneOf(layer.OBR()), fg, bg, render.AttrNone)
 	for col := x + 1; col < x+width-1; col++ {
-		buf.SetChar(col, boty, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
+		buf.SetChar(col, boty, render.RuneOf(layer.OH()), fg, bg, render.AttrNone)
 	}
 
 	// Left/right borders.
-	vr := common.RuneOf(layer.OV())
+	vr := render.RuneOf(layer.OV())
 	for row := y + 1; row < boty; row++ {
-		buf.SetChar(x, row, vr, fg, bg, common.AttrNone)
-		buf.SetChar(x+width-1, row, vr, fg, bg, common.AttrNone)
+		buf.SetChar(x, row, vr, fg, bg, render.AttrNone)
+		buf.SetChar(x+width-1, row, vr, fg, bg, render.AttrNone)
 	}
 
 	// Compute grid layout and render children (same algorithm as Window).
@@ -92,13 +92,13 @@ func (p *Panel) Render(buf *common.ImageBuffer, x, y, width, height int, focused
 		switch child.Control.(type) {
 		case *HDivider:
 			if child.Control.(*HDivider).Connected {
-				buf.SetChar(x, cy, common.RuneOf(layer.XL()), fg, bg, common.AttrNone)
-				buf.SetChar(x+width-1, cy, common.RuneOf(layer.XR()), fg, bg, common.AttrNone)
+				buf.SetChar(x, cy, render.RuneOf(layer.XL()), fg, bg, render.AttrNone)
+				buf.SetChar(x+width-1, cy, render.RuneOf(layer.XR()), fg, bg, render.AttrNone)
 			}
 		case *VDivider:
 			if child.Control.(*VDivider).Connected {
-				buf.SetChar(cx, y, common.RuneOf(layer.XT()), fg, bg, common.AttrNone)
-				buf.SetChar(cx, boty, common.RuneOf(layer.XB()), fg, bg, common.AttrNone)
+				buf.SetChar(cx, y, render.RuneOf(layer.XT()), fg, bg, render.AttrNone)
+				buf.SetChar(cx, boty, render.RuneOf(layer.XB()), fg, bg, render.AttrNone)
 			}
 		}
 	}

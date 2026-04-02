@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"null-space/common"
+	"null-space/internal/domain"
 )
 
 func TestIncludeSingleFile(t *testing.T) {
@@ -24,8 +24,8 @@ func TestIncludeSingleFile(t *testing.T) {
 		};
 	`), 0o644)
 
-	chatCh := make(chan common.Message, 8)
-	game, err := LoadGame(mainJS, func(string) {}, chatCh, common.RealClock{}, dir)
+	chatCh := make(chan domain.Message, 8)
+	game, err := LoadGame(mainJS, func(string) {}, chatCh, domain.RealClock{}, dir)
 	if err != nil {
 		t.Fatalf("LoadGame: %v", err)
 	}
@@ -51,8 +51,8 @@ func TestIncludeIdempotent(t *testing.T) {
 		};
 	`), 0o644)
 
-	chatCh := make(chan common.Message, 8)
-	game, err := LoadGame(mainJS, func(string) {}, chatCh, common.RealClock{}, dir)
+	chatCh := make(chan domain.Message, 8)
+	game, err := LoadGame(mainJS, func(string) {}, chatCh, domain.RealClock{}, dir)
 	if err != nil {
 		t.Fatalf("LoadGame: %v", err)
 	}
@@ -70,8 +70,8 @@ func TestIncludeRejectsPathTraversal(t *testing.T) {
 		var Game = { init: function(s) {} };
 	`), 0o644)
 
-	chatCh := make(chan common.Message, 8)
-	_, err := LoadGame(mainJS, func(string) {}, chatCh, common.RealClock{}, dir)
+	chatCh := make(chan domain.Message, 8)
+	_, err := LoadGame(mainJS, func(string) {}, chatCh, domain.RealClock{}, dir)
 	if err == nil {
 		t.Fatal("expected error for path traversal, got nil")
 	}
@@ -83,8 +83,8 @@ func TestNethackGameLoads(t *testing.T) {
 		t.Skip("nethack game not found at", mainJS)
 	}
 
-	chatCh := make(chan common.Message, 64)
-	game, err := LoadGame(mainJS, func(string) {}, chatCh, common.RealClock{}, "../../dist")
+	chatCh := make(chan domain.Message, 64)
+	game, err := LoadGame(mainJS, func(string) {}, chatCh, domain.RealClock{}, "../../dist")
 	if err != nil {
 		t.Fatalf("LoadGame nethack: %v", err)
 	}
@@ -99,8 +99,8 @@ func TestHoldemGameLoads(t *testing.T) {
 		t.Skip("holdem game not found at", mainJS)
 	}
 
-	chatCh := make(chan common.Message, 64)
-	game, err := LoadGame(mainJS, func(string) {}, chatCh, common.RealClock{}, "../../dist")
+	chatCh := make(chan domain.Message, 64)
+	game, err := LoadGame(mainJS, func(string) {}, chatCh, domain.RealClock{}, "../../dist")
 	if err != nil {
 		t.Fatalf("LoadGame holdem: %v", err)
 	}

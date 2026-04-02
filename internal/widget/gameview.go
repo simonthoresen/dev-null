@@ -3,7 +3,7 @@ package widget
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -11,7 +11,7 @@ import (
 // non-Tab keys are forwarded to the game via OnKey. Enter triggers a
 // focus cycle (to move to the command input for chat).
 type GameView struct {
-	RenderFn             func(buf *common.ImageBuffer, x, y, w, h int)
+	RenderFn             func(buf *render.ImageBuffer, x, y, w, h int)
 	OnKey                func(key string) // bound to game.OnInput(playerID, key)
 	focusable            bool
 	WantTab, WantBackTab bool
@@ -51,11 +51,11 @@ func (g *GameView) Update(msg tea.Msg) {
 	}
 }
 
-func (g *GameView) Render(buf *common.ImageBuffer, x, y, width, height int, _ bool, layer *theme.Layer) {
+func (g *GameView) Render(buf *render.ImageBuffer, x, y, width, height int, _ bool, layer *theme.Layer) {
 	if g.RenderFn == nil {
 		fg := layer.FgC()
 		bg := layer.BgC()
-		buf.Fill(x, y, width, height, ' ', fg, bg, common.AttrNone)
+		buf.Fill(x, y, width, height, ' ', fg, bg, render.AttrNone)
 		return
 	}
 	g.RenderFn(buf, x, y, width, height)

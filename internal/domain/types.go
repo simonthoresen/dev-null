@@ -1,4 +1,4 @@
-package common
+package domain
 
 import (
 	"encoding/binary"
@@ -73,12 +73,12 @@ type WidgetNode struct {
 	Children []*WidgetNode // child nodes (for split/panel containers)
 
 	// Interactive control fields
-	Action   string   // action ID sent via OnInput when control is activated (for "button", "textinput", "checkbox")
-	IsFocusable bool  // participates in Tab cycling (for "gameview")
-	TabIndex int      // focus order; lower values first (0 = default)
-	Checked  bool     // current checked state (for "checkbox")
-	Value    string   // current value (for "textinput")
-	Lines    []string // content lines (for "textview")
+	Action      string // action ID sent via OnInput when control is activated (for "button", "textinput", "checkbox")
+	IsFocusable bool   // participates in Tab cycling (for "gameview")
+	TabIndex    int    // focus order; lower values first (0 = default)
+	Checked     bool   // current checked state (for "checkbox")
+	Value       string // current value (for "textinput")
+	Lines       []string // content lines (for "textview")
 }
 
 // Hash returns a content hash of this node and all descendants.
@@ -139,7 +139,7 @@ func (n *WidgetNode) Hash() uint64 {
 
 // Tea messages
 
-type TickMsg struct{ N int }            // broadcast to all programs every 100ms; N is tick counter
+type TickMsg struct{ N int }               // broadcast to all programs every 100ms; N is tick counter
 type PlayerJoinedMsg struct{ Player *Player }
 type PlayerLeftMsg struct{ PlayerID string }
 type ChatMsg struct{ Msg Message }

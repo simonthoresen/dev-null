@@ -9,7 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/common"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -61,7 +61,7 @@ func (ti *TextInput) Update(msg tea.Msg) {
 	*ti.Model = updated
 }
 
-func (ti *TextInput) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
+func (ti *TextInput) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
 	inputBg := layer.InputBgC()
 	inputFg := layer.InputFgC()
 	ti.bg = inputBg
@@ -86,8 +86,8 @@ func (ti *TextInput) Render(buf *common.ImageBuffer, x, y, width, height int, fo
 	ti.Model.SetVirtualCursor(false)
 
 	// Brackets.
-	buf.SetChar(x, y, '[', baseFg, baseBg, common.AttrNone)
-	buf.SetChar(x+width-1, y, ']', baseFg, baseBg, common.AttrNone)
+	buf.SetChar(x, y, '[', baseFg, baseBg, render.AttrNone)
+	buf.SetChar(x+width-1, y, ']', baseFg, baseBg, render.AttrNone)
 
 	hasCursor := ti.Model.Focused()
 	if hasCursor {
@@ -100,7 +100,7 @@ func (ti *TextInput) Render(buf *common.ImageBuffer, x, y, width, height int, fo
 		buf.PaintANSI(x+1, y, fieldW, 1, trimmedView, inputFg, inputBg)
 		// Fill remaining with dots.
 		for i := 0; i < dotsW; i++ {
-			buf.SetChar(x+1+usedW+i, y, '·', inputFg, inputBg, common.AttrFaint)
+			buf.SetChar(x+1+usedW+i, y, '·', inputFg, inputBg, render.AttrFaint)
 		}
 		return
 	}
@@ -110,7 +110,7 @@ func (ti *TextInput) Render(buf *common.ImageBuffer, x, y, width, height int, fo
 	if val == "" {
 		// All dots.
 		for i := 0; i < fieldW; i++ {
-			buf.SetChar(x+1+i, y, '·', inputFg, inputBg, common.AttrFaint)
+			buf.SetChar(x+1+i, y, '·', inputFg, inputBg, render.AttrFaint)
 		}
 		return
 	}
@@ -120,12 +120,12 @@ func (ti *TextInput) Render(buf *common.ImageBuffer, x, y, width, height int, fo
 		if col >= fieldW {
 			break
 		}
-		buf.SetChar(x+1+col, y, r, inputFg, inputBg, common.AttrNone)
+		buf.SetChar(x+1+col, y, r, inputFg, inputBg, render.AttrNone)
 		col++
 	}
 	dotsW := max(0, fieldW-valW)
 	for i := 0; i < dotsW; i++ {
-		buf.SetChar(x+1+valW+i, y, '·', inputFg, inputBg, common.AttrFaint)
+		buf.SetChar(x+1+valW+i, y, '·', inputFg, inputBg, render.AttrFaint)
 	}
 }
 

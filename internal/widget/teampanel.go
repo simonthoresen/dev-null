@@ -4,7 +4,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"null-space/common"
+	"null-space/internal/domain"
+	"null-space/internal/render"
 	"null-space/internal/theme"
 )
 
@@ -13,11 +14,11 @@ import (
 // (up/down to move between teams, left/right to cycle color, enter to rename).
 type TeamPanel struct {
 	// Data — set each frame by the lobby renderer before Render.
-	Teams      []common.Team
+	Teams      []domain.Team
 	Unassigned []string // player IDs
 	MyTeamIdx  int      // -1 = unassigned
 	PlayerID   string
-	GetPlayer  func(id string) *common.Player
+	GetPlayer  func(id string) *domain.Player
 
 	// Edit state — managed by chrome key handlers.
 	Editing   bool
@@ -99,25 +100,25 @@ func (tp *TeamPanel) Update(msg tea.Msg) {
 	}
 }
 
-func (tp *TeamPanel) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
+func (tp *TeamPanel) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 
 	// Fill background.
-	buf.Fill(x, y, width, height, ' ', fg, bg, common.AttrNone)
+	buf.Fill(x, y, width, height, ' ', fg, bg, render.AttrNone)
 
 	row := 0
 
 	// Unassigned header.
 	if row < height {
-		attr := common.PixelAttr(common.AttrNone)
+		attr := render.PixelAttr(render.AttrNone)
 		if focused && tp.MyTeamIdx < 0 {
-			attr = common.AttrBold
+			attr = render.AttrBold
 		}
 		// Gray color swatch.
 		swatchColor := lipgloss.Color("#888888")
-		buf.SetChar(x+1, y+row, ' ', fg, swatchColor, common.AttrNone)
-		buf.SetChar(x+2, y+row, ' ', fg, swatchColor, common.AttrNone)
+		buf.SetChar(x+1, y+row, ' ', fg, swatchColor, render.AttrNone)
+		buf.SetChar(x+2, y+row, ' ', fg, swatchColor, render.AttrNone)
 		buf.WriteString(x+4, y+row, "Unassigned", fg, bg, attr)
 		row++
 	}
@@ -133,7 +134,7 @@ func (tp *TeamPanel) Render(buf *common.ImageBuffer, x, y, width, height int, fo
 				name = p.Name
 			}
 		}
-		buf.WriteString(x+4, y+row, TruncateStr(name, width-4), fg, bg, common.AttrNone)
+		buf.WriteString(x+4, y+row, TruncateStr(name, width-4), fg, bg, render.AttrNone)
 		row++
 	}
 
@@ -149,13 +150,13 @@ func (tp *TeamPanel) Render(buf *common.ImageBuffer, x, y, width, height int, fo
 		}
 
 		// Team header with color swatch.
-		attr := common.PixelAttr(common.AttrNone)
+		attr := render.PixelAttr(render.AttrNone)
 		if focused && i == tp.MyTeamIdx {
-			attr = common.AttrBold
+			attr = render.AttrBold
 		}
 		teamColor := lipgloss.Color(team.Color)
-		buf.SetChar(x+1, y+row, ' ', fg, teamColor, common.AttrNone)
-		buf.SetChar(x+2, y+row, ' ', fg, teamColor, common.AttrNone)
+		buf.SetChar(x+1, y+row, ' ', fg, teamColor, render.AttrNone)
+		buf.SetChar(x+2, y+row, ' ', fg, teamColor, render.AttrNone)
 
 		teamName := team.Name
 		if tp.Editing && i == tp.MyTeamIdx {
@@ -175,7 +176,7 @@ func (tp *TeamPanel) Render(buf *common.ImageBuffer, x, y, width, height int, fo
 					name = p.Name
 				}
 			}
-			buf.WriteString(x+4, y+row, TruncateStr(name, width-4), fg, bg, common.AttrNone)
+			buf.WriteString(x+4, y+row, TruncateStr(name, width-4), fg, bg, render.AttrNone)
 			row++
 		}
 	}
@@ -184,7 +185,7 @@ func (tp *TeamPanel) Render(buf *common.ImageBuffer, x, y, width, height int, fo
 	if tp.ShowCreate && row+1 < height {
 		row++ // blank separator
 		disabledFg := layer.DisabledFgC()
-		buf.WriteString(x+1, y+row, TruncateStr("[+ Create Team]", width-1), disabledFg, bg, common.AttrNone)
+		buf.WriteString(x+1, y+row, TruncateStr("[+ Create Team]", width-1), disabledFg, bg, render.AttrNone)
 	}
 }
 
