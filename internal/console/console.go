@@ -1,4 +1,4 @@
-package server
+package console
 
 import (
 	"context"
@@ -13,30 +13,40 @@ import (
 
 	"null-space/common"
 	"null-space/internal/engine"
+	"null-space/internal/state"
 	"null-space/internal/theme"
 	"null-space/internal/widget"
 )
 
-// logCategory tags console log lines for filtering.
-type logCategory int
+// ServerAPI is the interface that the console model uses to interact with the server.
+type ServerAPI interface {
+	State() *state.CentralState
+	Clock() common.Clock
+	DataDir() string
+	Uptime() string
 
-const (
-	catDebug   logCategory = iota
-	catInfo
-	catWarn
-	catError
-	catChat    // player chat, system messages
-	catCommand // "> /help" echo and command replies
-)
+	// Communication
+	BroadcastChat(msg common.Message)
+	ChatCh() <-chan common.Message
+	SlogCh() <-chan SlogLine
+
+	// Commands
+	TabCandidates(input string, playerNames []string) (prefix string, candidates []string)
+	DispatchCommand(input string, ctx common.CommandContext)
+
+	// Console-specific
+	SetConsoleWidth(w int)
+}
 
 // taggedLine is a log line with its category.
 type taggedLine struct {
-	cat  logCategory
+	cat  LogCategory
 	text string
 }
 
-type consoleModel struct {
-	app    *Server
+// Model is the Bubble Tea model for the server console.
+type Model struct {
+	api    ServerAPI
 	cancel context.CancelFunc
 	width  int
 	height int
@@ -47,7 +57,7 @@ type consoleModel struct {
 
 	// All log lines (tagged), and filter state.
 	allLines []taggedLine
-	filter   map[logCategory]bool // true = show this category
+	filter   map[LogCategory]bool // true = show this category
 
 	// Tab completion state (used by tabComplete callback).
 	tabPrefix     string
@@ -72,7 +82,28 @@ type consoleModel struct {
 	shaderNames []string
 }
 
-func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
+// tea.Msg types for channel-based updates.
+type chatLineMsg common.Message
+type slogLineMsg SlogLine
+
+func listenForEvents(chatCh <-chan common.Message, slogCh <-chan SlogLine) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case msg, ok := <-chatCh:
+			if !ok {
+				return nil
+			}
+			return chatLineMsg(msg)
+		case sl, ok := <-slogCh:
+			if !ok {
+				return nil
+			}
+			return slogLineMsg(sl)
+		}
+	}
+}
+
+func NewModel(api ServerAPI, cancel context.CancelFunc) *Model {
 	input := new(textinput.Model)
 	*input = textinput.New()
 	input.Prompt = ""
@@ -91,22 +122,22 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	}
 	window.FocusFirst()
 
-	m := &consoleModel{
-		app:       app,
+	m := &Model{
+		api:       api,
 		cancel:    cancel,
 		inputCtrl: inputCtrl,
 		logView:   logView,
 		window:    window,
-		filter: map[logCategory]bool{
-			catInfo:    true,
-			catWarn:    true,
-			catError:   true,
-			catChat:    true,
-			catCommand: true,
-			// catDebug defaults to false
+		filter: map[LogCategory]bool{
+			CatInfo:    true,
+			CatWarn:    true,
+			CatError:   true,
+			CatChat:    true,
+			CatCommand: true,
+			// CatDebug defaults to false
 		},
-		theme:     theme.Default(),
-		overlay:   widget.OverlayState{OpenMenu: -1},
+		theme:   theme.Default(),
+		overlay: widget.OverlayState{OpenMenu: -1},
 	}
 
 	// Wire callbacks — the NCTextInput handles Enter/Esc/Up/Down/Tab internally.
@@ -128,16 +159,16 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	return m
 }
 
-func (m *consoleModel) Init() tea.Cmd {
-	return tea.Batch(m.inputCtrl.Model.Focus(), listenForEvents(m.app.ChatCh(), m.app.SlogCh()))
+func (m *Model) Init() tea.Cmd {
+	return tea.Batch(m.inputCtrl.Model.Focus(), listenForEvents(m.api.ChatCh(), m.api.SlogCh()))
 }
 
-func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = max(40, msg.Width)
 		m.height = max(6, msg.Height)
-		m.app.consoleWidth = m.width
+		m.api.SetConsoleWidth(m.width)
 		m.resize()
 		return m, nil
 
@@ -153,8 +184,8 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case slogLineMsg:
-		m.appendTagged(msg.cat, msg.text)
-		return m, listenForEvents(m.app.ChatCh(), m.app.SlogCh())
+		m.appendTagged(msg.Cat, msg.Text)
+		return m, listenForEvents(m.api.ChatCh(), m.api.SlogCh())
 
 	case chatLineMsg:
 		chatMsg := common.Message(msg)
@@ -164,14 +195,14 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			line = chatMsg.Text
 		case chatMsg.IsPrivate:
 			fromName := chatMsg.FromID
-			if p := m.app.state.GetPlayer(fromName); p != nil {
+			if p := m.api.State().GetPlayer(fromName); p != nil {
 				fromName = p.Name
 			}
 			if fromName == "" {
 				fromName = "console"
 			}
 			toName := chatMsg.ToID
-			if p := m.app.state.GetPlayer(toName); p != nil {
+			if p := m.api.State().GetPlayer(toName); p != nil {
 				toName = p.Name
 			}
 			if toName == "" {
@@ -183,7 +214,7 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			line = fmt.Sprintf("<%s> %s", chatMsg.Author, chatMsg.Text)
 		}
-		m.appendTagged(catChat, line)
+		m.appendTagged(CatChat, line)
 		if !chatMsg.IsReply {
 			isSystem := chatMsg.Author == ""
 			for _, pl := range m.plugins {
@@ -192,7 +223,7 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		return m, listenForEvents(m.app.ChatCh(), m.app.SlogCh())
+		return m, listenForEvents(m.api.ChatCh(), m.api.SlogCh())
 
 	case common.GamePhaseMsg, common.GameLoadedMsg, common.GameUnloadedMsg, common.TeamUpdatedMsg, common.PlayerJoinedMsg, common.PlayerLeftMsg:
 		return m, nil
@@ -237,7 +268,7 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *consoleModel) consoleMenus() []common.MenuDef {
+func (m *Model) consoleMenus() []common.MenuDef {
 	return []common.MenuDef{
 		{
 			Label: "&File",
@@ -264,24 +295,24 @@ func (m *consoleModel) consoleMenus() []common.MenuDef {
 		{
 			Label: "&View",
 			Items: []common.MenuItemDef{
-				{Label: "&Debug", Toggle: true, Checked: func() bool { return m.filter[catDebug] }, Handler: func(_ string) {
-					m.filter[catDebug] = !m.filter[catDebug]; m.rebuildVisibleLines()
+				{Label: "&Debug", Toggle: true, Checked: func() bool { return m.filter[CatDebug] }, Handler: func(_ string) {
+					m.filter[CatDebug] = !m.filter[CatDebug]; m.rebuildVisibleLines()
 				}},
-				{Label: "&Info", Toggle: true, Checked: func() bool { return m.filter[catInfo] }, Handler: func(_ string) {
-					m.filter[catInfo] = !m.filter[catInfo]; m.rebuildVisibleLines()
+				{Label: "&Info", Toggle: true, Checked: func() bool { return m.filter[CatInfo] }, Handler: func(_ string) {
+					m.filter[CatInfo] = !m.filter[CatInfo]; m.rebuildVisibleLines()
 				}},
-				{Label: "&Warnings", Toggle: true, Checked: func() bool { return m.filter[catWarn] }, Handler: func(_ string) {
-					m.filter[catWarn] = !m.filter[catWarn]; m.rebuildVisibleLines()
+				{Label: "&Warnings", Toggle: true, Checked: func() bool { return m.filter[CatWarn] }, Handler: func(_ string) {
+					m.filter[CatWarn] = !m.filter[CatWarn]; m.rebuildVisibleLines()
 				}},
-				{Label: "&Errors", Toggle: true, Checked: func() bool { return m.filter[catError] }, Handler: func(_ string) {
-					m.filter[catError] = !m.filter[catError]; m.rebuildVisibleLines()
+				{Label: "&Errors", Toggle: true, Checked: func() bool { return m.filter[CatError] }, Handler: func(_ string) {
+					m.filter[CatError] = !m.filter[CatError]; m.rebuildVisibleLines()
 				}},
 				{Label: "---"},
-				{Label: "&Chat", Toggle: true, Checked: func() bool { return m.filter[catChat] }, Handler: func(_ string) {
-					m.filter[catChat] = !m.filter[catChat]; m.rebuildVisibleLines()
+				{Label: "&Chat", Toggle: true, Checked: func() bool { return m.filter[CatChat] }, Handler: func(_ string) {
+					m.filter[CatChat] = !m.filter[CatChat]; m.rebuildVisibleLines()
 				}},
-				{Label: "C&ommands", Toggle: true, Checked: func() bool { return m.filter[catCommand] }, Handler: func(_ string) {
-					m.filter[catCommand] = !m.filter[catCommand]; m.rebuildVisibleLines()
+				{Label: "C&ommands", Toggle: true, Checked: func() bool { return m.filter[CatCommand] }, Handler: func(_ string) {
+					m.filter[CatCommand] = !m.filter[CatCommand]; m.rebuildVisibleLines()
 				}},
 			},
 		},
@@ -301,8 +332,8 @@ func (m *consoleModel) consoleMenus() []common.MenuDef {
 }
 
 // showListDialog opens a dialog listing available items from a dist/ subdirectory.
-func (m *consoleModel) showShaderDialog() {
-	available := engine.ListDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+func (m *Model) showShaderDialog() {
+	available := engine.ListDir(filepath.Join(m.api.DataDir(), "shaders"), ".js")
 	loadedSet := make(map[string]bool)
 	for _, n := range m.shaderNames {
 		loadedSet[n] = true
@@ -338,8 +369,8 @@ func (m *consoleModel) showShaderDialog() {
 	})
 }
 
-func (m *consoleModel) showListDialog(title, subdir, ext string) {
-	dir := filepath.Join(m.app.dataDir, subdir)
+func (m *Model) showListDialog(title, subdir, ext string) {
+	dir := filepath.Join(m.api.DataDir(), subdir)
 	items := engine.ListDir(dir, ext)
 	body := "(empty)"
 	if len(items) > 0 {
@@ -365,10 +396,10 @@ func (m *consoleModel) showListDialog(title, subdir, ext string) {
 }
 
 // showAddDialog asks for a URL or filename to add.
-func (m *consoleModel) showAddDialog(title, subdir, ext string) {
+func (m *Model) showAddDialog(title, subdir, ext string) {
 	// Use the command input to get user input — chain back via a command.
 	m.overlay.PushDialog(common.DialogRequest{
-		Title:   "Add " + title[:len(title)-1], // "Themes" → "Theme"
+		Title:   "Add " + title[:len(title)-1], // "Themes" -> "Theme"
 		Body:    "Type a /command to add:\n\n  For games:   /game load <name or url>\n  For plugins: /plugin load <name or url>\n  For themes:  /theme <name>",
 		Buttons: []string{"OK"},
 		OnClose: func(_ string) {
@@ -378,7 +409,7 @@ func (m *consoleModel) showAddDialog(title, subdir, ext string) {
 }
 
 // showRemoveDialog asks which item to remove and confirms.
-func (m *consoleModel) showRemoveDialog(title, subdir, ext string, items []string) {
+func (m *Model) showRemoveDialog(title, subdir, ext string, items []string) {
 	if len(items) == 0 {
 		m.overlay.PushDialog(common.DialogRequest{
 			Title:   "Remove",
@@ -406,7 +437,7 @@ func (m *consoleModel) showRemoveDialog(title, subdir, ext string, items []strin
 	})
 }
 
-func (m *consoleModel) View() tea.View {
+func (m *Model) View() tea.View {
 	EnterRenderPath()
 	defer LeaveRenderPath()
 
@@ -433,10 +464,10 @@ func (m *consoleModel) View() tea.View {
 	m.window.RenderToBuf(buf, 0, 1, m.width, panelH, primary)
 
 	// Status bar (bottom row).
-	m.app.state.RLock()
-	gameName := m.app.state.GameName
-	phase := m.app.state.GamePhase
-	m.app.state.RUnlock()
+	m.api.State().RLock()
+	gameName := m.api.State().GameName
+	phase := m.api.State().GamePhase
+	m.api.State().RUnlock()
 	gameLabel := "none"
 	if gameName != "" {
 		gameLabel = gameName
@@ -449,7 +480,7 @@ func (m *consoleModel) View() tea.View {
 			gameLabel += " [game over]"
 		}
 	}
-	statusText := fmt.Sprintf("game: %s | players: %d | uptime %s | %s", gameLabel, m.app.state.PlayerCount(), m.app.uptime(), time.Now().Format("15:04:05"))
+	statusText := fmt.Sprintf("game: %s | players: %d | uptime %s | %s", gameLabel, m.api.State().PlayerCount(), m.api.Uptime(), time.Now().Format("15:04:05"))
 	sbFg := secondary.FgC()
 	sbBg := secondary.BgC()
 	buf.Fill(0, m.height-1, m.width, 1, ' ', sbFg, sbBg, common.AttrNone)
@@ -503,11 +534,11 @@ func (m *consoleModel) View() tea.View {
 	return view
 }
 
-func (m *consoleModel) resize() {
+func (m *Model) resize() {
 	// Width is managed by NCWindow.Render via the grid layout.
 }
 
-func (m *consoleModel) appendTagged(cat logCategory, line string) {
+func (m *Model) appendTagged(cat LogCategory, line string) {
 	for _, l := range strings.Split(line, "\n") {
 		m.allLines = append(m.allLines, taggedLine{cat: cat, text: l})
 	}
@@ -518,11 +549,11 @@ func (m *consoleModel) appendTagged(cat logCategory, line string) {
 }
 
 // appendLog adds a command/feedback line (for backwards compat with existing callers).
-func (m *consoleModel) appendLog(line string) {
-	m.appendTagged(catCommand, line)
+func (m *Model) appendLog(line string) {
+	m.appendTagged(CatCommand, line)
 }
 
-func (m *consoleModel) rebuildVisibleLines() {
+func (m *Model) rebuildVisibleLines() {
 	var visible []string
 	for _, tl := range m.allLines {
 		if m.filter[tl.cat] {
@@ -533,12 +564,12 @@ func (m *consoleModel) rebuildVisibleLines() {
 }
 
 // tabComplete handles tab completion for the input control.
-func (m *consoleModel) tabComplete(current string) (string, bool) {
+func (m *Model) tabComplete(current string) (string, bool) {
 	if !strings.HasPrefix(current, "/") {
 		return "", false
 	}
 	if m.tabCandidates == nil {
-		m.tabPrefix, m.tabCandidates = m.app.registry.TabCandidates(current, m.app.state.PlayerNames())
+		m.tabPrefix, m.tabCandidates = m.api.TabCandidates(current, m.api.State().PlayerNames())
 		m.tabIndex = 0
 	}
 	if len(m.tabCandidates) == 0 {
@@ -551,7 +582,7 @@ func (m *consoleModel) tabComplete(current string) (string, bool) {
 
 // submitInput is called by NCTextInput.OnSubmit when Enter is pressed.
 // text is already trimmed and non-empty; input is already cleared; history is already added.
-func (m *consoleModel) submitInput(text string) {
+func (m *Model) submitInput(text string) {
 	// Reset tab completion on submit.
 	m.tabCandidates = nil
 
@@ -582,19 +613,19 @@ func (m *consoleModel) submitInput(text string) {
 			m.appendLog(s)
 		},
 		Broadcast: func(s string) {
-			m.app.broadcastChat(common.Message{Text: s})
+			m.api.BroadcastChat(common.Message{Text: s})
 		},
 		ServerLog: func(s string) {
 			m.appendLog(s)
 		},
 	}
-	m.app.registry.Dispatch(text, ctx)
+	m.api.DispatchCommand(text, ctx)
 }
 
-func (m *consoleModel) handleThemeCommand(input string) {
+func (m *Model) handleThemeCommand(input string) {
 	parts := strings.Fields(input)
 	if len(parts) <= 1 {
-		available := theme.ListThemes(m.app.dataDir)
+		available := theme.ListThemes(m.api.DataDir())
 		if len(available) == 0 {
 			m.appendLog("No themes found in themes/")
 			return
@@ -611,7 +642,7 @@ func (m *consoleModel) handleThemeCommand(input string) {
 		return
 	}
 	name := parts[1]
-	path := filepath.Join(m.app.dataDir, "themes", name+".json")
+	path := filepath.Join(m.api.DataDir(), "themes", name+".json")
 	t, err := theme.Load(path)
 	if err != nil {
 		m.appendLog(fmt.Sprintf("Failed to load theme: %v", err))
@@ -621,10 +652,10 @@ func (m *consoleModel) handleThemeCommand(input string) {
 	m.appendLog(fmt.Sprintf("Theme changed to: %s", t.Name))
 }
 
-func (m *consoleModel) handlePluginCommand(input string) {
+func (m *Model) handlePluginCommand(input string) {
 	parts := strings.Fields(input)
 	if len(parts) <= 1 {
-		available := engine.ListDir(filepath.Join(m.app.dataDir, "plugins"), ".js")
+		available := engine.ListDir(filepath.Join(m.api.DataDir(), "plugins"), ".js")
 		loadedSet := make(map[string]bool)
 		for _, n := range m.pluginNames {
 			loadedSet[n] = true
@@ -650,7 +681,7 @@ func (m *consoleModel) handlePluginCommand(input string) {
 			m.appendLog("Usage: /plugin load <name|url>")
 			return
 		}
-		name, path, err := engine.ResolvePluginPath(parts[2], m.app.dataDir)
+		name, path, err := engine.ResolvePluginPath(parts[2], m.api.DataDir())
 		if err != nil {
 			m.appendLog(fmt.Sprintf("Failed: %v", err))
 			return
@@ -661,7 +692,7 @@ func (m *consoleModel) handlePluginCommand(input string) {
 				return
 			}
 		}
-		pl, err := engine.LoadPlugin(path, m.app.clock)
+		pl, err := engine.LoadPlugin(path, m.api.Clock())
 		if err != nil {
 			m.appendLog(fmt.Sprintf("Failed to load plugin: %v", err))
 			return
@@ -703,7 +734,7 @@ func (m *consoleModel) handlePluginCommand(input string) {
 
 // dispatchPluginReply handles a string returned by a console plugin's onMessage hook.
 // If it starts with "/" it's treated as a command, otherwise logged as info.
-func (m *consoleModel) dispatchPluginReply(text string) {
+func (m *Model) dispatchPluginReply(text string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return
@@ -717,24 +748,24 @@ func (m *consoleModel) dispatchPluginReply(text string) {
 				m.appendLog(s)
 			},
 			Broadcast: func(s string) {
-				m.app.broadcastChat(common.Message{Text: s})
+				m.api.BroadcastChat(common.Message{Text: s})
 			},
 			ServerLog: func(s string) {
 				m.appendLog(s)
 			},
 		}
-		m.app.registry.Dispatch(text, ctx)
+		m.api.DispatchCommand(text, ctx)
 		return
 	}
-	// Plain text from console plugin → broadcast as admin chat.
-	m.app.broadcastChat(common.Message{Author: "admin", Text: text})
+	// Plain text from console plugin -> broadcast as admin chat.
+	m.api.BroadcastChat(common.Message{Author: "admin", Text: text})
 }
 
-func (m *consoleModel) handleShaderCommand(input string) {
+func (m *Model) handleShaderCommand(input string) {
 	parts := strings.Fields(input)
-	// /shader with no args → list
+	// /shader with no args -> list
 	if len(parts) <= 1 {
-		available := engine.ListDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+		available := engine.ListDir(filepath.Join(m.api.DataDir(), "shaders"), ".js")
 		loadedSet := make(map[string]bool)
 		for _, n := range m.shaderNames {
 			loadedSet[n] = true
@@ -761,7 +792,7 @@ func (m *consoleModel) handleShaderCommand(input string) {
 			return
 		}
 		nameOrURL := parts[2]
-		name, path, err := engine.ResolveShaderPath(nameOrURL, m.app.dataDir)
+		name, path, err := engine.ResolveShaderPath(nameOrURL, m.api.DataDir())
 		if err != nil {
 			m.appendLog(fmt.Sprintf("Failed: %v", err))
 			return
@@ -772,7 +803,7 @@ func (m *consoleModel) handleShaderCommand(input string) {
 				return
 			}
 		}
-		sh, err := engine.LoadShader(path, m.app.clock)
+		sh, err := engine.LoadShader(path, m.api.Clock())
 		if err != nil {
 			m.appendLog(fmt.Sprintf("Failed to load shader: %v", err))
 			return
@@ -828,7 +859,7 @@ func (m *consoleModel) handleShaderCommand(input string) {
 	}
 }
 
-func (m *consoleModel) moveShader(name string, delta int) {
+func (m *Model) moveShader(name string, delta int) {
 	idx := -1
 	for i, n := range m.shaderNames {
 		if strings.EqualFold(n, name) {
@@ -848,31 +879,4 @@ func (m *consoleModel) moveShader(name string, delta int) {
 	m.shaders[idx], m.shaders[newIdx] = m.shaders[newIdx], m.shaders[idx]
 	m.shaderNames[idx], m.shaderNames[newIdx] = m.shaderNames[newIdx], m.shaderNames[idx]
 	m.appendLog(fmt.Sprintf("Shader '%s' moved to position %d.", name, newIdx+1))
-}
-
-// slogLine carries a formatted slog record to the console.
-type slogLine struct {
-	cat  logCategory
-	text string
-}
-
-// tea.Msg types for channel-based updates.
-type chatLineMsg common.Message
-type slogLineMsg slogLine
-
-func listenForEvents(chatCh <-chan common.Message, slogCh <-chan slogLine) tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case msg, ok := <-chatCh:
-			if !ok {
-				return nil
-			}
-			return chatLineMsg(msg)
-		case sl, ok := <-slogCh:
-			if !ok {
-				return nil
-			}
-			return slogLineMsg(sl)
-		}
-	}
 }

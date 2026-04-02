@@ -1,4 +1,4 @@
-package server
+package chrome
 
 import (
 	"fmt"
@@ -14,23 +14,49 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/common"
+	"null-space/internal/console"
 	"null-space/internal/engine"
+	"null-space/internal/state"
 	"null-space/internal/theme"
 	"null-space/internal/widget"
 )
 
-// lobbyTeamPanelW is the fixed width of the team panel in the lobby.
+// ServerAPI is the interface that the chrome model uses to interact with the server.
+type ServerAPI interface {
+	State() *state.CentralState
+	Clock() common.Clock
+	DataDir() string
+	Uptime() string
 
+	// Communication
+	BroadcastChat(msg common.Message)
+	BroadcastMsg(msg tea.Msg)
+	SendToPlayer(playerID string, msg tea.Msg)
+	ServerLog(text string)
+
+	// Commands
+	TabCandidates(input string, playerNames []string) (prefix string, candidates []string)
+	DispatchCommand(input string, ctx common.CommandContext)
+
+	// Game lifecycle
+	StartGame()
+	AcknowledgeGameOver(playerID string)
+
+	// Session management
+	KickPlayer(playerID string) error
+}
+
+// lobbyTeamPanelW is the fixed width of the team panel in the lobby.
 const lobbyTeamPanelW = 32
 
-// setInputStyle applies matching background/foreground to all textinput sub-styles
+// SetInputStyle applies matching background/foreground to all textinput sub-styles
 // and switches to the real terminal cursor (not the virtual cursor).
 //
 // The virtual cursor's TextStyle (used during blink-hide) has no background by
 // default, causing the character under the cursor to flash to terminal default
 // (black) on every blink. Using the real cursor avoids this entirely: all text
 // renders with a solid background, and the terminal handles cursor blinking.
-func setInputStyle(input *textinput.Model, bg, fg color.Color) {
+func SetInputStyle(input *textinput.Model, bg, fg color.Color) {
 	base := lipgloss.NewStyle().Background(bg).Foreground(fg)
 	s := input.Styles()
 	s.Focused.Prompt = base
@@ -50,16 +76,16 @@ const (
 	modeInput = 1
 )
 
-
 const (
 	lobbyFocusChat  = 0
 	lobbyFocusTeams = 1
 )
 
-type chromeModel struct {
-	app      *Server
+// Model is the Bubble Tea model for a player's chrome (lobby, game viewport, etc.).
+type Model struct {
+	api      ServerAPI
 	playerID string
-	isLocal  bool // true for local mode, false for SSH
+	IsLocal  bool // true for local mode, false for SSH
 	width    int
 	height   int
 	mode     int
@@ -92,7 +118,7 @@ type chromeModel struct {
 	gameOverStart time.Time
 
 	// Init commands from ~/.null-space/client.txt (dispatched on first tick)
-	initCommands []string
+	InitCommands []string
 
 	// Per-player theme
 	theme *theme.Theme
@@ -122,7 +148,7 @@ type chromeModel struct {
 	gameWindow *widget.GameWindow
 }
 
-func newChromeModel(app *Server, playerID string) chromeModel {
+func NewModel(api ServerAPI, playerID string) Model {
 	chat := viewport.New(viewport.WithWidth(80), viewport.WithHeight(5))
 	chat.MouseWheelEnabled = false
 	chat.SoftWrap = true
@@ -168,8 +194,8 @@ func newChromeModel(app *Server, playerID string) chromeModel {
 		},
 	}
 
-	m := chromeModel{
-		app:            app,
+	m := Model{
+		api:            api,
 		playerID:       playerID,
 		chat:           chat,
 		input:          input,
@@ -185,20 +211,20 @@ func newChromeModel(app *Server, playerID string) chromeModel {
 	m.syncChat()
 	// Always start in lobby/input mode. GameLoadedMsg will transition
 	// participating players into game mode. Late joiners stay in lobby.
-	setInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
+	SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
 	m.mode = modeInput
 	m.input.Focus()
 	return m
 }
 
-func (m chromeModel) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	if m.mode == modeInput {
 		return m.input.Focus() // starts cursor blink
 	}
 	return nil
 }
 
-func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = max(1, msg.Width)
@@ -210,8 +236,8 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case common.TickMsg:
 		// Dispatch init commands from ~/.null-space/client.txt on the first tick
 		// (after the TUI is fully running and the player is registered).
-		if len(m.initCommands) > 0 {
-			for _, cmd := range m.initCommands {
+		if len(m.InitCommands) > 0 {
+			for _, cmd := range m.InitCommands {
 				if strings.HasPrefix(cmd, "/plugin") {
 					m.handlePluginCommand(cmd)
 				} else if strings.HasPrefix(cmd, "/theme") {
@@ -220,7 +246,7 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.dispatchPluginReply(cmd)
 				}
 			}
-			m.initCommands = nil
+			m.InitCommands = nil
 		}
 		return m, nil
 
@@ -237,7 +263,7 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			line = chatMsg.Text
 		case chatMsg.IsPrivate:
 			from := chatMsg.FromID
-			if p := m.app.state.GetPlayer(from); p != nil {
+			if p := m.api.State().GetPlayer(from); p != nil {
 				from = p.Name
 			}
 			if from == "" {
@@ -284,7 +310,7 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// This player was connected when the game loaded — they're in the game.
 		m.inActiveGame = true
 		m.invalidateMenuCache()
-		setInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
+		SetInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
 		m.mode = modeIdle
 		m.lobbyFocus = lobbyFocusChat
 		m.input.Blur()
@@ -294,7 +320,7 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case common.GameUnloadedMsg:
 		m.inActiveGame = false
 		m.invalidateMenuCache()
-		setInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
+		SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
 		m.mode = modeInput
 		cmd := m.input.Focus()
 		m.resizeViewports()
@@ -306,7 +332,7 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Phase == common.PhaseNone {
 			m.inActiveGame = false
-			setInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
+			SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
 			m.mode = modeInput
 			cmd := m.input.Focus()
 			m.resizeViewports()
@@ -389,8 +415,8 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	phase := m.app.state.GetGamePhase()
+func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	phase := m.api.State().GetGamePhase()
 
 	// Ctrl+C / Ctrl+D quit from any mode.
 	switch msg.String() {
@@ -439,9 +465,9 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.inActiveGame && phase == common.PhaseSplash {
 		switch msg.String() {
 		case "enter":
-			player := m.app.state.GetPlayer(m.playerID)
+			player := m.api.State().GetPlayer(m.playerID)
 			if player != nil && player.IsAdmin {
-				m.app.StartGame()
+				m.api.StartGame()
 			}
 		}
 		return m, nil
@@ -451,7 +477,7 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.inActiveGame && phase == common.PhaseGameOver {
 		switch msg.String() {
 		case "enter":
-			m.app.AcknowledgeGameOver(m.playerID)
+			m.api.AcknowledgeGameOver(m.playerID)
 		}
 		return m, nil
 	}
@@ -482,15 +508,15 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 		switch key {
 		case "enter":
-			setInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
+			SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
 			m.mode = modeInput
 			cmd := m.input.Focus()
 			return m, cmd
 		default:
 			// route to game
-			m.app.state.RLock()
-			game := m.app.state.ActiveGame
-			m.app.state.RUnlock()
+			m.api.State().RLock()
+			game := m.api.State().ActiveGame
+			m.api.State().RUnlock()
 			if game != nil {
 				// Bubble Tea v2 returns "space" for spacebar; normalize to " "
 				// so game scripts can use the intuitive key === " " check.
@@ -511,7 +537,7 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.historyDraft = ""
 		m.input.SetValue("")
 		if m.inActiveGame {
-			setInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
+			SetInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
 			m.mode = modeIdle
 			m.input.Blur()
 		}
@@ -557,7 +583,7 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if strings.HasPrefix(m.input.Value(), "/") {
 			if m.tabCandidates == nil {
-				m.tabPrefix, m.tabCandidates = m.app.registry.TabCandidates(m.input.Value(), m.app.state.PlayerNames())
+				m.tabPrefix, m.tabCandidates = m.api.TabCandidates(m.input.Value(), m.api.State().PlayerNames())
 				m.tabIndex = 0
 			}
 			if len(m.tabCandidates) > 0 {
@@ -575,7 +601,7 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m chromeModel) handleTeamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleTeamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "tab", "esc":
 		// Switch back to chat.
@@ -584,45 +610,45 @@ func (m chromeModel) handleTeamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		cmd := m.input.Focus()
 		return m, cmd
 	case "up":
-		idx := m.app.state.PlayerTeamIndex(m.playerID)
+		idx := m.api.State().PlayerTeamIndex(m.playerID)
 		if idx == 0 {
 			// At first team — become unassigned.
-			m.app.state.MovePlayerToTeam(m.playerID, -1)
-			m.app.broadcastMsg(common.TeamUpdatedMsg{})
+			m.api.State().MovePlayerToTeam(m.playerID, -1)
+			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 		} else if idx > 0 {
 			// Move to team above.
-			m.app.state.MovePlayerToTeam(m.playerID, idx-1)
-			m.app.broadcastMsg(common.TeamUpdatedMsg{})
+			m.api.State().MovePlayerToTeam(m.playerID, idx-1)
+			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 		}
 		// idx == -1 (unassigned) — block, already at top.
 		return m, nil
 	case "down":
-		idx := m.app.state.PlayerTeamIndex(m.playerID)
-		teamCount := m.app.state.TeamCount()
+		idx := m.api.State().PlayerTeamIndex(m.playerID)
+		teamCount := m.api.State().TeamCount()
 		if idx < 0 {
 			// Unassigned — join first team, or create one if none exist.
 			if teamCount > 0 {
-				m.app.state.MovePlayerToTeam(m.playerID, 0)
+				m.api.State().MovePlayerToTeam(m.playerID, 0)
 			} else {
-				m.app.state.MovePlayerToTeam(m.playerID, 0) // creates new team
+				m.api.State().MovePlayerToTeam(m.playerID, 0) // creates new team
 			}
-			m.app.broadcastMsg(common.TeamUpdatedMsg{})
+			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 		} else if idx < teamCount-1 {
 			// Move to team below.
-			m.app.state.MovePlayerToTeam(m.playerID, idx+1)
-			m.app.broadcastMsg(common.TeamUpdatedMsg{})
-		} else if !m.app.state.IsSoleMemberOfTeam(m.playerID) {
+			m.api.State().MovePlayerToTeam(m.playerID, idx+1)
+			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+		} else if !m.api.State().IsSoleMemberOfTeam(m.playerID) {
 			// On last team with others — create new solo team.
-			m.app.state.MovePlayerToTeam(m.playerID, teamCount)
-			m.app.broadcastMsg(common.TeamUpdatedMsg{})
+			m.api.State().MovePlayerToTeam(m.playerID, teamCount)
+			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 		}
 		// Sole member of last team — block to avoid drop/recreate.
 		return m, nil
 	case "enter":
 		// If first player of team, start renaming.
-		if m.app.state.IsFirstInTeam(m.playerID) {
-			idx := m.app.state.PlayerTeamIndex(m.playerID)
-			teams := m.app.state.GetTeams()
+		if m.api.State().IsFirstInTeam(m.playerID) {
+			idx := m.api.State().PlayerTeamIndex(m.playerID)
+			teams := m.api.State().GetTeams()
 			if idx >= 0 && idx < len(teams) {
 				m.teamEditing = true
 				m.teamEditInput.SetValue(teams[idx].Name)
@@ -632,31 +658,31 @@ func (m chromeModel) handleTeamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "left":
-		if m.app.state.IsFirstInTeam(m.playerID) {
-			idx := m.app.state.PlayerTeamIndex(m.playerID)
-			m.app.state.NextTeamColor(idx, -1)
-			m.app.broadcastMsg(common.TeamUpdatedMsg{})
+		if m.api.State().IsFirstInTeam(m.playerID) {
+			idx := m.api.State().PlayerTeamIndex(m.playerID)
+			m.api.State().NextTeamColor(idx, -1)
+			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 		}
 		return m, nil
 	case "right":
-		if m.app.state.IsFirstInTeam(m.playerID) {
-			idx := m.app.state.PlayerTeamIndex(m.playerID)
-			m.app.state.NextTeamColor(idx, 1)
-			m.app.broadcastMsg(common.TeamUpdatedMsg{})
+		if m.api.State().IsFirstInTeam(m.playerID) {
+			idx := m.api.State().PlayerTeamIndex(m.playerID)
+			m.api.State().NextTeamColor(idx, 1)
+			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 		}
 		return m, nil
 	}
 	return m, nil
 }
 
-func (m chromeModel) handleTeamEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleTeamEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		name := strings.TrimSpace(m.teamEditInput.Value())
 		if name != "" {
-			idx := m.app.state.PlayerTeamIndex(m.playerID)
-			if m.app.state.RenameTeam(idx, name) {
-				m.app.broadcastMsg(common.TeamUpdatedMsg{})
+			idx := m.api.State().PlayerTeamIndex(m.playerID)
+			if m.api.State().RenameTeam(idx, name) {
+				m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 			}
 		}
 		m.teamEditing = false
@@ -678,16 +704,16 @@ func (m chromeModel) handleTeamEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 // (or renames/recolors if owner), clicking a player returns their name,
 // clicking [+] creates a new team.
 // Returns the name of a clicked player (empty string if a non-player row was clicked).
-func (m *chromeModel) handleTeamPanelClick(panelX, contentY int) string {
-	teams := m.app.state.GetTeams()
-	unassigned := m.app.state.UnassignedPlayers()
+func (m *Model) handleTeamPanelClick(panelX, contentY int) string {
+	teams := m.api.State().GetTeams()
+	unassigned := m.api.State().UnassignedPlayers()
 
 	// Row 0: "Unassigned" header
 	row := 0
 	if contentY == row {
-		if m.app.state.PlayerTeamIndex(m.playerID) >= 0 {
-			m.app.state.MovePlayerToTeam(m.playerID, -1)
-			m.app.broadcastMsg(common.TeamUpdatedMsg{})
+		if m.api.State().PlayerTeamIndex(m.playerID) >= 0 {
+			m.api.State().MovePlayerToTeam(m.playerID, -1)
+			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 		}
 		return ""
 	}
@@ -696,7 +722,7 @@ func (m *chromeModel) handleTeamPanelClick(panelX, contentY int) string {
 	// Unassigned player rows.
 	for _, pid := range unassigned {
 		if contentY == row {
-			if p := m.app.state.GetPlayer(pid); p != nil {
+			if p := m.api.State().GetPlayer(pid); p != nil {
 				return p.Name
 			}
 			return pid
@@ -705,7 +731,7 @@ func (m *chromeModel) handleTeamPanelClick(panelX, contentY int) string {
 	}
 
 	// Each team: blank line, team header, player rows.
-	// Team header layout: " ██ TeamName" → X 0=space, 1-2=color swatch, 3=space, 4+=name
+	// Team header layout: " XX TeamName" -> X 0=space, 1-2=color swatch, 3=space, 4+=name
 	for i, team := range teams {
 		if contentY == row {
 			// Clicked on blank separator — ignore.
@@ -713,14 +739,14 @@ func (m *chromeModel) handleTeamPanelClick(panelX, contentY int) string {
 		}
 		row++ // advance past blank to team header
 		if contentY == row {
-			myIdx := m.app.state.PlayerTeamIndex(m.playerID)
-			isFirst := m.app.state.IsFirstInTeam(m.playerID)
+			myIdx := m.api.State().PlayerTeamIndex(m.playerID)
+			isFirst := m.api.State().IsFirstInTeam(m.playerID)
 			if myIdx == i && isFirst {
 				// Owner clicked own team header.
 				if panelX >= 1 && panelX <= 2 {
 					// Clicked on color swatch — cycle color.
-					m.app.state.NextTeamColor(i, 1)
-					m.app.broadcastMsg(common.TeamUpdatedMsg{})
+					m.api.State().NextTeamColor(i, 1)
+					m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 				} else {
 					// Clicked on team name — enter rename mode.
 					m.teamEditing = true
@@ -729,15 +755,15 @@ func (m *chromeModel) handleTeamPanelClick(panelX, contentY int) string {
 					m.teamEditInput.CursorEnd()
 				}
 			} else if myIdx != i {
-				m.app.state.MovePlayerToTeam(m.playerID, i)
-				m.app.broadcastMsg(common.TeamUpdatedMsg{})
+				m.api.State().MovePlayerToTeam(m.playerID, i)
+				m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 			}
 			return ""
 		}
 		row++ // advance past header
 		for _, pid := range team.Players {
 			if contentY == row {
-				if p := m.app.state.GetPlayer(pid); p != nil {
+				if p := m.api.State().GetPlayer(pid); p != nil {
 					return p.Name
 				}
 				return pid
@@ -748,15 +774,15 @@ func (m *chromeModel) handleTeamPanelClick(panelX, contentY int) string {
 
 	// After all teams: blank + [+ Create Team] button.
 	row++ // blank line
-	if contentY == row && !m.app.state.IsSoleMemberOfTeam(m.playerID) {
-		m.app.state.MovePlayerToTeam(m.playerID, len(teams))
-		m.app.broadcastMsg(common.TeamUpdatedMsg{})
+	if contentY == row && !m.api.State().IsSoleMemberOfTeam(m.playerID) {
+		m.api.State().MovePlayerToTeam(m.playerID, len(teams))
+		m.api.BroadcastMsg(common.TeamUpdatedMsg{})
 	}
 	return ""
 }
 
 // handleMouseWheel scrolls the chat panel on wheel events.
-func (m chromeModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	scrollAmount := 3
 	chatH := max(1, m.chatH)
 	switch msg.Button {
@@ -778,9 +804,9 @@ func (m chromeModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd
 	return m, nil
 }
 
-func (m chromeModel) View() tea.View {
-	EnterRenderPath()
-	defer LeaveRenderPath()
+func (m Model) View() tea.View {
+	console.EnterRenderPath()
+	defer console.LeaveRenderPath()
 
 	var view tea.View
 	if m.width == 0 || m.height == 0 {
@@ -789,29 +815,30 @@ func (m chromeModel) View() tea.View {
 		return view
 	}
 
-	m.app.state.RLock()
-	game := m.app.state.ActiveGame
-	gameName := m.app.state.GameName
-	phase := m.app.state.GamePhase
-	m.app.state.RUnlock()
+	m.api.State().RLock()
+	game := m.api.State().ActiveGame
+	gameName := m.api.State().GameName
+	phase := m.api.State().GamePhase
+	m.api.State().RUnlock()
 
 	barLayer := m.theme.LayerAt(1) // secondary: menu bar, status bar, command bar
 	bodyLayer := m.theme.LayerAt(0) // primary: content areas
+
 	mbStyle := barLayer.HighlightStyle()
 	chStyle := bodyLayer.BaseStyle()
 	ciStyle := barLayer.BaseStyle()
 
 	if !m.inActiveGame || phase == common.PhaseNone {
 		if m.mode == modeInput {
-			setInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
+			SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
 		}
 		if m.teamEditing {
-			setInputStyle(&m.teamEditInput, m.theme.LayerAt(0).InputBgC(), m.theme.LayerAt(0).InputFgC())
+			SetInputStyle(&m.teamEditInput, m.theme.LayerAt(0).InputBgC(), m.theme.LayerAt(0).InputFgC())
 		}
 	} else if m.mode == modeInput {
-		setInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
+		SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
 	} else {
-		setInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
+		SetInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
 	}
 
 	// Build menus once per frame — passed to sub-views and overlay rendering.
@@ -880,9 +907,9 @@ func (m chromeModel) View() tea.View {
 			// Position cursor on the team name row in the right panel.
 			// The team panel is at col 2 in the NCWindow grid. After grid layout,
 			// its X position is computed. We calculate the Y row within the panel.
-			teams := m.app.state.GetTeams()
-			unassigned := m.app.state.UnassignedPlayers()
-			idx := m.app.state.PlayerTeamIndex(m.playerID)
+			teams := m.api.State().GetTeams()
+			unassigned := m.api.State().UnassignedPlayers()
+			idx := m.api.State().PlayerTeamIndex(m.playerID)
 			row := 1 + len(unassigned) // "Unassigned" header + player rows
 			for i := 0; i < idx && i < len(teams); i++ {
 				row += 1 + 1 + len(teams[i].Players) // blank + team header + members
@@ -894,7 +921,7 @@ func (m chromeModel) View() tea.View {
 			// Use the grid's computed position if available.
 			if len(m.lobbyWindow.Children) > 2 {
 				cx, _, _, _ := m.lobbyWindow.ChildRect(2) // team panel is child index 2
-				cursor.Position.X += cx + 4 // +4 for " XX " (space + swatch + space before name)
+				cursor.Position.X += cx + 4              // +4 for " XX " (space + swatch + space before name)
 			}
 			view.Cursor = cursor
 		}
@@ -904,7 +931,7 @@ func (m chromeModel) View() tea.View {
 
 // renderLobby renders the lobby view using NC controls directly into the buffer.
 // Layout: row 0 = NC menu bar, rows 1..H-2 = NCWindow (chat + teams + cmd bar), row H-1 = status bar.
-func (m chromeModel) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef) {
+func (m Model) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef) {
 	layer := m.theme.LayerAt(0)
 	menuLayer := m.theme.LayerAt(1)
 
@@ -917,17 +944,17 @@ func (m chromeModel) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef
 	m.lobbyChatView.ScrollOffset = m.chatScrollOffset
 
 	// Update team panel.
-	teams := m.app.state.GetTeams()
+	teams := m.api.State().GetTeams()
 	m.lobbyTeamPanel.Teams = teams
-	m.lobbyTeamPanel.Unassigned = m.app.state.UnassignedPlayers()
-	m.lobbyTeamPanel.MyTeamIdx = m.app.state.PlayerTeamIndex(m.playerID)
+	m.lobbyTeamPanel.Unassigned = m.api.State().UnassignedPlayers()
+	m.lobbyTeamPanel.MyTeamIdx = m.api.State().PlayerTeamIndex(m.playerID)
 	m.lobbyTeamPanel.PlayerID = m.playerID
-	m.lobbyTeamPanel.GetPlayer = m.app.state.GetPlayer
+	m.lobbyTeamPanel.GetPlayer = m.api.State().GetPlayer
 	m.lobbyTeamPanel.Editing = m.teamEditing
 	if m.teamEditing {
 		m.lobbyTeamPanel.EditValue = m.teamEditInput.Value()
 	}
-	m.lobbyTeamPanel.ShowCreate = !m.app.state.IsSoleMemberOfTeam(m.playerID)
+	m.lobbyTeamPanel.ShowCreate = !m.api.State().IsSoleMemberOfTeam(m.playerID)
 
 	// Update command bar text.
 	if m.teamEditing {
@@ -970,10 +997,10 @@ func (m chromeModel) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef
 	buf.Fill(0, m.height-1, m.width, 1, ' ', statusFg, statusBg, common.AttrNone)
 
 	modeLabel := "remote"
-	if m.isLocal {
+	if m.IsLocal {
 		modeLabel = "local"
 	}
-	statusLeft := fmt.Sprintf(" null-space (%s) | %d players | uptime %s", modeLabel, m.app.state.PlayerCount(), m.app.uptime())
+	statusLeft := fmt.Sprintf(" null-space (%s) | %d players | uptime %s", modeLabel, m.api.State().PlayerCount(), m.api.Uptime())
 	buf.WriteString(0, m.height-1, statusLeft, statusFg, statusBg, common.AttrNone)
 
 	statusRight := time.Now().Format("2006-01-02 15:04:05") + " "
@@ -986,7 +1013,7 @@ func (m chromeModel) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef
 	m.chatScrollOffset = m.lobbyChatView.ScrollOffset
 }
 
-func (m chromeModel) viewSplash(menus []common.MenuDef, game common.Game, gameName string, mbStyle, ciStyle lipgloss.Style) string {
+func (m Model) viewSplash(menus []common.MenuDef, game common.Game, gameName string, mbStyle, ciStyle lipgloss.Style) string {
 	ncBar := m.overlay.RenderMenuBar(m.width, menus, m.theme.LayerAt(1))
 	displayName := gameName
 	if gn := game.GameName(); gn != "" {
@@ -1007,7 +1034,7 @@ func (m chromeModel) viewSplash(menus []common.MenuDef, game common.Game, gameNa
 
 	viewport := fitBlock(splashContent, m.width, viewportH)
 
-	player := m.app.state.GetPlayer(m.playerID)
+	player := m.api.State().GetPlayer(m.playerID)
 	isAdmin := player != nil && player.IsAdmin
 	var cmdBar string
 	if isAdmin {
@@ -1021,7 +1048,7 @@ func (m chromeModel) viewSplash(menus []common.MenuDef, game common.Game, gameNa
 	return lipgloss.JoinVertical(lipgloss.Left, menuBar, ncBar, viewport, cmdBar, statusBar)
 }
 
-func (m chromeModel) viewGameOver(menus []common.MenuDef, game common.Game, gameName string, mbStyle, ciStyle lipgloss.Style) string {
+func (m Model) viewGameOver(menus []common.MenuDef, game common.Game, gameName string, mbStyle, ciStyle lipgloss.Style) string {
 	ncBar := m.overlay.RenderMenuBar(m.width, menus, m.theme.LayerAt(1))
 	displayName := gameName
 	if gn := game.GameName(); gn != "" {
@@ -1035,9 +1062,9 @@ func (m chromeModel) viewGameOver(menus []common.MenuDef, game common.Game, game
 		viewportH = 1
 	}
 
-	m.app.state.RLock()
-	results := m.app.state.GameOverResults
-	m.app.state.RUnlock()
+	m.api.State().RLock()
+	results := m.api.State().GameOverResults
+	m.api.State().RUnlock()
 
 	goContent := m.defaultGameOverScreen(results, m.width, viewportH)
 	viewport := fitBlock(goContent, m.width, viewportH)
@@ -1053,7 +1080,7 @@ func (m chromeModel) viewGameOver(menus []common.MenuDef, game common.Game, game
 	return lipgloss.JoinVertical(lipgloss.Left, menuBar, ncBar, viewport, cmdBar, statusBar)
 }
 
-func (m chromeModel) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style) {
+func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style) {
 	// Row layout: menuBar(1) + ncBar(1) + gameStatusBar(1) + game(gameH) + chat(chatH) + cmdBar(1) + statusBar(1)
 	// = 5 + gameH + chatH = m.height
 
@@ -1123,7 +1150,7 @@ func (m chromeModel) renderPlaying(buf *common.ImageBuffer, menus []common.MenuD
 }
 
 // defaultSplashScreen renders a simple splash screen with the game name centered in a box.
-func (m chromeModel) defaultSplashScreen(name string, width, height int) string {
+func (m Model) defaultSplashScreen(name string, width, height int) string {
 	boxW := len(name) + 6
 	if boxW > width-4 {
 		boxW = width - 4
@@ -1166,7 +1193,7 @@ func (m chromeModel) defaultSplashScreen(name string, width, height int) string 
 }
 
 // defaultGameOverScreen renders a "GAME OVER" screen with ranked results.
-func (m chromeModel) defaultGameOverScreen(results []common.GameResult, width, height int) string {
+func (m Model) defaultGameOverScreen(results []common.GameResult, width, height int) string {
 	var lines []string
 
 	lines = append(lines, "")
@@ -1222,9 +1249,9 @@ func (m chromeModel) defaultGameOverScreen(results []common.GameResult, width, h
 	return strings.Join(result, "\n")
 }
 
-func (m *chromeModel) syncChat() {
+func (m *Model) syncChat() {
 	// Rebuild chat from state
-	history := m.app.state.GetChatHistory()
+	history := m.api.State().GetChatHistory()
 	lines := make([]string, 0, len(history))
 	addLines := func(text string) {
 		for _, l := range strings.Split(text, "\n") {
@@ -1237,7 +1264,7 @@ func (m *chromeModel) syncChat() {
 				continue
 			}
 			from := msg.FromID
-			if p := m.app.state.GetPlayer(from); p != nil {
+			if p := m.api.State().GetPlayer(from); p != nil {
 				from = p.Name
 			}
 			if from == "" {
@@ -1260,8 +1287,8 @@ func (m *chromeModel) syncChat() {
 	m.chat.GotoBottom()
 }
 
-func (m *chromeModel) resizeViewports() {
-	phase := m.app.state.GetGamePhase()
+func (m *Model) resizeViewports() {
+	phase := m.api.State().GetGamePhase()
 
 	if !m.inActiveGame || phase == common.PhaseNone {
 		// Lobby — NC bar (1) + window bottom border (1) + hdivider (1) + cmd bar (1) + status bar (1) = 5 overhead rows.
@@ -1291,15 +1318,15 @@ func (m *chromeModel) resizeViewports() {
 // allMenus returns the full ordered list of menus for the NC action bar:
 // the framework "File" menu followed by any game-registered menus.
 // invalidateMenuCache forces the next cachedMenus() call to rebuild.
-func (m *chromeModel) invalidateMenuCache() {
+func (m *Model) invalidateMenuCache() {
 	m.menuCache = nil
 }
 
 // cachedMenus returns the menu tree, rebuilding only when the active game has changed.
-func (m *chromeModel) cachedMenus() []common.MenuDef {
-	m.app.state.RLock()
-	game := m.app.state.ActiveGame
-	m.app.state.RUnlock()
+func (m *Model) cachedMenus() []common.MenuDef {
+	m.api.State().RLock()
+	game := m.api.State().ActiveGame
+	m.api.State().RUnlock()
 
 	if m.menuCache != nil && m.menuCacheGame == game {
 		return m.menuCache
@@ -1311,7 +1338,7 @@ func (m *chromeModel) cachedMenus() []common.MenuDef {
 		{Label: "&Shaders...", Handler: func(_ string) { m.showShaderDialog() }},
 		{Label: "---"},
 	}
-	if m.isLocal {
+	if m.IsLocal {
 		fileItems = append(fileItems, common.MenuItemDef{
 			Label: "&Quit",
 			Handler: func(_ string) {
@@ -1322,7 +1349,7 @@ func (m *chromeModel) cachedMenus() []common.MenuDef {
 		fileItems = append(fileItems, common.MenuItemDef{
 			Label: "&Disconnect",
 			Handler: func(playerID string) {
-				go m.app.kickPlayer(playerID)
+				go m.api.KickPlayer(playerID)
 			},
 		})
 	}
@@ -1347,8 +1374,8 @@ func (m *chromeModel) cachedMenus() []common.MenuDef {
 	return menus
 }
 
-func (m *chromeModel) showPlayerListDialog(title, subdir, ext string) {
-	dir := filepath.Join(m.app.dataDir, subdir)
+func (m *Model) showPlayerListDialog(title, subdir, ext string) {
+	dir := filepath.Join(m.api.DataDir(), subdir)
 	items := engine.ListDir(dir, ext)
 	body := "(empty)"
 	if len(items) > 0 {
@@ -1365,8 +1392,8 @@ func (m *chromeModel) showPlayerListDialog(title, subdir, ext string) {
 	})
 }
 
-func (m *chromeModel) showShaderDialog() {
-	available := engine.ListDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+func (m *Model) showShaderDialog() {
+	available := engine.ListDir(filepath.Join(m.api.DataDir(), "shaders"), ".js")
 	loadedSet := make(map[string]bool)
 	for _, n := range m.shaderNames {
 		loadedSet[n] = true
@@ -1402,7 +1429,7 @@ func (m *chromeModel) showShaderDialog() {
 	})
 }
 
-func (m *chromeModel) submitInput() {
+func (m *Model) submitInput() {
 	text := strings.TrimSpace(m.input.Value())
 	m.input.SetValue("")
 	if text != "" {
@@ -1416,7 +1443,7 @@ func (m *chromeModel) submitInput() {
 	// In-game: return to idle after submit so keys route to the game.
 	// Lobby: stay in input mode.
 	if m.inActiveGame {
-		setInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
+		SetInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
 		m.mode = modeIdle
 		m.input.Blur()
 	}
@@ -1437,37 +1464,37 @@ func (m *chromeModel) submitInput() {
 		return
 	}
 	if strings.HasPrefix(text, "/") {
-		player := m.app.state.GetPlayer(m.playerID)
+		player := m.api.State().GetPlayer(m.playerID)
 		isAdmin := player != nil && player.IsAdmin
 		ctx := common.CommandContext{
 			PlayerID: m.playerID,
 			IsAdmin:  isAdmin,
 			Reply: func(s string) {
 				msg := common.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: s}
-				m.app.sendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
+				m.api.SendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
 			},
 			Broadcast: func(s string) {
-				m.app.broadcastChat(common.Message{Text: s})
+				m.api.BroadcastChat(common.Message{Text: s})
 			},
 			ServerLog: func(s string) {
-				m.app.serverLog(s)
+				m.api.ServerLog(s)
 			},
 		}
-		m.app.registry.Dispatch(text, ctx)
+		m.api.DispatchCommand(text, ctx)
 		return
 	}
 	// Regular chat
 	playerName := "unknown"
-	if p := m.app.state.GetPlayer(m.playerID); p != nil {
+	if p := m.api.State().GetPlayer(m.playerID); p != nil {
 		playerName = p.Name
 	}
-	m.app.broadcastChat(common.Message{Author: playerName, Text: text})
+	m.api.BroadcastChat(common.Message{Author: playerName, Text: text})
 }
 
-func (m *chromeModel) handleThemeCommand(input string) {
+func (m *Model) handleThemeCommand(input string) {
 	parts := strings.Fields(input)
 	if len(parts) <= 1 {
-		available := theme.ListThemes(m.app.dataDir)
+		available := theme.ListThemes(m.api.DataDir())
 		if len(available) == 0 {
 			m.pluginReply("No themes found in themes/")
 			return
@@ -1484,7 +1511,7 @@ func (m *chromeModel) handleThemeCommand(input string) {
 		return
 	}
 	name := parts[1]
-	path := filepath.Join(m.app.dataDir, "themes", name+".json")
+	path := filepath.Join(m.api.DataDir(), "themes", name+".json")
 	t, err := theme.Load(path)
 	if err != nil {
 		m.pluginReply(fmt.Sprintf("Failed to load theme: %v", err))
@@ -1495,16 +1522,16 @@ func (m *chromeModel) handleThemeCommand(input string) {
 	m.pluginReply(fmt.Sprintf("Theme changed to: %s", t.Name))
 }
 
-func (m *chromeModel) pluginReply(text string) {
+func (m *Model) pluginReply(text string) {
 	msg := common.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: text}
-	m.app.sendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
+	m.api.SendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
 }
 
-func (m *chromeModel) handlePluginCommand(input string) {
+func (m *Model) handlePluginCommand(input string) {
 	parts := strings.Fields(input)
-	// /plugin with no args → list
+	// /plugin with no args -> list
 	if len(parts) <= 1 {
-		available := engine.ListDir(filepath.Join(m.app.dataDir, "plugins"), ".js")
+		available := engine.ListDir(filepath.Join(m.api.DataDir(), "plugins"), ".js")
 		loadedSet := make(map[string]bool)
 		for _, n := range m.pluginNames {
 			loadedSet[n] = true
@@ -1531,7 +1558,7 @@ func (m *chromeModel) handlePluginCommand(input string) {
 			return
 		}
 		nameOrURL := parts[2]
-		name, path, err := engine.ResolvePluginPath(nameOrURL, m.app.dataDir)
+		name, path, err := engine.ResolvePluginPath(nameOrURL, m.api.DataDir())
 		if err != nil {
 			m.pluginReply(fmt.Sprintf("Failed: %v", err))
 			return
@@ -1542,7 +1569,7 @@ func (m *chromeModel) handlePluginCommand(input string) {
 				return
 			}
 		}
-		pl, err := engine.LoadPlugin(path, m.app.clock)
+		pl, err := engine.LoadPlugin(path, m.api.Clock())
 		if err != nil {
 			m.pluginReply(fmt.Sprintf("Failed to load plugin: %v", err))
 			return
@@ -1584,43 +1611,43 @@ func (m *chromeModel) handlePluginCommand(input string) {
 
 // dispatchPluginReply handles a string returned by a plugin's onMessage hook.
 // If it starts with "/" it's treated as a command, otherwise as chat.
-func (m *chromeModel) dispatchPluginReply(text string) {
+func (m *Model) dispatchPluginReply(text string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return
 	}
 	if strings.HasPrefix(text, "/") {
-		player := m.app.state.GetPlayer(m.playerID)
+		player := m.api.State().GetPlayer(m.playerID)
 		isAdmin := player != nil && player.IsAdmin
 		ctx := common.CommandContext{
 			PlayerID: m.playerID,
 			IsAdmin:  isAdmin,
 			Reply: func(s string) {
 				msg := common.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: s}
-				m.app.sendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
+				m.api.SendToPlayer(m.playerID, common.ChatMsg{Msg: msg})
 			},
 			Broadcast: func(s string) {
-				m.app.broadcastChat(common.Message{Text: s})
+				m.api.BroadcastChat(common.Message{Text: s})
 			},
 			ServerLog: func(s string) {
-				m.app.serverLog(s)
+				m.api.ServerLog(s)
 			},
 		}
-		m.app.registry.Dispatch(text, ctx)
+		m.api.DispatchCommand(text, ctx)
 		return
 	}
 	playerName := "unknown"
-	if p := m.app.state.GetPlayer(m.playerID); p != nil {
+	if p := m.api.State().GetPlayer(m.playerID); p != nil {
 		playerName = p.Name
 	}
-	m.app.broadcastChat(common.Message{Author: playerName, Text: text})
+	m.api.BroadcastChat(common.Message{Author: playerName, Text: text})
 }
 
-func (m *chromeModel) handleShaderCommand(input string) {
+func (m *Model) handleShaderCommand(input string) {
 	parts := strings.Fields(input)
-	// /shader with no args → list
+	// /shader with no args -> list
 	if len(parts) <= 1 {
-		available := engine.ListDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+		available := engine.ListDir(filepath.Join(m.api.DataDir(), "shaders"), ".js")
 		loadedSet := make(map[string]bool)
 		for _, n := range m.shaderNames {
 			loadedSet[n] = true
@@ -1647,7 +1674,7 @@ func (m *chromeModel) handleShaderCommand(input string) {
 			return
 		}
 		nameOrURL := parts[2]
-		name, path, err := engine.ResolveShaderPath(nameOrURL, m.app.dataDir)
+		name, path, err := engine.ResolveShaderPath(nameOrURL, m.api.DataDir())
 		if err != nil {
 			m.pluginReply(fmt.Sprintf("Failed: %v", err))
 			return
@@ -1658,7 +1685,7 @@ func (m *chromeModel) handleShaderCommand(input string) {
 				return
 			}
 		}
-		sh, err := engine.LoadShader(path, m.app.clock)
+		sh, err := engine.LoadShader(path, m.api.Clock())
 		if err != nil {
 			m.pluginReply(fmt.Sprintf("Failed to load shader: %v", err))
 			return
@@ -1714,7 +1741,7 @@ func (m *chromeModel) handleShaderCommand(input string) {
 	}
 }
 
-func (m *chromeModel) moveShader(name string, delta int) {
+func (m *Model) moveShader(name string, delta int) {
 	idx := -1
 	for i, n := range m.shaderNames {
 		if strings.EqualFold(n, name) {
@@ -1751,7 +1778,6 @@ func headerWithSpinner(text string, width int, spinner string) string {
 	}
 	return left + strings.Repeat(" ", spaces) + spinner
 }
-
 
 func renderChatLines(lines []string, width, height, scrollOffset int, style lipgloss.Style) string {
 	end := len(lines) - scrollOffset

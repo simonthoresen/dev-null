@@ -11,6 +11,8 @@ import (
 	"github.com/charmbracelet/colorprofile"
 
 	"null-space/common"
+	"null-space/internal/chrome"
+	"null-space/internal/console"
 	"null-space/internal/engine"
 	"null-space/internal/network"
 	"null-space/internal/state"
@@ -27,7 +29,7 @@ func NewLocal(dataDir string) *Server {
 		// sessions left nil — SSH middleware never runs in local mode;
 		// map reads against a nil map are safe (return zero value).
 		logCh:  make(chan string, 256),
-		slogCh: make(chan slogLine, 256),
+		slogCh: make(chan console.SlogLine, 256),
 		chatCh: make(chan common.Message, 256),
 	}
 	app.registerBuiltins()
@@ -60,8 +62,8 @@ func (a *Server) RunLocal(ctx context.Context, playerName, gameName string) erro
 		}
 	}
 
-	model := newChromeModel(a, playerID)
-	model.isLocal = true
+	model := chrome.NewModel(a, playerID)
+	model.IsLocal = true
 
 	// Load init commands from ~/.null-space/client.txt if it exists.
 	if home, err := os.UserHomeDir(); err == nil {
@@ -69,7 +71,7 @@ func (a *Server) RunLocal(ctx context.Context, playerName, gameName string) erro
 			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
 				line = strings.TrimSpace(line)
 				if line != "" && !strings.HasPrefix(line, "#") {
-					model.initCommands = append(model.initCommands, line)
+					model.InitCommands = append(model.InitCommands, line)
 				}
 			}
 		}

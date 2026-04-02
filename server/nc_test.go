@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/common"
+	"null-space/internal/console"
 	"null-space/internal/engine"
 	"null-space/internal/theme"
 	"null-space/internal/widget"
@@ -765,9 +766,9 @@ func TestNCWindowIntegration(t *testing.T) {
 // (e.g. "widget.Window render child") are not routed to the console channel, which
 // would cause a feedback loop: render → debug log → console → re-render → ...
 func TestSlogDebugRoutedToConsole(t *testing.T) {
-	ch := make(chan slogLine, 10)
+	ch := make(chan console.SlogLine, 10)
 	wrapped := &discardHandler{}
-	handler := NewConsoleSlogHandler(ch, wrapped)
+	handler := console.NewSlogHandler(ch, wrapped)
 
 	ctx := t.Context()
 
@@ -782,7 +783,7 @@ func TestSlogDebugRoutedToConsole(t *testing.T) {
 	close(ch)
 	var messages []string
 	for sl := range ch {
-		messages = append(messages, sl.text)
+		messages = append(messages, sl.Text)
 	}
 
 	if len(messages) != 2 {
@@ -843,9 +844,9 @@ func TestNoSlogInRenderPath(t *testing.T) {
 // TestSlogBlockedInRenderPath verifies that the consoleSlogHandler suppresses
 // messages sent from inside a View/Render call stack (feedback loop guard).
 func TestSlogBlockedInRenderPath(t *testing.T) {
-	ch := make(chan slogLine, 10)
+	ch := make(chan console.SlogLine, 10)
 	wrapped := &discardHandler{}
-	handler := NewConsoleSlogHandler(ch, wrapped)
+	handler := console.NewSlogHandler(ch, wrapped)
 
 	ctx := t.Context()
 
@@ -859,14 +860,14 @@ func TestSlogBlockedInRenderPath(t *testing.T) {
 		_ = handler.Handle(ctx, rec2)
 	}
 	// Simulate being inside a View/Render cycle.
-	EnterRenderPath()
+	console.EnterRenderPath()
 	renderHelper()
-	LeaveRenderPath()
+	console.LeaveRenderPath()
 
 	close(ch)
 	var messages []string
 	for sl := range ch {
-		messages = append(messages, sl.text)
+		messages = append(messages, sl.Text)
 	}
 
 	if len(messages) != 1 {

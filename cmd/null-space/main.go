@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/ssh"
 
+	"null-space/internal/console"
 	"null-space/internal/runlog"
 	"null-space/server"
 )
@@ -134,7 +135,7 @@ func main() {
 	}
 
 	startBootStep("Starting console")
-	consoleModel := server.NewConsoleModel(app, stop)
+	consoleModel := console.NewModel(app, stop)
 	program := tea.NewProgram(consoleModel, tea.WithFPS(60))
 	app.SetConsoleProgram(program)
 

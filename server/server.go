@@ -23,6 +23,8 @@ import (
 	"github.com/charmbracelet/ssh"
 
 	"null-space/common"
+	"null-space/internal/chrome"
+	"null-space/internal/console"
 	"null-space/internal/engine"
 	"null-space/internal/network"
 	"null-space/internal/state"
@@ -45,7 +47,7 @@ type Server struct {
 	// channels for communicating events to the console
 	logCh   chan string         // server log lines (legacy, used by serverLog)
 	chatCh  chan common.Message // new chat messages
-	slogCh  chan slogLine       // slog records routed to console
+	slogCh  chan console.SlogLine // slog records routed to console
 
 	chatLogFile *os.File // persistent chat log (timestamp-chat.log)
 
@@ -73,7 +75,7 @@ func New(address, password, dataDir string) (*Server, error) {
 		sessions: make(map[string]ssh.Session),
 		logCh:    make(chan string, 256),
 		chatCh:   make(chan common.Message, 256),
-		slogCh:   make(chan slogLine, 256),
+		slogCh:   make(chan console.SlogLine, 256),
 	}
 
 	app.registerBuiltins()
@@ -105,10 +107,31 @@ func (a *Server) LogCh() <-chan string {
 	return a.logCh
 }
 
-func (a *Server) SlogCh() <-chan slogLine { return a.slogCh }
+func (a *Server) SlogCh() <-chan console.SlogLine { return a.slogCh }
 func (a *Server) ChatCh() <-chan common.Message {
 	return a.chatCh
 }
+
+// --- Interface methods for chrome.ServerAPI and console.ServerAPI ---
+
+func (a *Server) State() *state.CentralState { return a.state }
+func (a *Server) Clock() common.Clock         { return a.clock }
+func (a *Server) DataDir() string             { return a.dataDir }
+func (a *Server) Uptime() string              { return a.uptime() }
+
+func (a *Server) BroadcastChat(msg common.Message) { a.broadcastChat(msg) }
+func (a *Server) BroadcastMsg(msg tea.Msg)          { a.broadcastMsg(msg) }
+func (a *Server) SendToPlayer(playerID string, msg tea.Msg) { a.sendToPlayer(playerID, msg) }
+func (a *Server) ServerLog(text string)              { a.serverLog(text) }
+func (a *Server) KickPlayer(playerID string) error   { return a.kickPlayer(playerID) }
+
+func (a *Server) TabCandidates(input string, playerNames []string) (string, []string) {
+	return a.registry.TabCandidates(input, playerNames)
+}
+func (a *Server) DispatchCommand(input string, ctx common.CommandContext) {
+	a.registry.Dispatch(input, ctx)
+}
+func (a *Server) SetConsoleWidth(w int) { a.consoleWidth = w }
 
 func (a *Server) Start(ctx context.Context) error {
 	go a.runTicker(ctx)
@@ -340,7 +363,7 @@ func (a *Server) sessionMiddleware() wish.Middleware {
 
 func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 	playerID := sess.Context().SessionID()
-	model := newChromeModel(a, playerID)
+	model := chrome.NewModel(a, playerID)
 
 	// Check for init commands from ~/.null-space/client.txt (base64-encoded in env var).
 	for _, e := range sess.Environ() {
@@ -350,7 +373,7 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 				for _, line := range strings.Split(strings.TrimSpace(string(decoded)), "\n") {
 					line = strings.TrimSpace(line)
 					if line != "" && !strings.HasPrefix(line, "#") {
-						model.initCommands = append(model.initCommands, line)
+						model.InitCommands = append(model.InitCommands, line)
 					}
 				}
 			}
@@ -652,6 +675,14 @@ func (a *Server) ShowDialog(playerID string, d common.DialogRequest) {
 
 func (a *Server) serverLog(line string) {
 	slog.Info(line)
+}
+
+// InstallConsoleSlogHandler wraps the current default slog handler to also
+// route records to the server's slogCh. Call after server creation.
+func (a *Server) InstallConsoleSlogHandler() {
+	existing := slog.Default().Handler()
+	handler := console.NewSlogHandler(a.slogCh, existing)
+	slog.SetDefault(slog.New(handler))
 }
 
 func (a *Server) uptime() string {
