@@ -116,6 +116,10 @@ type Model struct {
 	shaders     []common.Shader
 	shaderNames []string // parallel to shaders; display names
 
+	// Enhanced client protocol (null-space-client with charmap support).
+	IsEnhancedClient bool
+	charmapSent      bool // true after charmap+atlas OSC have been sent for the current game
+
 	overlay widget.OverlayState
 
 	// Lobby NC window and child controls.
@@ -143,6 +147,9 @@ type Model struct {
 	// Game NC window — built from WidgetNode tree via reconciler.
 	// Preserves interactive control state (focus, cursor, scroll) across frames.
 	gameWindow *widget.GameWindow
+
+	// Viewport bounds from the last renderPlaying call (for enhanced client OSC).
+	viewportX, viewportY, viewportW, viewportH int
 }
 
 func NewModel(api ServerAPI, playerID string) Model {
@@ -401,6 +408,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case common.GameLoadedMsg:
 		// This player was connected when the game loaded — they're in the game.
 		m.inActiveGame = true
+		m.charmapSent = false
 		m.invalidateMenuCache()
 		m.lobbyInput.Model.Blur()
 		// Focus the playing gameview.
@@ -766,7 +774,25 @@ func (m Model) View() tea.View {
 		}
 	}
 
-	view.SetContent(buf.ToString())
+	// Enhanced client OSC protocol: send charmap data and viewport bounds.
+	var oscPrefix string
+	if m.IsEnhancedClient && m.inActiveGame && game != nil {
+		if !m.charmapSent {
+			if cm := game.CharMap(); cm != nil {
+				oscPrefix += common.EncodeCharmapOSC(cm)
+				if cm.Atlas != "" {
+					atlasPath := filepath.Join(m.api.DataDir(), "charmaps", cm.Name, cm.Atlas)
+					oscPrefix += common.EncodeAtlasOSC(atlasPath)
+				}
+			}
+			m.charmapSent = true
+		}
+		if m.viewportW > 0 && m.viewportH > 0 {
+			oscPrefix += common.EncodeViewportOSC(m.viewportX, m.viewportY, m.viewportW, m.viewportH)
+		}
+	}
+
+	view.SetContent(oscPrefix + buf.ToString())
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
 
@@ -928,6 +954,15 @@ func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, ga
 			m.playingGameView.OnKey = func(key string) {
 				game.OnInput(m.playerID, key)
 			}
+		}
+	}
+
+	// Capture viewport bounds for enhanced client OSC (wraps the render function).
+	if m.IsEnhancedClient && m.playingGameView.RenderFn != nil {
+		inner := m.playingGameView.RenderFn
+		m.playingGameView.RenderFn = func(gbuf *common.ImageBuffer, x, y, w, h int) {
+			m.viewportX, m.viewportY, m.viewportW, m.viewportH = x, y, w, h
+			inner(gbuf, x, y, w, h)
 		}
 	}
 

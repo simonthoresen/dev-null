@@ -88,6 +88,7 @@ type Game interface {
 	CommandBar(playerID string) string // game-controlled command bar (above framework status bar)
 	Commands() []Command
 	Menus() []MenuDef
+	CharMap() *CharMapDef // returns nil if the game doesn't use a charmap
 	Unload()
 
 	// Suspend/resume support — optional for JS games.

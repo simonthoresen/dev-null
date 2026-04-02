@@ -3,16 +3,18 @@
 // It connects via standard SSH but additionally supports charmap-based
 // sprite rendering: games that declare a charmap have their PUA codepoints
 // rendered as sprites from a sprite sheet instead of terminal glyphs.
-//
-// This is a skeleton — the rendering engine (Ebitengine) and SSH transport
-// will be implemented in internal/client/.
 package main
 
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/user"
+
+	"github.com/hajimehoshi/ebiten/v2"
+
+	"null-space/internal/client"
 )
 
 func main() {
@@ -21,9 +23,27 @@ func main() {
 	player := flag.String("player", defaultPlayer(), "player name")
 	flag.Parse()
 
-	fmt.Printf("null-space-client: connecting to %s:%d as %s\n", *host, *port, *player)
-	fmt.Println("(not yet implemented — see internal/client/)")
-	os.Exit(0)
+	fmt.Printf("Connecting to %s:%d as %s...\n", *host, *port, *player)
+
+	conn, err := client.Dial(*host, *port, *player)
+	if err != nil {
+		log.Fatalf("Failed to connect: %v", err)
+	}
+	defer conn.Close()
+
+	fmt.Println("Connected. Starting renderer...")
+
+	fontFace := client.DefaultFontFace()
+	game := client.NewGame(conn, fontFace, 1200, 800)
+
+	ebiten.SetWindowSize(1200, 800)
+	ebiten.SetWindowTitle("null-space")
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+
+	if err := ebiten.RunGame(game); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func defaultPlayer() string {

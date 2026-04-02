@@ -69,6 +69,7 @@ type JSRuntime struct {
 	mu      sync.Mutex
 	vm      *goja.Runtime
 	baseDir string       // directory containing the game file (for include() resolution)
+	dataDir string       // root data directory (for resolving charmaps, etc.)
 	clock   common.Clock // server clock exposed to JS as now()
 
 	commands    []common.Command
@@ -105,12 +106,14 @@ type JSRuntime struct {
 
 	menus        []common.MenuDef
 	ShowDialogFn func(playerID string, d common.DialogRequest) // injected by server
+
+	charmapDef *common.CharMapDef // loaded from dist/charmaps/<name>/charmap.json; nil if no charmap
 }
 
 // LoadGame loads and executes a JS file from games/, extracts the Game object
 // methods, and returns a common.Game. Init() is NOT called here — the server
 // calls it at the splash→playing transition when GamePlayerIDs are set.
-func LoadGame(path string, logFn func(string), chatCh chan common.Message, clock common.Clock) (common.Game, error) {
+func LoadGame(path string, logFn func(string), chatCh chan common.Message, clock common.Clock, dataDir string) (common.Game, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read game file: %w", err)
@@ -122,6 +125,7 @@ func LoadGame(path string, logFn func(string), chatCh chan common.Message, clock
 		logFn:   logFn,
 		ChatCh:  chatCh,
 		clock:   clock,
+		dataDir: dataDir,
 	}
 
 	rt.registerGlobals()
@@ -182,6 +186,10 @@ func (r *JSRuntime) registerGlobals() {
 	r.vm.Set("ATTR_ITALIC", int(common.AttrItalic))
 	r.vm.Set("ATTR_UNDERLINE", int(common.AttrUnderline))
 	r.vm.Set("ATTR_REVERSE", int(common.AttrReverse))
+
+	// PUA codepoint range constants for charmap-based sprite rendering.
+	r.vm.Set("PUA_START", int(common.PUAStart))
+	r.vm.Set("PUA_END", int(common.PUAEnd))
 
 	r.vm.Set("log", func(msg string) {
 		if r.logFn != nil {
@@ -527,6 +535,23 @@ func (r *JSRuntime) extractGameObject() error {
 	}
 	r.suspendFn = extractCallable(gameObj, "suspend")
 	r.resumeFn = extractCallable(gameObj, "resume")
+
+	// Read charmap property (string name, e.g. "pacman").
+	// Loads dist/charmaps/<name>/charmap.json if present.
+	if v := gameObj.Get("charmap"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+		name := v.String()
+		if name != "" && r.dataDir != "" {
+			jsonPath := filepath.Join(r.dataDir, "charmaps", name, "charmap.json")
+			def, err := common.LoadCharMapDef(jsonPath)
+			if err != nil {
+				slog.Warn("failed to load charmap", "name", name, "error", err)
+			} else {
+				r.charmapDef = def
+				slog.Info("loaded charmap", "name", name, "entries", len(def.Entries))
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -877,6 +902,10 @@ func (r *JSRuntime) GameName() string {
 
 func (r *JSRuntime) TeamRange() common.TeamRange {
 	return r.teamRangeProp
+}
+
+func (r *JSRuntime) CharMap() *common.CharMapDef {
+	return r.charmapDef
 }
 
 func (r *JSRuntime) RenderSplash(buf *common.ImageBuffer, playerID string, x, y, width, height int) bool {

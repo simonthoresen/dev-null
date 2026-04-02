@@ -365,7 +365,7 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 	playerID := sess.Context().SessionID()
 	model := chrome.NewModel(a, playerID)
 
-	// Check for init commands from ~/.null-space/client.txt (base64-encoded in env var).
+	// Check for init commands and enhanced client flag from SSH env vars.
 	for _, e := range sess.Environ() {
 		if strings.HasPrefix(e, "NULL_SPACE_INIT=") {
 			encoded := strings.TrimPrefix(e, "NULL_SPACE_INIT=")
@@ -377,7 +377,9 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 					}
 				}
 			}
-			break
+		}
+		if e == "NULL_SPACE_CLIENT=enhanced" {
+			model.IsEnhancedClient = true
 		}
 	}
 
@@ -758,7 +760,7 @@ func (a *Server) loadGame(path string) error {
 	// Create a buffered channel for JS→server chat; drained by a goroutine below.
 	gameChatCh := make(chan common.Message, 64)
 
-	rt, err := engine.LoadGame(path, a.serverLog, gameChatCh, a.clock)
+	rt, err := engine.LoadGame(path, a.serverLog, gameChatCh, a.clock, a.dataDir)
 	if err != nil {
 		close(gameChatCh)
 		return err
@@ -1021,7 +1023,7 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 	path := engine.ResolveGamePath(gamesDir, gameName)
 
 	gameChatCh := make(chan common.Message, 64)
-	rt, err := engine.LoadGame(path, a.serverLog, gameChatCh, a.clock)
+	rt, err := engine.LoadGame(path, a.serverLog, gameChatCh, a.clock, a.dataDir)
 	if err != nil {
 		close(gameChatCh)
 		return fmt.Errorf("load game for resume: %w", err)

@@ -31,7 +31,11 @@ make clean          # remove compiled binaries from dist/
 go run ./cmd/null-space-server --data-dir dist   # equivalent to make run, add --password etc.
 go test ./...
 
-ssh -p 23234 localhost   # connect as a client (host plays this way too)
+ssh -p 23234 localhost   # connect via plain SSH (host plays this way too)
+
+# Graphical client — SSH + sprite rendering for charmap games.
+go run ./cmd/null-space-client
+go run ./cmd/null-space-client --host example.com --port 23234 --player alice
 
 # Local mode — no SSH, runs full client TUI directly in the terminal.
 # Useful as a render test-bed and as a local single-player mode.
@@ -212,6 +216,7 @@ type Game interface {
     CommandBar(playerID string) string     // command bar (above framework status bar)
     Commands() []Command
     Menus() []MenuDef
+    CharMap() *CharMapDef              // nil if game doesn't use a charmap
     Unload()
 
     // Suspend/resume (optional — requires canSuspend: true in JS)
@@ -263,7 +268,7 @@ type Message struct {
 
 Games live in `dist/games/` as either single `.js` files or folders containing `main.js` (for multi-file games using `include()`). Loaded at runtime via `/game load <name>`. A HTTPS URL can be given instead of a name — `.js` files are cached in `dist/games/.cache/`, `.zip` files are extracted to `dist/games/<name>/`. GitHub blob URLs are converted to raw automatically.
 
-**Game** — exports a global `Game` object with hooks `update`, `onPlayerLeave`, `onInput`, `render`, `renderSplash`, `renderGameOver`, `renderNC`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport. `update(dt)` is called once per tick with elapsed seconds — all game logic belongs here. `render(buf, playerID, ox, oy, w, h)` receives an `ImageBuffer` and writes pixels directly via `buf.setChar(x, y, ch, fg, bg)`, `buf.writeString(x, y, text, fg, bg)`, `buf.fill(x, y, w, h, ch, fg, bg)`. Colors are `"#RRGGBB"` hex strings or `null`. Attribute constants: `ATTR_BOLD`, `ATTR_FAINT`, `ATTR_ITALIC`, `ATTR_UNDERLINE`, `ATTR_REVERSE`. `renderSplash(buf, playerID, ox, oy, w, h)` renders a custom splash screen (return true); if omitted, framework renders figlet game name. `renderGameOver(buf, playerID, ox, oy, w, h, results)` renders a custom game-over screen (return true); if omitted, framework renders figlet "GAME OVER" + results table. `renderNC` returns a declarative widget tree that the framework renders using real NC controls; if defined, `render()` is only called for `{type: "gameview"}` nodes within the tree. Interactive node types (`button`, `textinput`, `checkbox`) route actions back via `onInput(playerID, action)`. Tab cycles focus between interactive controls; Esc returns to raw `onInput` mode.
+**Game** — exports a global `Game` object with hooks `update`, `onPlayerLeave`, `onInput`, `render`, `renderSplash`, `renderGameOver`, `renderNC`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `charmap`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport. `update(dt)` is called once per tick with elapsed seconds — all game logic belongs here. `render(buf, playerID, ox, oy, w, h)` receives an `ImageBuffer` and writes pixels directly via `buf.setChar(x, y, ch, fg, bg)`, `buf.writeString(x, y, text, fg, bg)`, `buf.fill(x, y, w, h, ch, fg, bg)`. Colors are `"#RRGGBB"` hex strings or `null`. Attribute constants: `ATTR_BOLD`, `ATTR_FAINT`, `ATTR_ITALIC`, `ATTR_UNDERLINE`, `ATTR_REVERSE`. `renderSplash(buf, playerID, ox, oy, w, h)` renders a custom splash screen (return true); if omitted, framework renders figlet game name. `renderGameOver(buf, playerID, ox, oy, w, h, results)` renders a custom game-over screen (return true); if omitted, framework renders figlet "GAME OVER" + results table. `renderNC` returns a declarative widget tree that the framework renders using real NC controls; if defined, `render()` is only called for `{type: "gameview"}` nodes within the tree. Interactive node types (`button`, `textinput`, `checkbox`) route actions back via `onInput(playerID, action)`. Tab cycles focus between interactive controls; Esc returns to raw `onInput` mode.
 
 **Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `teams()`, `now()`, `registerCommand()`, `gameOver(results, state)`, `figlet(text, font?)` (ASCII art via figlet4go; built-in fonts: `"standard"`, `"larry3d"`; extra fonts loaded from `dist/fonts/*.flf` at startup), `include(name)` (evaluate another `.js` file from the same directory — for multi-file games).
 
@@ -306,6 +311,49 @@ Optional hooks: `init()` (called once on load), `update(dt)` (called every tick 
 | Package | Role |
 |---------|------|
 | `internal/engine/shader.go` | JS shader runtime: `jsShader`, `LoadShader()`, `applyShaders()`, JS buffer wrapper with `getPixel`/`setChar`/`recolor` |
+
+### Charmaps (Sprite-Based Rendering)
+
+Games can use **charmap-based sprite rendering** by mapping Unicode Private Use Area codepoints (U+E000–U+F8FF) to sprites in a sprite sheet. Regular SSH clients show tofu/blank for PUA codepoints; the custom `null-space-client` renders them as sprites.
+
+**Charmap format:** Each charmap lives in `dist/charmaps/<name>/` with a `charmap.json` and an atlas PNG:
+```json
+{
+  "name": "pacman",
+  "version": 1,
+  "cellWidth": 16,
+  "cellHeight": 16,
+  "atlas": "atlas.png",
+  "entries": [
+    {"codepoint": 57344, "x": 0, "y": 0, "w": 16, "h": 16, "name": "player"},
+    {"codepoint": 57345, "x": 16, "y": 0, "w": 16, "h": 16, "name": "ghost"}
+  ]
+}
+```
+
+**JS game usage:** Set `Game.charmap = "pacman"`, then use PUA codepoints in render:
+```js
+var Game = {
+    charmap: "pacman",
+    // ...
+};
+buf.setChar(x, y, "\uE000", "#ffff00", "#000000"); // renders as sprite in custom client
+```
+
+**PUA constants:** `PUA_START` (0xE000) and `PUA_END` (0xF8FF) are available in JS.
+
+**Enhanced client protocol:** The server detects the custom client via `NULL_SPACE_CLIENT=enhanced` SSH env var, then sends charmap data and viewport bounds using in-band OSC escape sequences that regular terminals silently ignore:
+- `\x1b]ns;charmap;<base64 JSON>\x07` — charmap definition (sent once on game load)
+- `\x1b]ns;atlas;<base64 gzipped PNG>\x07` — sprite sheet (sent once on game load)
+- `\x1b]ns;viewport;<x>,<y>,<w>,<h>\x07` — game viewport bounds (sent every frame)
+
+**Rendering rules:** Charmaps apply only to the game viewport. NC chrome (menus, dialogs, chat, status bars) always renders as text. Drop shadows on PUA cells clear the sprite and fill with shadow color.
+
+| Package | Role |
+|---------|------|
+| `common/charmap.go` | CharMapDef/CharMapEntry types, PUA constants, JSON loader |
+| `common/osc.go` | OSC escape sequence encoding for charmap/atlas/viewport |
+| `internal/client/` | SSH connection, ANSI parser, Ebitengine sprite renderer |
 
 ### Init Files (`~/.null-space/`)
 
