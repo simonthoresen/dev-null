@@ -34,9 +34,9 @@ func (r *JSRuntime) registerGlobals() {
 	})
 
 	r.vm.Set("chat", func(msg string) {
-		if r.ChatCh != nil {
+		if r.chatCh != nil {
 			select {
-			case r.ChatCh <- domain.Message{Text: msg}:
+			case r.chatCh <- domain.Message{Text: msg}:
 			default:
 				slog.Warn("JS chat channel full, dropping message", "text", msg)
 			}
@@ -44,9 +44,9 @@ func (r *JSRuntime) registerGlobals() {
 	})
 
 	r.vm.Set("chatPlayer", func(playerID, msg string) {
-		if r.ChatCh != nil {
+		if r.chatCh != nil {
 			select {
-			case r.ChatCh <- domain.Message{Text: msg, IsPrivate: true, ToID: playerID}:
+			case r.chatCh <- domain.Message{Text: msg, IsPrivate: true, ToID: playerID}:
 			default:
 				slog.Warn("JS chatPlayer channel full, dropping message")
 			}
@@ -223,8 +223,8 @@ func (r *JSRuntime) registerGlobals() {
 			Buttons: buttons,
 			OnClose: onClose,
 		}
-		if r.ShowDialogFn != nil {
-			go r.ShowDialogFn(playerID, d)
+		if r.showDialogFn != nil {
+			go r.showDialogFn(playerID, d)
 		}
 		return goja.Undefined()
 	})

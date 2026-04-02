@@ -117,7 +117,7 @@ func (a *Server) loadGame(path string) error {
 		return err
 	}
 	if jrt, ok := rt.(*engine.JSRuntime); ok {
-		jrt.ShowDialogFn = a.ShowDialog
+		jrt.SetShowDialogFn(a.ShowDialog)
 	}
 
 	// Validate team count against game's declared range.
@@ -248,8 +248,8 @@ func (a *Server) unloadGame() {
 	game.Unload()
 
 	// Close the JS chat channel so the drainer goroutine exits.
-	if jrt, ok := game.(*engine.JSRuntime); ok && jrt.ChatCh != nil {
-		close(jrt.ChatCh)
+	if jrt, ok := game.(*engine.JSRuntime); ok {
+		jrt.CloseChatCh()
 	}
 
 	a.broadcastMsg(domain.GameUnloadedMsg{})
@@ -405,7 +405,7 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 		return fmt.Errorf("load game for resume: %w", err)
 	}
 	if jrt, ok := rt.(*engine.JSRuntime); ok {
-		jrt.ShowDialogFn = a.ShowDialog
+		jrt.SetShowDialogFn(a.ShowDialog)
 	}
 
 	// Validate team count against game's declared range.

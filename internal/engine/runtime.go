@@ -74,7 +74,7 @@ type JSRuntime struct {
 	commands    []domain.Command
 	cachedTeams []map[string]any   // snapshot set by server; read by JS teams()
 	logFn       func(string)
-	ChatCh      chan domain.Message // drained by server goroutine; closed on unload
+	chatCh      chan domain.Message // drained by server goroutine; closed on unload
 
 	// game object methods (nil if not defined)
 	updateFn        goja.Callable
@@ -105,7 +105,7 @@ type JSRuntime struct {
 	gameOverState   goja.Value          // state argument passed as second arg to gameOver()
 
 	menus        []domain.MenuDef
-	ShowDialogFn func(playerID string, d domain.DialogRequest) // injected by server
+	showDialogFn func(playerID string, d domain.DialogRequest) // injected by server
 
 	charmapDef *render.CharMapDef // loaded from dist/charmaps/<name>/charmap.json; nil if no charmap
 }
@@ -123,7 +123,7 @@ func LoadGame(path string, logFn func(string), chatCh chan domain.Message, clock
 		vm:      goja.New(),
 		baseDir: filepath.Dir(path),
 		logFn:   logFn,
-		ChatCh:  chatCh,
+		chatCh:  chatCh,
 		clock:   clock,
 		dataDir: dataDir,
 	}
@@ -561,6 +561,25 @@ func (r *JSRuntime) Resume(sessionState any) {
 	cancel := WatchdogJS(r.vm, "Resume")
 	defer cancel()
 	_, _ = r.resumeFn(goja.Undefined(), r.vm.ToValue(sessionState))
+}
+
+// ChatCh returns the channel used by JS chat()/chatPlayer() to send messages.
+func (r *JSRuntime) ChatCh() chan domain.Message {
+	return r.chatCh
+}
+
+// CloseChatCh closes the chat channel. Called during game unload.
+func (r *JSRuntime) CloseChatCh() {
+	if r.chatCh != nil {
+		close(r.chatCh)
+	}
+}
+
+// SetShowDialogFn sets the callback used by JS messageBox() to show dialogs.
+func (r *JSRuntime) SetShowDialogFn(fn func(playerID string, d domain.DialogRequest)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.showDialogFn = fn
 }
 
 func (r *JSRuntime) recoverJS(method string) {
