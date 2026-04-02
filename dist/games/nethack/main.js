@@ -176,20 +176,18 @@ var Game = {
         }
     },
 
-    render: function(playerID, width, height) {
+    render: function(buf, playerID, ox, oy, width, height) {
         var player = state.players[playerID];
+        var content;
         if (!player) {
-            // Late joiner — spectate or create
-            return renderSpectatorView(width, height);
+            content = renderSpectatorView(width, height);
+        } else if (state.inventoryOpen[playerID]) {
+            content = renderInventory(player, width, height);
+        } else {
+            var level = getOrCreateLevel(player.depth);
+            content = renderView(player, level, state.players, width, height);
         }
-
-        var level = getOrCreateLevel(player.depth);
-
-        if (state.inventoryOpen[playerID]) {
-            return renderInventory(player, width, height);
-        }
-
-        return renderView(player, level, state.players, width, height);
+        buf.paintANSI(0, 0, width, height, content, null, null);
     },
 
     statusBar: function(playerID) {

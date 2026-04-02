@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"image/color"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -165,6 +166,14 @@ func (r *jsRuntime) Start() {
 }
 
 func (r *jsRuntime) registerGlobals() {
+	// Pixel attribute constants for buf.setChar/writeString/fill.
+	r.vm.Set("ATTR_NONE", int(common.AttrNone))
+	r.vm.Set("ATTR_BOLD", int(common.AttrBold))
+	r.vm.Set("ATTR_FAINT", int(common.AttrFaint))
+	r.vm.Set("ATTR_ITALIC", int(common.AttrItalic))
+	r.vm.Set("ATTR_UNDERLINE", int(common.AttrUnderline))
+	r.vm.Set("ATTR_REVERSE", int(common.AttrReverse))
+
 	r.vm.Set("log", func(msg string) {
 		if r.logFn != nil {
 			r.logFn(msg)
@@ -572,12 +581,115 @@ func (r *jsRuntime) Render(buf *common.ImageBuffer, playerID string, x, y, width
 	defer traceJS(r.vm, "Render")()
 	cancel := watchdogJS(r.vm, "Render")
 	defer cancel()
-	val, err := r.renderFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
+	jsBuf := r.newJSImageBuffer(buf, x, y, width, height)
+	_, err := r.renderFn(goja.Undefined(), r.vm.ToValue(jsBuf), r.vm.ToValue(playerID), r.vm.ToValue(x), r.vm.ToValue(y), r.vm.ToValue(width), r.vm.ToValue(height))
 	if err != nil {
 		slog.Error("JS Render error", "error", err)
-		return
 	}
-	buf.PaintANSI(x, y, width, height, val.String(), nil, nil)
+}
+
+// newJSImageBuffer creates a JS-friendly wrapper around an ImageBuffer region.
+// JS games call buf.setChar(x, y, ch, fg, bg), buf.writeString(x, y, text, fg, bg),
+// buf.fill(x, y, w, h, ch, fg, bg) to write directly into the buffer.
+func (r *jsRuntime) newJSImageBuffer(buf *common.ImageBuffer, ox, oy, w, h int) map[string]any {
+	// buf.paintANSI allows games with existing ANSI rendering to bridge
+	// their output into the buffer without returning a string from render().
+	// Games should migrate to setChar/writeString over time.
+	return map[string]any{
+		"width":  w,
+		"height": h,
+		"setChar": func(call goja.FunctionCall) goja.Value {
+			x := int(call.Argument(0).ToInteger())
+			y := int(call.Argument(1).ToInteger())
+			ch := call.Argument(2).String()
+			fg := parseJSColor(call.Argument(3))
+			bg := parseJSColor(call.Argument(4))
+			attr := parseJSAttr(call.Argument(5))
+			if len(ch) > 0 {
+				r := []rune(ch)[0]
+				buf.SetChar(ox+x, oy+y, r, fg, bg, attr)
+			}
+			return goja.Undefined()
+		},
+		"writeString": func(call goja.FunctionCall) goja.Value {
+			x := int(call.Argument(0).ToInteger())
+			y := int(call.Argument(1).ToInteger())
+			text := call.Argument(2).String()
+			fg := parseJSColor(call.Argument(3))
+			bg := parseJSColor(call.Argument(4))
+			attr := parseJSAttr(call.Argument(5))
+			buf.WriteString(ox+x, oy+y, text, fg, bg, attr)
+			return goja.Undefined()
+		},
+		"fill": func(call goja.FunctionCall) goja.Value {
+			x := int(call.Argument(0).ToInteger())
+			y := int(call.Argument(1).ToInteger())
+			fw := int(call.Argument(2).ToInteger())
+			fh := int(call.Argument(3).ToInteger())
+			ch := call.Argument(4).String()
+			fg := parseJSColor(call.Argument(5))
+			bg := parseJSColor(call.Argument(6))
+			attr := parseJSAttr(call.Argument(7))
+			fillCh := ' '
+			if len(ch) > 0 {
+				fillCh = []rune(ch)[0]
+			}
+			buf.Fill(ox+x, oy+y, fw, fh, fillCh, fg, bg, attr)
+			return goja.Undefined()
+		},
+		"paintANSI": func(call goja.FunctionCall) goja.Value {
+			px := int(call.Argument(0).ToInteger())
+			py := int(call.Argument(1).ToInteger())
+			pw := int(call.Argument(2).ToInteger())
+			ph := int(call.Argument(3).ToInteger())
+			s := call.Argument(4).String()
+			fg := parseJSColor(call.Argument(5))
+			bg := parseJSColor(call.Argument(6))
+			buf.PaintANSI(ox+px, oy+py, pw, ph, s, fg, bg)
+			return goja.Undefined()
+		},
+	}
+}
+
+// parseJSColor converts a JS value to a color.Color.
+// Accepts: null/undefined → nil, "#RRGGBB" hex string → color.RGBA.
+func parseJSColor(v goja.Value) color.Color {
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return nil
+	}
+	s := v.String()
+	if len(s) == 7 && s[0] == '#' {
+		r := hexByte(s[1], s[2])
+		g := hexByte(s[3], s[4])
+		b := hexByte(s[5], s[6])
+		return color.RGBA{R: r, G: g, B: b, A: 255}
+	}
+	return nil
+}
+
+func hexByte(hi, lo byte) uint8 {
+	return hexNibble(hi)<<4 | hexNibble(lo)
+}
+
+func hexNibble(c byte) uint8 {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0'
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10
+	case c >= 'A' && c <= 'F':
+		return c - 'A' + 10
+	}
+	return 0
+}
+
+// parseJSAttr converts a JS value to a PixelAttr.
+// Accepts: null/undefined → AttrNone, number → PixelAttr bitmask.
+func parseJSAttr(v goja.Value) common.PixelAttr {
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return common.AttrNone
+	}
+	return common.PixelAttr(v.ToInteger())
 }
 
 func (r *jsRuntime) RenderNC(playerID string, width, height int) *common.WidgetNode {

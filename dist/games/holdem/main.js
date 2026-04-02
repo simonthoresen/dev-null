@@ -569,8 +569,8 @@ var Game = {
         tick();
     },
 
-    render: function(playerID, width, height) {
-        return '';
+    render: function(buf, playerID, ox, oy, width, height) {
+        // holdem uses renderNC exclusively
     },
 
     renderNC: function(playerID, width, height) {

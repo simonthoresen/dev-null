@@ -86,12 +86,14 @@ var Game = {
     // "a"–"z", "A"–"Z", "0"–"9", "ctrl+c", "ctrl+z", "f1"–"f12", etc.
     onInput: function(playerID, key) {},
 
-    // Returns the game viewport as a plain string (newline-separated rows).
-    // width and height are the exact dimensions available — fill them exactly
-    // or the framework will pad/clip. Called per player on every render tick (~10 fps).
-    // Must be pure rendering — no game state mutation.
-    render: function(playerID, width, height) {
-        return "";
+    // Renders the game viewport into buf at position (ox, oy) with dimensions width × height.
+    // buf is an ImageBuffer — call buf.setChar(x, y, ch, fg, bg), buf.writeString(x, y, text, fg, bg),
+    // buf.fill(x, y, w, h, ch, fg, bg) to write pixels directly. Colors are "#RRGGBB" strings or null.
+    // Optional: buf.paintANSI(x, y, w, h, str) for legacy ANSI-string rendering.
+    // Coordinates are relative to the buffer region (0,0 = top-left of the game viewport).
+    // Called per player on every render tick (~10 fps). Must be pure rendering — no game state mutation.
+    render: function(buf, playerID, ox, oy, width, height) {
+        buf.writeString(0, 0, "Hello!", "#FFFFFF", null);
     },
 
     // Returns a declarative NC widget tree for the game viewport.
@@ -177,10 +179,8 @@ var Game = {
         if (key === "right") p.x++;
     },
 
-    render: function(playerID, width, height) {
-        var lines = [];
+    render: function(buf, playerID, ox, oy, width, height) {
         for (var y = 0; y < height; y++) {
-            var row = "";
             for (var x = 0; x < width; x++) {
                 var ch = ".";
                 for (var id in players) {
@@ -189,11 +189,9 @@ var Game = {
                         break;
                     }
                 }
-                row += ch;
+                buf.setChar(x, y, ch, null, null);
             }
-            lines.push(row);
         }
-        return lines.join("\n");
     },
 
     statusBar: function(playerID) {
@@ -431,7 +429,7 @@ Games can persist data between runs. Saved state is stored as JSON in `dist/stat
 │ status bar (1 row)                 │  ← Game.statusBar(playerID)
 ├────────────────────────────────────┤
 │                                    │
-│ game viewport (width × height)     │  ← Game.render(playerID, width, height)
+│ game viewport (width × height)     │  ← Game.render(buf, playerID, ox, oy, w, h)
 │                                    │
 ├────────────────────────────────────┤
 │ chat (remaining rows, min 5)       │
@@ -459,13 +457,26 @@ Games can persist data between runs. Saved state is stored as JSON in `dist/stat
 
 **Rendering is character-based.** Each character is one cell wide. For box-drawing or emoji that span multiple columns, count display width carefully — the framework does not reflow.
 
-**ANSI escape codes work.** You can use ANSI color codes in `render()`, `statusBar()`, and `commandBar()` output (but not in `gameName`, which is rendered by lipgloss). Example:
+**ImageBuffer API.** The `buf` parameter in `render()` supports these methods:
+
+| Method | Description |
+|--------|-------------|
+| `buf.setChar(x, y, ch, fg, bg)` | Set one character. `fg`/`bg` are `"#RRGGBB"` or `null` (default). |
+| `buf.writeString(x, y, text, fg, bg)` | Write plain text starting at (x, y). |
+| `buf.fill(x, y, w, h, ch, fg, bg)` | Fill a rectangle with a character. |
+| `buf.paintANSI(x, y, w, h, str)` | Paint an ANSI-escaped string (legacy bridge). |
+| `buf.width` / `buf.height` | Dimensions of the game viewport. |
+
+All methods accept an optional trailing `attr` parameter (bitmask): `ATTR_BOLD`, `ATTR_FAINT`, `ATTR_ITALIC`, `ATTR_UNDERLINE`, `ATTR_REVERSE`. Coordinates are relative to the viewport (0,0 = top-left).
 
 ```js
-render: function(playerID, width, height) {
-    return "\x1b[32mHello, \x1b[33m" + playerID + "\x1b[0m";
+render: function(buf, playerID, ox, oy, width, height) {
+    buf.writeString(0, 0, "Hello, " + playerID, "#00FF00", null);
+    buf.setChar(5, 2, "@", "#FFFF00", "#000080", ATTR_BOLD);
 }
 ```
+
+**ANSI escape codes** still work in `statusBar()` and `commandBar()` output.
 
 ---
 
@@ -489,7 +500,7 @@ If your game defines `renderNC(playerID, width, height)`, it should return a tre
 
 | Type | Description | Key properties |
 |------|-------------|----------------|
-| `gameview` | Renders the raw `render()` output in this region | (none — calls `render(playerID, w, h)` with the computed sub-area size) |
+| `gameview` | Renders the raw `render()` output in this region | (none — calls `render(buf, playerID, x, y, w, h)` with the computed sub-area) |
 | `panel` | Bordered NC panel with optional title | `title`, `children` |
 | `label` | Single line of text | `text`, `align` (`"left"`, `"center"`, `"right"`) |
 | `hsplit` | Horizontal split — children placed side by side | `children` |

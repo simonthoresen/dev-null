@@ -94,11 +94,8 @@ var Game = {
         }
     },
 
-    render: function(playerID, width, height) {
-        var me = state.players[playerID];
-        var lines = [];
+    render: function(buf, playerID, ox, oy, width, height) {
         for (var y = 0; y < height; y++) {
-            var line = "";
             for (var x = 0; x < width; x++) {
                 var ch = ".";
                 for (var id in state.players) {
@@ -108,11 +105,9 @@ var Game = {
                         break;
                     }
                 }
-                line += ch;
+                buf.setChar(x, y, ch, null, null);
             }
-            lines.push(line);
         }
-        return lines.join("\n");
     },
 
     statusBar: function(playerID) {

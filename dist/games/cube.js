@@ -85,7 +85,7 @@ function project(v, cx, cy, scale) {
 }
 
 // Fill a triangle on the screen buffer using scanline
-function fillTriangle(buf, zbuf, w, h, p0, p1, p2, z0, z1, z2, shade) {
+function fillTriangle(imgBuf, zbuf, w, h, p0, p1, p2, z0, z1, z2, shade) {
     // Sort by y
     var pts = [{x: p0[0], y: p0[1], z: z0}, {x: p1[0], y: p1[1], z: z1}, {x: p2[0], y: p2[1], z: z2}];
     pts.sort(function(a, b) { return a.y - b.y; });
@@ -98,7 +98,6 @@ function fillTriangle(buf, zbuf, w, h, p0, p1, p2, z0, z1, z2, shade) {
 
         // Interpolate edges
         if (y < b.y || a.y === b.y) {
-            // Top half: a→c and a→b  (or flat top: a→c and b→c)
             var t1 = (c.y === a.y) ? 0 : (y - a.y) / (c.y - a.y);
             var t2;
             if (a.y === b.y) {
@@ -115,7 +114,6 @@ function fillTriangle(buf, zbuf, w, h, p0, p1, p2, z0, z1, z2, shade) {
                 zr = a.z + (b.z - a.z) * t2;
             }
         } else {
-            // Bottom half: a→c and b→c
             var t1 = (c.y === a.y) ? 0 : (y - a.y) / (c.y - a.y);
             var t2 = (c.y === b.y) ? 0 : (y - b.y) / (c.y - b.y);
             x1 = a.x + (c.x - a.x) * t1;
@@ -135,13 +133,13 @@ function fillTriangle(buf, zbuf, w, h, p0, p1, p2, z0, z1, z2, shade) {
             var idx = y * w + x;
             if (zz < zbuf[idx]) {
                 zbuf[idx] = zz;
-                buf[idx] = shade;
+                imgBuf.setChar(x, y, shade, null, null);
             }
         }
     }
 }
 
-function renderCube(width, height) {
+function renderCube(imgBuf, width, height) {
     var ax = state.angleX;
     var ay = state.angleY;
     var az = state.angleZ;
@@ -162,11 +160,9 @@ function renderCube(width, height) {
     var cy = Math.floor(height / 2);
     var scale = Math.min(width / 4, height / 1.5);
 
-    // Initialize buffers
-    var buf = [];
+    // Initialize z-buffer only (image buffer is the output)
     var zbuf = [];
     for (var i = 0; i < width * height; i++) {
-        buf.push(" ");
         zbuf.push(9999);
     }
 
@@ -209,8 +205,8 @@ function renderCube(width, height) {
         }
 
         // Fill two triangles per quad
-        fillTriangle(buf, zbuf, width, height, pts[0], pts[1], pts[2], zvals[0], zvals[1], zvals[2], shade);
-        fillTriangle(buf, zbuf, width, height, pts[0], pts[2], pts[3], zvals[0], zvals[2], zvals[3], shade);
+        fillTriangle(imgBuf, zbuf, width, height, pts[0], pts[1], pts[2], zvals[0], zvals[1], zvals[2], shade);
+        fillTriangle(imgBuf, zbuf, width, height, pts[0], pts[2], pts[3], zvals[0], zvals[2], zvals[3], shade);
     }
 
     // Draw edges on top for crisp outline
@@ -228,23 +224,13 @@ function renderCube(width, height) {
         for (var e = 0; e < 4; e++) {
             var p0 = pts[e];
             var p1 = pts[(e + 1) % 4];
-            drawLine(buf, width, height, p0[0], p0[1], p1[0], p1[1]);
+            drawLine(imgBuf, width, height, p0[0], p0[1], p1[0], p1[1]);
         }
     }
 
-    // Build output string
-    var lines = [];
-    for (var y = 0; y < height; y++) {
-        var line = "";
-        for (var x = 0; x < width; x++) {
-            line += buf[y * width + x];
-        }
-        lines.push(line);
-    }
-    return lines.join("\n");
 }
 
-function drawLine(buf, w, h, x0, y0, x1, y1) {
+function drawLine(imgBuf, w, h, x0, y0, x1, y1) {
     var dx = Math.abs(x1 - x0);
     var dy = Math.abs(y1 - y0);
     var sx = x0 < x1 ? 1 : -1;
@@ -256,7 +242,7 @@ function drawLine(buf, w, h, x0, y0, x1, y1) {
 
     while (steps < maxSteps) {
         if (x0 >= 0 && x0 < w && y0 >= 0 && y0 < h) {
-            buf[y0 * w + x0] = "·";
+            imgBuf.setChar(x0, y0, "·", null, null);
         }
         if (x0 === x1 && y0 === y1) break;
         var e2 = 2 * err;
@@ -323,8 +309,8 @@ var Game = {
         state.angleZ = t * 0.7;
     },
 
-    render: function(playerID, width, height) {
-        return renderCube(width, height);
+    render: function(buf, playerID, ox, oy, width, height) {
+        renderCube(buf, width, height);
     },
 
     statusBar: function(playerID) {

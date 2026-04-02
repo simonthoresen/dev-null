@@ -623,8 +623,8 @@ var Game = {
         tick();
     },
 
-    render: function(playerID, width, height) {
-        return render(playerID, width, height);
+    render: function(buf, playerID, ox, oy, width, height) {
+        buf.paintANSI(0, 0, width, height, render(playerID, width, height), null, null);
     },
 
     statusBar: function(playerID) {
