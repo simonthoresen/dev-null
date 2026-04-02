@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 
 	"null-space/internal/theme"
+	"null-space/internal/widget"
 )
 
 var benchDuration = flag.Duration("nc.benchtime", 10*time.Second, "how long to run NC render benchmark")
@@ -53,160 +54,160 @@ func BenchmarkComplexNCRender(b *testing.B) {
 
 // buildComplexWindow constructs a realistic NC widget layout with multiple
 // control types arranged in a grid.
-func buildComplexWindow() *NCWindow {
+func buildComplexWindow() *widget.Window {
 	// Header row: title label spanning full width
-	headerLabel := &NCLabel{Text: "Game Dashboard — Round 3 of 10", Align: "center"}
+	headerLabel := &widget.Label{Text: "Game Dashboard — Round 3 of 10", Align: "center"}
 
 	// Horizontal divider
-	divider1 := &NCHDivider{Connected: true}
+	divider1 := &widget.HDivider{Connected: true}
 
 	// Left panel: player stats with labels and a text view
 	statsLines := make([]string, 20)
 	for i := range statsLines {
 		statsLines[i] = fmt.Sprintf("Player %02d  HP: %3d  Score: %5d", i+1, 100-i*4, 1000+i*200)
 	}
-	statsView := &NCTextView{
+	statsView := &widget.TextView{
 		Lines:       statsLines,
 		BottomAlign: false,
 		Scrollable:  true,
 	}
 
-	statsPanel := &NCPanel{
+	statsPanel := &widget.Panel{
 		Title: "Player Stats",
-		Children: []GridChild{
+		Children: []widget.GridChild{
 			{
-				Control:    &NCLabel{Text: "Leaderboard", Align: "center"},
-				Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal},
+				Control:    &widget.Label{Text: "Leaderboard", Align: "center"},
+				Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal},
 			},
 			{
-				Control:    &NCHDivider{Connected: true},
-				Constraint: GridConstraint{Col: 0, Row: 1, WeightX: 1, Fill: FillHorizontal},
+				Control:    &widget.HDivider{Connected: true},
+				Constraint: widget.GridConstraint{Col: 0, Row: 1, WeightX: 1, Fill: widget.FillHorizontal},
 			},
 			{
 				Control:    statsView,
-				Constraint: GridConstraint{Col: 0, Row: 2, WeightX: 1, WeightY: 1, Fill: FillBoth},
+				Constraint: widget.GridConstraint{Col: 0, Row: 2, WeightX: 1, WeightY: 1, Fill: widget.FillBoth},
 			},
 		},
 	}
 
 	// Right panel: controls — inputs, buttons, checkboxes
-	nameInput := &NCTextInput{Model: newBenchTextInput("Enter name...")}
-	chatInput := &NCTextInput{Model: newBenchTextInput("Type a message...")}
+	nameInput := &widget.TextInput{Model: newBenchTextInput("Enter name...")}
+	chatInput := &widget.TextInput{Model: newBenchTextInput("Type a message...")}
 
-	controlsPanel := &NCPanel{
+	controlsPanel := &widget.Panel{
 		Title: "Controls",
-		Children: []GridChild{
+		Children: []widget.GridChild{
 			{
-				Control:    &NCLabel{Text: "Name:", Align: "left"},
-				Constraint: GridConstraint{Col: 0, Row: 0},
+				Control:    &widget.Label{Text: "Name:", Align: "left"},
+				Constraint: widget.GridConstraint{Col: 0, Row: 0},
 			},
 			{
 				Control:    nameInput,
-				Constraint: GridConstraint{Col: 1, Row: 0, WeightX: 1, Fill: FillHorizontal},
+				Constraint: widget.GridConstraint{Col: 1, Row: 0, WeightX: 1, Fill: widget.FillHorizontal},
 				TabIndex:   1,
 			},
 			{
-				Control:    &NCLabel{Text: "Chat:", Align: "left"},
-				Constraint: GridConstraint{Col: 0, Row: 1},
+				Control:    &widget.Label{Text: "Chat:", Align: "left"},
+				Constraint: widget.GridConstraint{Col: 0, Row: 1},
 			},
 			{
 				Control:    chatInput,
-				Constraint: GridConstraint{Col: 1, Row: 1, WeightX: 1, Fill: FillHorizontal},
+				Constraint: widget.GridConstraint{Col: 1, Row: 1, WeightX: 1, Fill: widget.FillHorizontal},
 				TabIndex:   2,
 			},
 			{
-				Control:    &NCHDivider{Connected: true},
-				Constraint: GridConstraint{Col: 0, Row: 2, ColSpan: 2, WeightX: 1, Fill: FillHorizontal},
+				Control:    &widget.HDivider{Connected: true},
+				Constraint: widget.GridConstraint{Col: 0, Row: 2, ColSpan: 2, WeightX: 1, Fill: widget.FillHorizontal},
 			},
 			{
-				Control:    &NCCheckbox{Label: "Ready", Checked: true},
-				Constraint: GridConstraint{Col: 0, Row: 3, ColSpan: 2},
+				Control:    &widget.Checkbox{Label: "Ready", Checked: true},
+				Constraint: widget.GridConstraint{Col: 0, Row: 3, ColSpan: 2},
 				TabIndex:   3,
 			},
 			{
-				Control:    &NCCheckbox{Label: "Spectator Mode", Checked: false},
-				Constraint: GridConstraint{Col: 0, Row: 4, ColSpan: 2},
+				Control:    &widget.Checkbox{Label: "Spectator Mode", Checked: false},
+				Constraint: widget.GridConstraint{Col: 0, Row: 4, ColSpan: 2},
 				TabIndex:   4,
 			},
 			{
-				Control:    &NCButton{Label: "Start Game"},
-				Constraint: GridConstraint{Col: 0, Row: 5},
+				Control:    &widget.Button{Label: "Start Game"},
+				Constraint: widget.GridConstraint{Col: 0, Row: 5},
 				TabIndex:   5,
 			},
 			{
-				Control:    &NCButton{Label: "Leave"},
-				Constraint: GridConstraint{Col: 1, Row: 5},
+				Control:    &widget.Button{Label: "Leave"},
+				Constraint: widget.GridConstraint{Col: 1, Row: 5},
 				TabIndex:   6,
 			},
 		},
 	}
 
 	// Vertical divider between panels
-	vdivider := &NCVDivider{Connected: true}
+	vdivider := &widget.VDivider{Connected: true}
 
 	// Bottom section: chat log
 	chatLines := make([]string, 30)
 	for i := range chatLines {
 		chatLines[i] = fmt.Sprintf("[%02d:%02d] Player%d: This is chat message number %d with some text", i/60, i%60, i%5+1, i+1)
 	}
-	chatView := &NCTextView{
+	chatView := &widget.TextView{
 		Lines:       chatLines,
 		BottomAlign: true,
 		Scrollable:  true,
 	}
 
 	// Bottom divider
-	divider2 := &NCHDivider{Connected: true}
+	divider2 := &widget.HDivider{Connected: true}
 
 	// Status bar labels
-	statusLeft := &NCLabel{Text: "Game: Invaders | Teams: 3 | Phase: Playing", Align: "left"}
-	statusRight := &NCLabel{Text: "Server time: 12:34:56", Align: "right"}
+	statusLeft := &widget.Label{Text: "Game: Invaders | Teams: 3 | Phase: Playing", Align: "left"}
+	statusRight := &widget.Label{Text: "Server time: 12:34:56", Align: "right"}
 
 	// Assemble the full window
-	return &NCWindow{
+	return &widget.Window{
 		Title: "null-space",
-		Children: []GridChild{
+		Children: []widget.GridChild{
 			// Row 0: header
 			{
 				Control:    headerLabel,
-				Constraint: GridConstraint{Col: 0, Row: 0, ColSpan: 3, WeightX: 1, Fill: FillHorizontal},
+				Constraint: widget.GridConstraint{Col: 0, Row: 0, ColSpan: 3, WeightX: 1, Fill: widget.FillHorizontal},
 			},
 			// Row 1: divider
 			{
 				Control:    divider1,
-				Constraint: GridConstraint{Col: 0, Row: 1, ColSpan: 3, WeightX: 1, Fill: FillHorizontal},
+				Constraint: widget.GridConstraint{Col: 0, Row: 1, ColSpan: 3, WeightX: 1, Fill: widget.FillHorizontal},
 			},
 			// Row 2: left panel | vdivider | right panel
 			{
 				Control:    statsPanel,
-				Constraint: GridConstraint{Col: 0, Row: 2, WeightX: 2, WeightY: 1, Fill: FillBoth},
+				Constraint: widget.GridConstraint{Col: 0, Row: 2, WeightX: 2, WeightY: 1, Fill: widget.FillBoth},
 			},
 			{
 				Control:    vdivider,
-				Constraint: GridConstraint{Col: 1, Row: 2, Fill: FillVertical},
+				Constraint: widget.GridConstraint{Col: 1, Row: 2, Fill: widget.FillVertical},
 			},
 			{
 				Control:    controlsPanel,
-				Constraint: GridConstraint{Col: 2, Row: 2, WeightX: 1, WeightY: 1, Fill: FillBoth},
+				Constraint: widget.GridConstraint{Col: 2, Row: 2, WeightX: 1, WeightY: 1, Fill: widget.FillBoth},
 			},
 			// Row 3: divider
 			{
 				Control:    divider2,
-				Constraint: GridConstraint{Col: 0, Row: 3, ColSpan: 3, WeightX: 1, Fill: FillHorizontal},
+				Constraint: widget.GridConstraint{Col: 0, Row: 3, ColSpan: 3, WeightX: 1, Fill: widget.FillHorizontal},
 			},
 			// Row 4: chat
 			{
 				Control:    chatView,
-				Constraint: GridConstraint{Col: 0, Row: 4, ColSpan: 3, WeightX: 1, WeightY: 0.5, Fill: FillBoth},
+				Constraint: widget.GridConstraint{Col: 0, Row: 4, ColSpan: 3, WeightX: 1, WeightY: 0.5, Fill: widget.FillBoth},
 			},
 			// Row 5: status bar
 			{
 				Control:    statusLeft,
-				Constraint: GridConstraint{Col: 0, Row: 5, ColSpan: 2, WeightX: 1, Fill: FillHorizontal},
+				Constraint: widget.GridConstraint{Col: 0, Row: 5, ColSpan: 2, WeightX: 1, Fill: widget.FillHorizontal},
 			},
 			{
 				Control:    statusRight,
-				Constraint: GridConstraint{Col: 2, Row: 5, Fill: FillHorizontal},
+				Constraint: widget.GridConstraint{Col: 2, Row: 5, Fill: widget.FillHorizontal},
 			},
 		},
 	}

@@ -9,6 +9,7 @@ import (
 
 	"null-space/common"
 	"null-space/internal/theme"
+	"null-space/internal/widget"
 )
 
 // ─── Screen test harness ─────────────────────────────────────────────────────
@@ -248,11 +249,11 @@ func asciiTheme() *theme.Theme {
 }
 
 func TestNCWindowBordersDefaultTheme(t *testing.T) {
-	label := &NCLabel{Text: "X"}
-	win := &NCWindow{
+	label := &widget.Label{Text: "X"}
+	win := &widget.Window{
 		Title: "T",
-		Children: []GridChild{
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+		Children: []widget.GridChild{
+			{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal}},
 		},
 	}
 	th := theme.Default()
@@ -274,11 +275,11 @@ func TestNCWindowBordersDefaultTheme(t *testing.T) {
 }
 
 func TestNCWindowBordersSingleLineTheme(t *testing.T) {
-	label := &NCLabel{Text: "X"}
-	win := &NCWindow{
+	label := &widget.Label{Text: "X"}
+	win := &widget.Window{
 		Title: "T",
-		Children: []GridChild{
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+		Children: []widget.GridChild{
+			{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal}},
 		},
 	}
 	th := singleLineTheme()
@@ -302,11 +303,11 @@ func TestNCWindowBordersSingleLineTheme(t *testing.T) {
 }
 
 func TestNCWindowBordersASCIITheme(t *testing.T) {
-	label := &NCLabel{Text: "X"}
-	win := &NCWindow{
+	label := &widget.Label{Text: "X"}
+	win := &widget.Window{
 		Title: "T",
-		Children: []GridChild{
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+		Children: []widget.GridChild{
+			{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal}},
 		},
 	}
 	th := asciiTheme()
@@ -327,7 +328,7 @@ func TestNCWindowBordersASCIITheme(t *testing.T) {
 }
 
 func TestDropdownBordersSingleLineTheme(t *testing.T) {
-	o := overlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := widget.OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{
 			{Label: "&New"},
@@ -356,7 +357,7 @@ func TestDropdownBordersSingleLineTheme(t *testing.T) {
 }
 
 func TestMenuBarSeparatorFromTheme(t *testing.T) {
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
@@ -380,7 +381,7 @@ func TestMenuBarSeparatorFromTheme(t *testing.T) {
 }
 
 func TestDialogBordersASCIITheme(t *testing.T) {
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	o.PushDialog(common.DialogRequest{
 		Title: "Err",
 		Body:  "Oops",
@@ -415,12 +416,12 @@ func TestDialogBordersASCIITheme(t *testing.T) {
 
 func TestSameLayoutDifferentThemeBorders(t *testing.T) {
 	// Render the same window with three themes — only borders should change.
-	label := &NCLabel{Text: "Hello"}
-	makeWin := func() *NCWindow {
-		return &NCWindow{
+	label := &widget.Label{Text: "Hello"}
+	makeWin := func() *widget.Window {
+		return &widget.Window{
 			Title: "T",
-			Children: []GridChild{
-				{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+			Children: []widget.GridChild{
+				{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal}},
 			},
 		}
 	}
@@ -473,11 +474,11 @@ func distinctPaletteTheme() *theme.Theme {
 
 func TestPaletteDepthOnNCWindow(t *testing.T) {
 	th := distinctPaletteTheme()
-	label := &NCLabel{Text: "hello"}
-	win := &NCWindow{
+	label := &widget.Label{Text: "hello"}
+	win := &widget.Window{
 		Title: "Main",
-		Children: []GridChild{
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+		Children: []widget.GridChild{
+			{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal}},
 		},
 	}
 
@@ -500,11 +501,11 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	th := distinctPaletteTheme()
 
 	// Layer 0: Main window at depth 0 (Primary).
-	label := &NCLabel{Text: "content"}
-	win := &NCWindow{
+	label := &widget.Label{Text: "content"}
+	win := &widget.Window{
 		Title: "Panel",
-		Children: []GridChild{
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+		Children: []widget.GridChild{
+			{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal}},
 		},
 	}
 	layer0 := win.Render(0, 0, 40, 12, th.LayerAt(0))
@@ -516,7 +517,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	}
 
 	// Layer 1: Dropdown at depth 1 (Secondary) over the window.
-	o := overlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := widget.OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}, {Label: "&Quit"}}},
 	}
@@ -524,7 +525,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	dd, ddCol, ddRow := ddBox.Content, ddBox.Col, ddBox.Row
 	assertHasANSI(t, dd, "#002200", "layer 1 dropdown (Secondary)")
 
-	layer1 := PlaceOverlay(ddCol, ddRow, dd, layer0)
+	layer1 := widget.PlaceOverlay(ddCol, ddRow, dd, layer0)
 	assertHasANSI(t, layer1, "#110000", "layer 1: Primary still visible")
 	assertHasANSI(t, layer1, "#002200", "layer 1: Secondary in dropdown")
 
@@ -541,7 +542,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	}
 
 	// Layer 2: Dialog at depth 2 (Tertiary) over everything.
-	o2 := overlayState{OpenMenu: -1}
+	o2 := widget.OverlayState{OpenMenu: -1}
 	o2.PushDialog(common.DialogRequest{
 		Title:   "Confirm",
 		Body:    "Proceed?",
@@ -551,19 +552,19 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	dlg, dlgCol, dlgRow := dlgBox.Content, dlgBox.Col, dlgBox.Row
 	assertHasANSI(t, dlg, "#000033", "layer 2 dialog (Tertiary)")
 
-	layer2 := PlaceOverlay(dlgCol, dlgRow, dlg, layer1)
+	layer2 := widget.PlaceOverlay(dlgCol, dlgRow, dlg, layer1)
 	assertHasANSI(t, layer2, "#110000", "layer 2: Primary")
 	assertHasANSI(t, layer2, "#002200", "layer 2: Secondary")
 	assertHasANSI(t, layer2, "#000033", "layer 2: Tertiary")
 
 	// Layer 3: Nested dialog at depth 3 → Secondary again.
-	o3 := overlayState{OpenMenu: -1}
+	o3 := widget.OverlayState{OpenMenu: -1}
 	o3.PushDialog(common.DialogRequest{Title: "Nested", Body: "Inner"})
 	dlg3Box := o3.RenderDialog(40, 12, th.LayerAt(3))
 	dlg3, dlg3Col, dlg3Row := dlg3Box.Content, dlg3Box.Col, dlg3Box.Row
 	assertHasANSI(t, dlg3, "#002200", "layer 3 nested dialog (Secondary again)")
 
-	layer3 := PlaceOverlay(dlg3Col, dlg3Row, dlg3, layer2)
+	layer3 := widget.PlaceOverlay(dlg3Col, dlg3Row, dlg3, layer2)
 	s3 := newScreen(layer3)
 	foundNested := false
 	for _, l := range s3.lines {
@@ -577,7 +578,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	}
 
 	// Layer 4: Depth 4 → Tertiary again.
-	o4 := overlayState{OpenMenu: -1}
+	o4 := widget.OverlayState{OpenMenu: -1}
 	o4.PushDialog(common.DialogRequest{Title: "Deep", Body: "Very deep"})
 	dlg4 := o4.RenderDialog(40, 12, th.LayerAt(4)).Content
 	assertHasANSI(t, dlg4, "#000033", "layer 4 (Tertiary again)")
@@ -585,7 +586,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 
 func TestPaletteDepthWarningBypassesCycle(t *testing.T) {
 	th := distinctPaletteTheme()
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	o.PushDialog(common.DialogRequest{Title: "Error", Body: "Something broke"})
 
 	dlg := o.RenderDialog(40, 20, th.WarningLayer()).Content
@@ -599,7 +600,7 @@ func TestPaletteDepthWarningBypassesCycle(t *testing.T) {
 
 func TestNCBarPaletteMatchesDepth(t *testing.T) {
 	th := distinctPaletteTheme()
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 	}
@@ -655,13 +656,13 @@ func layeredBorderTheme() *theme.Theme {
 
 func TestPerLayerBordersOnNCWindow(t *testing.T) {
 	th := layeredBorderTheme()
-	label := &NCLabel{Text: "X"}
+	label := &widget.Label{Text: "X"}
 
-	makeWin := func() *NCWindow {
-		return &NCWindow{
+	makeWin := func() *widget.Window {
+		return &widget.Window{
 			Title: "T",
-			Children: []GridChild{
-				{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+			Children: []widget.GridChild{
+				{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal}},
 			},
 		}
 	}
@@ -706,7 +707,7 @@ func TestPerLayerBordersOnDropdown(t *testing.T) {
 	}
 
 	// Depth 1 → Secondary → single-line.
-	o1 := overlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o1 := widget.OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
 	dd1 := o1.RenderDropdown(menus, 0, th.LayerAt(1)).Content
 	s1 := newScreen(dd1)
 	if !strings.HasPrefix(s1.lines[0], "┌") || !strings.HasSuffix(s1.lines[0], "┐") {
@@ -717,7 +718,7 @@ func TestPerLayerBordersOnDropdown(t *testing.T) {
 	}
 
 	// Depth 2 → Tertiary → ASCII.
-	o2 := overlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o2 := widget.OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
 	dd2 := o2.RenderDropdown(menus, 0, th.LayerAt(2)).Content
 	s2 := newScreen(dd2)
 	if !strings.HasPrefix(s2.lines[0], "+") || !strings.HasSuffix(s2.lines[0], "+") {
@@ -732,7 +733,7 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 	th := layeredBorderTheme()
 
 	// Depth 2 → Tertiary → ASCII.
-	o2 := overlayState{OpenMenu: -1}
+	o2 := widget.OverlayState{OpenMenu: -1}
 	o2.PushDialog(common.DialogRequest{Title: "Test", Body: "Hello"})
 	dlg2 := o2.RenderDialog(40, 20, th.LayerAt(2)).Content
 	s2 := newScreen(dlg2)
@@ -745,7 +746,7 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 	}
 
 	// Depth 1 → Secondary → single-line.
-	o1 := overlayState{OpenMenu: -1}
+	o1 := widget.OverlayState{OpenMenu: -1}
 	o1.PushDialog(common.DialogRequest{Title: "Test", Body: "Hello"})
 	dlg1 := o1.RenderDialog(40, 20, th.LayerAt(1)).Content
 	s1 := newScreen(dlg1)
@@ -756,7 +757,7 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 
 func TestPerLayerBordersOnMenuBar(t *testing.T) {
 	th := layeredBorderTheme()
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
@@ -788,11 +789,11 @@ func TestPerLayerBordersCompositedStack(t *testing.T) {
 	th := layeredBorderTheme()
 
 	// Render a window at depth 0 (double-line).
-	label := &NCLabel{Text: "main"}
-	win := &NCWindow{
+	label := &widget.Label{Text: "main"}
+	win := &widget.Window{
 		Title: "Main",
-		Children: []GridChild{
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+		Children: []widget.GridChild{
+			{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal}},
 		},
 	}
 	layer0 := win.Render(0, 0, 30, 10, th.LayerAt(0))
@@ -802,12 +803,12 @@ func TestPerLayerBordersCompositedStack(t *testing.T) {
 	}
 
 	// Composite a dropdown at depth 1 (single-line).
-	o := overlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := widget.OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 	}
 	ddBox := o.RenderDropdown(menus, 0, th.LayerAt(1))
-	composited := PlaceOverlay(ddBox.Col, ddBox.Row, ddBox.Content, layer0)
+	composited := widget.PlaceOverlay(ddBox.Col, ddBox.Row, ddBox.Content, layer0)
 	sc := newScreen(composited)
 
 	// Row 0 should still have the double-line window border.

@@ -17,6 +17,7 @@ import (
 
 	"null-space/common"
 	"null-space/internal/theme"
+	"null-space/internal/widget"
 )
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
@@ -49,7 +50,7 @@ func stripANSI(s string) string {
 }
 
 // renderControl is a test helper that renders a control into a ImageBuffer and returns the string.
-func renderControl(ctrl NCControl, w, h int, focused bool, layer *theme.Layer) string {
+func renderControl(ctrl widget.Control, w, h int, focused bool, layer *theme.Layer) string {
 	buf := common.NewImageBuffer(w, h)
 	ctrl.Render(buf, 0, 0, w, h, focused, layer)
 	return buf.ToString()
@@ -114,11 +115,11 @@ func TestBorderDefaults(t *testing.T) {
 	}
 }
 
-// ─── NCTextInput tests ───────────────────────────────────────────────────────
+// ─── widget.TextInput tests ───────────────────────────────────────────────────────
 
 func TestNCTextInputRender(t *testing.T) {
 	model := newTestTextInput()
-	ti := &NCTextInput{Model: model}
+	ti := &widget.TextInput{Model: model}
 	layer := testLayer()
 
 	output := renderControl(ti, 20, 1, false, layer)
@@ -138,7 +139,7 @@ func TestNCTextInputRender(t *testing.T) {
 
 func TestNCTextInputRenderWidth(t *testing.T) {
 	model := newTestTextInput()
-	ti := &NCTextInput{Model: model}
+	ti := &widget.TextInput{Model: model}
 	layer := testLayer()
 
 	for _, w := range []int{10, 20, 40, 80} {
@@ -152,7 +153,7 @@ func TestNCTextInputRenderWidth(t *testing.T) {
 
 func TestNCTextInputWantTab(t *testing.T) {
 	model := newTestTextInput()
-	ti := &NCTextInput{Model: model}
+	ti := &widget.TextInput{Model: model}
 
 	ti.Update(tea.KeyPressMsg{Code: -1, Text: "tab"})
 	if !ti.WantTab {
@@ -163,7 +164,7 @@ func TestNCTextInputWantTab(t *testing.T) {
 func TestNCTextInputOnSubmit(t *testing.T) {
 	model := newTestTextInput()
 	var submitted string
-	ti := &NCTextInput{Model: model, OnSubmit: func(text string) { submitted = text }}
+	ti := &widget.TextInput{Model: model, OnSubmit: func(text string) { submitted = text }}
 
 	model.SetValue("hello")
 	ti.Update(tea.KeyPressMsg{Code: -1, Text: "enter"})
@@ -176,11 +177,11 @@ func TestNCTextInputOnSubmit(t *testing.T) {
 	}
 }
 
-// ─── NCCommandInput tests ─────────────────────────────────────────────────────
+// ─── widget.CommandInput tests ─────────────────────────────────────────────────────
 
 func TestNCCommandInputHistory(t *testing.T) {
 	model := newTestTextInput()
-	ci := &NCCommandInput{TextInput: NCTextInput{Model: model}}
+	ci := &widget.CommandInput{TextInput: widget.TextInput{Model: model}}
 	ci.OnSubmit = func(text string) {}
 
 	// Submit a few commands.
@@ -222,7 +223,7 @@ func TestNCCommandInputHistory(t *testing.T) {
 
 func TestNCCommandInputTabOnEmpty(t *testing.T) {
 	model := newTestTextInput()
-	ci := &NCCommandInput{TextInput: NCTextInput{Model: model}}
+	ci := &widget.CommandInput{TextInput: widget.TextInput{Model: model}}
 	ci.OnTab = func(s string) (string, bool) { return "/help", true }
 
 	// Tab on empty input should signal WantTab (cycle focus), not complete.
@@ -234,7 +235,7 @@ func TestNCCommandInputTabOnEmpty(t *testing.T) {
 
 func TestNCCommandInputTabOnNonEmpty(t *testing.T) {
 	model := newTestTextInput()
-	ci := &NCCommandInput{TextInput: NCTextInput{Model: model}}
+	ci := &widget.CommandInput{TextInput: widget.TextInput{Model: model}}
 	ci.OnTab = func(s string) (string, bool) { return "/help", true }
 
 	model.SetValue("/h")
@@ -249,7 +250,7 @@ func TestNCCommandInputTabOnNonEmpty(t *testing.T) {
 
 func TestNCCommandInputEscClears(t *testing.T) {
 	model := newTestTextInput()
-	ci := &NCCommandInput{TextInput: NCTextInput{Model: model}}
+	ci := &widget.CommandInput{TextInput: widget.TextInput{Model: model}}
 
 	model.SetValue("something")
 	ci.Update(tea.KeyPressMsg{Code: -1, Text: "esc"})
@@ -258,10 +259,10 @@ func TestNCCommandInputEscClears(t *testing.T) {
 	}
 }
 
-// ─── NCTextView tests ─────────────────────────────────────────────────────────
+// ─── widget.TextView tests ─────────────────────────────────────────────────────────
 
 func TestNCTextViewRender(t *testing.T) {
-	tv := &NCTextView{
+	tv := &widget.TextView{
 		Lines:       []string{"line1", "line2", "line3"},
 		BottomAlign: true,
 	}
@@ -282,7 +283,7 @@ func TestNCTextViewRender(t *testing.T) {
 }
 
 func TestNCTextViewScrollClamp(t *testing.T) {
-	tv := &NCTextView{
+	tv := &widget.TextView{
 		Lines:      []string{"a", "b", "c"},
 		Scrollable: true,
 	}
@@ -301,10 +302,10 @@ func TestNCTextViewScrollClamp(t *testing.T) {
 	}
 }
 
-// ─── NCButton tests ──────────────────────────────────────────────────────────
+// ─── widget.Button tests ──────────────────────────────────────────────────────────
 
 func TestNCButtonRender(t *testing.T) {
-	btn := &NCButton{Label: "OK"}
+	btn := &widget.Button{Label: "OK"}
 	output := renderControl(btn, 10, 1, false, testLayer())
 	stripped := stripANSI(output)
 	if !strings.Contains(stripped, "[ OK ]") {
@@ -314,17 +315,17 @@ func TestNCButtonRender(t *testing.T) {
 
 func TestNCButtonPress(t *testing.T) {
 	pressed := false
-	btn := &NCButton{Label: "OK", OnPress: func() { pressed = true }}
+	btn := &widget.Button{Label: "OK", OnPress: func() { pressed = true }}
 	btn.Update(tea.KeyPressMsg{Code: -1, Text: "enter"})
 	if !pressed {
 		t.Error("expected button press on enter")
 	}
 }
 
-// ─── NCCheckbox tests ─────────────────────────────────────────────────────────
+// ─── widget.Checkbox tests ─────────────────────────────────────────────────────────
 
 func TestNCCheckboxToggle(t *testing.T) {
-	cb := &NCCheckbox{Label: "Option", Checked: false}
+	cb := &widget.Checkbox{Label: "Option", Checked: false}
 	cb.OnToggle = func(v bool) {}
 
 	// Use enter instead of space — both should work per the Update code.
@@ -340,7 +341,7 @@ func TestNCCheckboxToggle(t *testing.T) {
 }
 
 func TestNCCheckboxRender(t *testing.T) {
-	cb := &NCCheckbox{Label: "Opt", Checked: true}
+	cb := &widget.Checkbox{Label: "Opt", Checked: true}
 	output := renderControl(cb, 20, 1, false, testLayer())
 	stripped := stripANSI(output)
 	if !strings.Contains(stripped, "[x] Opt") {
@@ -355,14 +356,14 @@ func TestNCCheckboxRender(t *testing.T) {
 	}
 }
 
-// ─── NCWindow tests ──────────────────────────────────────────────────────────
+// ─── widget.Window tests ──────────────────────────────────────────────────────────
 
 func TestNCWindowRenderBasic(t *testing.T) {
-	label := &NCLabel{Text: "Hello"}
-	win := &NCWindow{
+	label := &widget.Label{Text: "Hello"}
+	win := &widget.Window{
 		Title: "Test",
-		Children: []GridChild{
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+		Children: []widget.GridChild{
+			{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal}},
 		},
 	}
 
@@ -386,9 +387,9 @@ func TestNCWindowRenderBasic(t *testing.T) {
 }
 
 func TestNCWindowNoTitle(t *testing.T) {
-	win := &NCWindow{
-		Children: []GridChild{
-			{Control: &NCLabel{Text: "X"}, Constraint: GridConstraint{Col: 0, Row: 0}},
+	win := &widget.Window{
+		Children: []widget.GridChild{
+			{Control: &widget.Label{Text: "X"}, Constraint: widget.GridConstraint{Col: 0, Row: 0}},
 		},
 	}
 	output := win.Render(0, 0, 20, 4, testLayer())
@@ -404,15 +405,15 @@ func TestNCWindowNoTitle(t *testing.T) {
 }
 
 func TestNCWindowFocusCycle(t *testing.T) {
-	btn1 := &NCButton{Label: "A"}
-	btn2 := &NCButton{Label: "B"}
-	label := &NCLabel{Text: "sep"} // not focusable
+	btn1 := &widget.Button{Label: "A"}
+	btn2 := &widget.Button{Label: "B"}
+	label := &widget.Label{Text: "sep"} // not focusable
 
-	win := &NCWindow{
-		Children: []GridChild{
-			{Control: btn1, Constraint: GridConstraint{Col: 0, Row: 0}},
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 1}},
-			{Control: btn2, Constraint: GridConstraint{Col: 0, Row: 2}},
+	win := &widget.Window{
+		Children: []widget.GridChild{
+			{Control: btn1, Constraint: widget.GridConstraint{Col: 0, Row: 0}},
+			{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 1}},
+			{Control: btn2, Constraint: widget.GridConstraint{Col: 0, Row: 2}},
 		},
 	}
 	win.FocusFirst()
@@ -435,11 +436,11 @@ func TestNCWindowFocusCycle(t *testing.T) {
 func TestNCWindowCursorPosition(t *testing.T) {
 	model := newTestTextInput()
 	model.Focus() // Must be focused for cursor to be visible.
-	ti := &NCTextInput{Model: model}
+	ti := &widget.TextInput{Model: model}
 
-	win := &NCWindow{
-		Children: []GridChild{
-			{Control: ti, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
+	win := &widget.Window{
+		Children: []widget.GridChild{
+			{Control: ti, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal}},
 		},
 	}
 	win.FocusFirst()
@@ -462,13 +463,13 @@ func TestNCWindowCursorPosition(t *testing.T) {
 }
 
 func TestNCWindowGridLayout(t *testing.T) {
-	label := &NCLabel{Text: "A"}
-	tv := &NCTextView{Lines: []string{"line"}}
+	label := &widget.Label{Text: "A"}
+	tv := &widget.TextView{Lines: []string{"line"}}
 
-	win := &NCWindow{
-		Children: []GridChild{
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0}},
-			{Control: tv, Constraint: GridConstraint{Col: 0, Row: 1, WeightY: 1, Fill: FillBoth}},
+	win := &widget.Window{
+		Children: []widget.GridChild{
+			{Control: label, Constraint: widget.GridConstraint{Col: 0, Row: 0}},
+			{Control: tv, Constraint: widget.GridConstraint{Col: 0, Row: 1, WeightY: 1, Fill: widget.FillBoth}},
 		},
 	}
 	win.Render(0, 0, 20, 10, testLayer())
@@ -485,10 +486,10 @@ func TestNCWindowGridLayout(t *testing.T) {
 	}
 }
 
-// ─── NCHDivider / NCVDivider tests ───────────────────────────────────────────
+// ─── widget.HDivider / widget.VDivider tests ───────────────────────────────────────────
 
 func TestNCHDividerRender(t *testing.T) {
-	d := &NCHDivider{Connected: true}
+	d := &widget.HDivider{Connected: true}
 	output := renderControl(d, 10, 1, false, testLayer())
 	stripped := stripANSI(output)
 	// The divider renders inner horizontal chars repeated to fill width.
@@ -499,7 +500,7 @@ func TestNCHDividerRender(t *testing.T) {
 }
 
 func TestNCVDividerRender(t *testing.T) {
-	d := &NCVDivider{}
+	d := &widget.VDivider{}
 	output := renderControl(d, 1, 3, false, testLayer())
 	lines := strings.Split(output, "\n")
 	if len(lines) != 3 {
@@ -510,29 +511,29 @@ func TestNCVDividerRender(t *testing.T) {
 // ─── Overlay / Menu tests ─────────────────────────────────────────────────────
 
 func TestMenuShortcut(t *testing.T) {
-	_, r := stripAmpersand("&File")
+	_, r := widget.StripAmpersand("&File")
 	if r != 'f' {
 		t.Errorf("expected 'f', got %c", r)
 	}
-	_, r = stripAmpersand("E&xit")
+	_, r = widget.StripAmpersand("E&xit")
 	if r != 'x' {
 		t.Errorf("expected 'x', got %c", r)
 	}
-	_, r = stripAmpersand("NoShortcut")
+	_, r = widget.StripAmpersand("NoShortcut")
 	if r != 0 {
 		t.Errorf("expected 0, got %c", r)
 	}
 }
 
 func TestHotkeyDisplay(t *testing.T) {
-	d := hotkeyDisplay("ctrl+c")
+	d := widget.HotkeyDisplay("ctrl+c")
 	if d != "(Ctrl+C)" {
 		t.Errorf("expected '(Ctrl+C)', got %q", d)
 	}
 }
 
 func TestOverlayMenuNavigation(t *testing.T) {
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}, {Label: "&Open"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
@@ -575,7 +576,7 @@ func TestOverlayMenuNavigation(t *testing.T) {
 }
 
 func TestOverlayHotkey(t *testing.T) {
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	triggered := false
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{
@@ -592,7 +593,7 @@ func TestOverlayHotkey(t *testing.T) {
 }
 
 func TestOverlayAltActivation(t *testing.T) {
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "Item"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "Item"}}},
@@ -605,7 +606,7 @@ func TestOverlayAltActivation(t *testing.T) {
 }
 
 func TestOverlayDialogStack(t *testing.T) {
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 
 	if o.HasDialog() {
 		t.Error("should have no dialog initially")
@@ -646,7 +647,7 @@ func TestApplyShadowShape(t *testing.T) {
 
 	// Box at (1,1) size 3x2 → shadow right strip at col=4, rows 2..2
 	// and bottom strip at row=3, cols 2..4.
-	result := ApplyShadow(1, 1, 3, 2, bg, testTheme().ShadowStyle())
+	result := widget.ApplyShadow(1, 1, 3, 2, bg, testTheme().ShadowStyle())
 	lines := strings.Split(result, "\n")
 
 	// Row 0 should be unchanged.
@@ -667,13 +668,13 @@ func TestApplyShadowShape(t *testing.T) {
 	}
 }
 
-// ─── PlaceOverlay tests ──────────────────────────────────────────────────────
+// ─── widget.PlaceOverlay tests ──────────────────────────────────────────────────────
 
 func TestPlaceOverlay(t *testing.T) {
 	bg := "AAAAAAA\nBBBBBBB\nCCCCCCC"
 	overlay := "XX\nYY"
 
-	result := PlaceOverlay(2, 1, overlay, bg)
+	result := widget.PlaceOverlay(2, 1, overlay, bg)
 	lines := strings.Split(result, "\n")
 
 	if lines[0] != "AAAAAAA" {
@@ -688,7 +689,7 @@ func TestPlaceOverlay(t *testing.T) {
 
 func TestRenderScrollbar(t *testing.T) {
 	pal := testLayer()
-	sb := renderScrollbar(100, 10, 0, pal.BaseStyle())
+	sb := widget.RenderScrollbar(100, 10, 0, pal.BaseStyle())
 
 	if len(sb) != 10 {
 		t.Errorf("expected 10 rows, got %d", len(sb))
@@ -708,7 +709,7 @@ func TestRenderScrollbar(t *testing.T) {
 
 func TestRenderScrollbarNoScroll(t *testing.T) {
 	pal := testLayer()
-	sb := renderScrollbar(5, 10, 0, pal.BaseStyle())
+	sb := widget.RenderScrollbar(5, 10, 0, pal.BaseStyle())
 
 	// Content fits — no scrollbar needed.
 	for _, s := range sb {
@@ -719,21 +720,21 @@ func TestRenderScrollbarNoScroll(t *testing.T) {
 	}
 }
 
-// ─── Integration: NCWindow with multiple controls ─────────────────────────────
+// ─── Integration: widget.Window with multiple controls ─────────────────────────────
 
 func TestNCWindowIntegration(t *testing.T) {
 	model := newTestTextInput()
-	tv := &NCTextView{Lines: []string{"log1", "log2"}, BottomAlign: true}
-	ci := &NCCommandInput{TextInput: NCTextInput{Model: model}}
+	tv := &widget.TextView{Lines: []string{"log1", "log2"}, BottomAlign: true}
+	ci := &widget.CommandInput{TextInput: widget.TextInput{Model: model}}
 	submitted := ""
 	ci.OnSubmit = func(text string) { submitted = text }
 
-	win := &NCWindow{
+	win := &widget.Window{
 		Title: "Console",
-		Children: []GridChild{
-			{Control: tv, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, WeightY: 1, Fill: FillBoth}},
-			{Control: &NCHDivider{Connected: true}, Constraint: GridConstraint{Col: 0, Row: 1}},
-			{Control: ci, Constraint: GridConstraint{Col: 0, Row: 2, WeightX: 1, Fill: FillHorizontal}},
+		Children: []widget.GridChild{
+			{Control: tv, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, WeightY: 1, Fill: widget.FillBoth}},
+			{Control: &widget.HDivider{Connected: true}, Constraint: widget.GridConstraint{Col: 0, Row: 1}},
+			{Control: ci, Constraint: widget.GridConstraint{Col: 0, Row: 2, WeightX: 1, Fill: widget.FillHorizontal}},
 		},
 	}
 	win.FocusFirst()
@@ -760,7 +761,7 @@ func TestNCWindowIntegration(t *testing.T) {
 // ─── Regression: slog feedback loop ───────────────────────────────────────────
 
 // TestSlogRenderLogsNotRoutedToConsole verifies that render-path debug messages
-// (e.g. "NCWindow render child") are not routed to the console channel, which
+// (e.g. "widget.Window render child") are not routed to the console channel, which
 // would cause a feedback loop: render → debug log → console → re-render → ...
 func TestSlogDebugRoutedToConsole(t *testing.T) {
 	ch := make(chan slogLine, 10)
@@ -795,14 +796,26 @@ func TestSlogDebugRoutedToConsole(t *testing.T) {
 func TestNoSlogInRenderPath(t *testing.T) {
 	// Files that are called from View/Render and must never use slog.
 	renderFiles := []string{
-		"ncwidget.go",
-		"nccontrols.go",
+		"window.go",
+		"control.go",
+		"label.go",
+		"textview.go",
+		"textinput.go",
+		"button.go",
+		"checkbox.go",
+		"divider.go",
+		"panel.go",
+		"table.go",
+		"teampanel.go",
+		"container.go",
+		"gameview.go",
 		"overlay.go",
+		"menu.go",
 	}
 	slogCall := regexp.MustCompile(`\bslog\.(Debug|Info|Warn|Error)\b`)
 
 	for _, name := range renderFiles {
-		path := filepath.Join(".", name)
+		path := filepath.Join("..", "internal", "widget", name)
 		f, err := os.Open(path)
 		if err != nil {
 			// File might not exist in some build configurations; skip.
@@ -874,7 +887,7 @@ func (h *discardHandler) WithGroup(_ string) slog.Handler               { return
 // TestAboutDialogClickDetection verifies that renderDialog and handleDialogClick
 // agree on the dialog position and button row, so clicking OK actually works.
 func TestAboutDialogClickDetection(t *testing.T) {
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	body := aboutLogo()
 	o.PushDialog(common.DialogRequest{
 		Title:   "About",
@@ -932,7 +945,7 @@ func TestAboutDialogClickDetection(t *testing.T) {
 
 // TestDialogClickMultiButton verifies click detection for multi-button dialogs.
 func TestDialogClickMultiButton(t *testing.T) {
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	var clicked string
 	o.PushDialog(common.DialogRequest{
 		Title:   "Confirm",
@@ -980,7 +993,7 @@ func TestDialogClickMultiButton(t *testing.T) {
 
 // TestAboutDialogKeyDismiss verifies that pressing Enter closes the About dialog.
 func TestAboutDialogKeyDismiss(t *testing.T) {
-	o := overlayState{OpenMenu: -1}
+	o := widget.OverlayState{OpenMenu: -1}
 	body := aboutLogo()
 	o.PushDialog(common.DialogRequest{
 		Title:   "About",

@@ -13,6 +13,7 @@ import (
 
 	"null-space/common"
 	"null-space/internal/theme"
+	"null-space/internal/widget"
 )
 
 // logCategory tags console log lines for filtering.
@@ -39,9 +40,9 @@ type consoleModel struct {
 	width  int
 	height int
 
-	inputCtrl *NCCommandInput
-	logView   *NCTextView
-	window    *NCWindow
+	inputCtrl *widget.CommandInput
+	logView   *widget.TextView
+	window    *widget.Window
 
 	// All log lines (tagged), and filter state.
 	allLines []taggedLine
@@ -56,7 +57,7 @@ type consoleModel struct {
 	theme *theme.Theme
 
 	// NC overlay (menus, dialogs)
-	overlay overlayState
+	overlay widget.OverlayState
 
 	// Init commands from ~/.null-space/server.txt (dispatched on first tick)
 	initCommands []string
@@ -77,14 +78,14 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	input.Placeholder = ""
 	input.CharLimit = 256
 	input.SetWidth(78)
-	logView := &NCTextView{BottomAlign: true, Scrollable: true}
-	inputCtrl := &NCCommandInput{TextInput: NCTextInput{Model: input}}
+	logView := &widget.TextView{BottomAlign: true, Scrollable: true}
+	inputCtrl := &widget.CommandInput{TextInput: widget.TextInput{Model: input}}
 
-	window := &NCWindow{
-		Children: []GridChild{
-			{Control: logView, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, WeightY: 1, Fill: FillBoth}, TabIndex: 1},
-			{Control: &NCHDivider{Connected: true}, Constraint: GridConstraint{Col: 0, Row: 1}},
-			{Control: inputCtrl, Constraint: GridConstraint{Col: 0, Row: 2, WeightX: 1, Fill: FillHorizontal}, TabIndex: 0},
+	window := &widget.Window{
+		Children: []widget.GridChild{
+			{Control: logView, Constraint: widget.GridConstraint{Col: 0, Row: 0, WeightX: 1, WeightY: 1, Fill: widget.FillBoth}, TabIndex: 1},
+			{Control: &widget.HDivider{Connected: true}, Constraint: widget.GridConstraint{Col: 0, Row: 1}},
+			{Control: inputCtrl, Constraint: widget.GridConstraint{Col: 0, Row: 2, WeightX: 1, Fill: widget.FillHorizontal}, TabIndex: 0},
 		},
 	}
 	window.FocusFirst()
@@ -104,7 +105,7 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 			// catDebug defaults to false
 		},
 		theme:     theme.Default(),
-		overlay:   overlayState{OpenMenu: -1},
+		overlay:   widget.OverlayState{OpenMenu: -1},
 	}
 
 	// Wire callbacks — the NCTextInput handles Enter/Esc/Up/Down/Tab internally.
@@ -195,7 +196,7 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case common.GamePhaseMsg, common.GameLoadedMsg, common.GameUnloadedMsg, common.TeamUpdatedMsg, common.PlayerJoinedMsg, common.PlayerLeftMsg:
 		return m, nil
 
-	case showDialogMsg:
+	case widget.ShowDialogMsg:
 		m.overlay.PushDialog(msg.Dialog)
 		return m, nil
 

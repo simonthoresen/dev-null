@@ -15,6 +15,7 @@ import (
 
 	"null-space/common"
 	"null-space/internal/theme"
+	"null-space/internal/widget"
 )
 
 // lobbyTeamPanelW is the fixed width of the team panel in the lobby.
@@ -103,13 +104,13 @@ type chromeModel struct {
 	shaders     []common.Shader
 	shaderNames []string // parallel to shaders; display names
 
-	overlay overlayState
+	overlay widget.OverlayState
 
 	// Lobby NC window and child controls.
-	lobbyWindow    *NCWindow
-	lobbyChatView  *NCTextView
-	lobbyTeamPanel *NCTeamPanel
-	lobbyCmdLabel  *NCLabel
+	lobbyWindow    *widget.Window
+	lobbyChatView  *widget.TextView
+	lobbyTeamPanel *widget.TeamPanel
+	lobbyCmdLabel  *widget.Label
 
 	// Cached menu tree — rebuilt only on invalidation.
 	menuCache     []common.MenuDef
@@ -117,7 +118,7 @@ type chromeModel struct {
 
 	// Game NC window — built from WidgetNode tree via reconciler.
 	// Preserves interactive control state (focus, cursor, scroll) across frames.
-	gameWindow *GameNCWindow
+	gameWindow *widget.GameWindow
 }
 
 func newChromeModel(app *Server, playerID string) chromeModel {
@@ -138,30 +139,30 @@ func newChromeModel(app *Server, playerID string) chromeModel {
 	teamInput.SetVirtualCursor(false)
 
 	// Lobby NC controls.
-	lobbyChatView := &NCTextView{
+	lobbyChatView := &widget.TextView{
 		BottomAlign: true,
 		Scrollable:  true,
 	}
-	lobbyTeamPanel := &NCTeamPanel{}
-	lobbyCmdLabel := &NCLabel{}
-	lobbyWindow := &NCWindow{
+	lobbyTeamPanel := &widget.TeamPanel{}
+	lobbyCmdLabel := &widget.Label{}
+	lobbyWindow := &widget.Window{
 		NoTopBorder: true,
 		FocusIdx:    0, // chat focused by default
-		Children: []GridChild{
-			{Control: lobbyChatView, TabIndex: 0, Constraint: GridConstraint{
-				Col: 0, Row: 0, WeightX: 1, WeightY: 1, Fill: FillBoth,
+		Children: []widget.GridChild{
+			{Control: lobbyChatView, TabIndex: 0, Constraint: widget.GridConstraint{
+				Col: 0, Row: 0, WeightX: 1, WeightY: 1, Fill: widget.FillBoth,
 			}},
-			{Control: &NCVDivider{Connected: true}, Constraint: GridConstraint{
-				Col: 1, Row: 0, MinW: 1, WeightY: 1, Fill: FillVertical,
+			{Control: &widget.VDivider{Connected: true}, Constraint: widget.GridConstraint{
+				Col: 1, Row: 0, MinW: 1, WeightY: 1, Fill: widget.FillVertical,
 			}},
-			{Control: lobbyTeamPanel, TabIndex: 1, Constraint: GridConstraint{
-				Col: 2, Row: 0, MinW: lobbyTeamPanelW, WeightY: 1, Fill: FillVertical,
+			{Control: lobbyTeamPanel, TabIndex: 1, Constraint: widget.GridConstraint{
+				Col: 2, Row: 0, MinW: lobbyTeamPanelW, WeightY: 1, Fill: widget.FillVertical,
 			}},
-			{Control: &NCHDivider{Connected: true}, Constraint: GridConstraint{
-				Col: 0, Row: 1, ColSpan: 3, MinH: 1, Fill: FillHorizontal,
+			{Control: &widget.HDivider{Connected: true}, Constraint: widget.GridConstraint{
+				Col: 0, Row: 1, ColSpan: 3, MinH: 1, Fill: widget.FillHorizontal,
 			}},
-			{Control: lobbyCmdLabel, Constraint: GridConstraint{
-				Col: 0, Row: 2, ColSpan: 3, MinH: 1, Fill: FillHorizontal,
+			{Control: lobbyCmdLabel, Constraint: widget.GridConstraint{
+				Col: 0, Row: 2, ColSpan: 3, MinH: 1, Fill: widget.FillHorizontal,
 			}},
 		},
 	}
@@ -174,7 +175,7 @@ func newChromeModel(app *Server, playerID string) chromeModel {
 		teamEditInput:  teamInput,
 		historyIdx:     -1,
 		theme:          theme.Default(),
-		overlay:        overlayState{OpenMenu: -1},
+		overlay:        widget.OverlayState{OpenMenu: -1},
 		lobbyWindow:    lobbyWindow,
 		lobbyChatView:  lobbyChatView,
 		lobbyTeamPanel: lobbyTeamPanel,
@@ -313,7 +314,7 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeViewports()
 		return m, nil
 
-	case showDialogMsg:
+	case widget.ShowDialogMsg:
 		m.overlay.PushDialog(msg.Dialog)
 		return m, nil
 
@@ -1086,7 +1087,7 @@ func (m chromeModel) renderPlaying(buf *common.ImageBuffer, menus []common.MenuD
 
 	// Rows 3..3+gameH: game viewport — render directly into the buffer.
 	if ncTree := game.RenderNC(m.playerID, m.width, gameH); ncTree != nil {
-		m.gameWindow = ReconcileGameWindow(m.gameWindow, ncTree,
+		m.gameWindow = widget.ReconcileGameWindow(m.gameWindow, ncTree,
 			func(gbuf *common.ImageBuffer, bx, by, bw, bh int) { game.Render(gbuf, m.playerID, bx, by, bw, bh) },
 			func(action string) { game.OnInput(m.playerID, action) })
 		m.gameWindow.Window.RenderToBuf(buf, 0, row, m.width, gameH, m.theme.LayerAt(0))
