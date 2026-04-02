@@ -18,7 +18,7 @@ import (
 
 	"null-space/internal/console"
 	"null-space/internal/runlog"
-	"null-space/server"
+	"null-space/internal/server"
 )
 
 func main() {
