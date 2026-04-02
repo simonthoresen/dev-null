@@ -570,10 +570,10 @@ var Game = {
     },
 
     render: function(buf, playerID, ox, oy, width, height) {
-        // holdem uses renderNC exclusively
+        // holdem uses layout exclusively
     },
 
-    renderNC: function(playerID, width, height) {
+    layout: function(playerID, width, height) {
         var seatID = playerSeat(playerID);
         if (!seatID) {
             if (state.seatOrder.length > 0) seatID = state.seatOrder[0];

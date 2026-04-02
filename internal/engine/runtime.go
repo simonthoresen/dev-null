@@ -84,7 +84,7 @@ type JSRuntime struct {
 	renderCanvasFn   goja.Callable
 	renderSplashFn   goja.Callable
 	renderGameOverFn goja.Callable
-	renderNCFn       goja.Callable
+	layoutFn         goja.Callable
 	statusBarFn     goja.Callable
 	commandBarFn    goja.Callable
 
@@ -197,7 +197,10 @@ func (r *JSRuntime) extractGameObject() error {
 	r.renderCanvasFn = extractCallable(gameObj, "renderCanvas")
 	r.renderSplashFn = extractCallable(gameObj, "renderSplash")
 	r.renderGameOverFn = extractCallable(gameObj, "renderGameOver")
-	r.renderNCFn = extractCallable(gameObj, "renderNC")
+	r.layoutFn = extractCallable(gameObj, "layout")
+	if r.layoutFn == nil {
+		r.layoutFn = extractCallable(gameObj, "renderNC") // backwards compat
+	}
 	r.statusBarFn = extractCallable(gameObj, "statusBar")
 	r.commandBarFn = extractCallable(gameObj, "commandBar")
 
@@ -322,19 +325,19 @@ func (r *JSRuntime) Render(buf *render.ImageBuffer, playerID string, x, y, width
 	}
 }
 
-func (r *JSRuntime) RenderNC(playerID string, width, height int) *domain.WidgetNode {
-	if r.renderNCFn == nil {
+func (r *JSRuntime) Layout(playerID string, width, height int) *domain.WidgetNode {
+	if r.layoutFn == nil {
 		return nil // framework will fall back to wrapping Render() in a gameview node
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	defer r.recoverJS("RenderNC")
-	defer TraceJS(r.vm, "RenderNC")()
-	cancel := WatchdogJS(r.vm, "RenderNC")
+	defer r.recoverJS("Layout")
+	defer TraceJS(r.vm, "Layout")()
+	cancel := WatchdogJS(r.vm, "Layout")
 	defer cancel()
-	val, err := r.renderNCFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
+	val, err := r.layoutFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
 	if err != nil {
-		slog.Error("JS RenderNC error", "error", err)
+		slog.Error("JS Layout error", "error", err)
 		return nil
 	}
 	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {

@@ -244,7 +244,7 @@ func (m Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, ga
 		}
 		m.playingGameView.OnKey = nil // game-over ignores game keys
 	default: // PhasePlaying
-		if ncTree := game.RenderNC(m.playerID, m.width, gameH); ncTree != nil {
+		if ncTree := game.Layout(m.playerID, m.width, gameH); ncTree != nil {
 			// NC-tree game: reconcile into a GameWindow and render/route through it.
 			m.gameWindow = widget.ReconcileGameWindow(m.gameWindow, ncTree,
 				func(gbuf *render.ImageBuffer, bx, by, bw, bh int) { game.Render(gbuf, m.playerID, bx, by, bw, bh) },

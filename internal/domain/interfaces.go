@@ -81,11 +81,11 @@ type Game interface {
 	// RenderGameOver renders a custom game-over screen into buf. Returns false
 	// to use the framework's default game-over screen with figlet title + results.
 	RenderGameOver(buf *render.ImageBuffer, playerID string, x, y, width, height int, results []GameResult) bool
-	// RenderNC returns a declarative widget tree for the game viewport.
+	// Layout returns a declarative widget tree describing the game window.
 	// If it returns nil, the framework falls back to wrapping Render() in a
 	// default gameview node. Games can mix NC panels with raw Render() output
 	// by including {type: "gameview"} nodes in their tree.
-	RenderNC(playerID string, width, height int) *WidgetNode
+	Layout(playerID string, width, height int) *WidgetNode
 	StatusBar(playerID string) string  // game-controlled status bar (second row, below menu bar)
 	CommandBar(playerID string) string // game-controlled command bar (above framework status bar)
 	Commands() []Command

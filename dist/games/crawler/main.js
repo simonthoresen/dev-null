@@ -220,7 +220,7 @@ var Game = {
         render3D(buf, p, state.maze, state.monsters, state.items, ox, oy, w, h);
     },
 
-    renderNC: function(playerID, width, height) {
+    layout: function(playerID, width, height) {
         var p = state.players[playerID];
         if (!p) return null;
 

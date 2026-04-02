@@ -95,12 +95,12 @@ var Game = {
         buf.writeString(0, 0, "Hello!", "#FFFFFF", null);
     },
 
-    // Returns a declarative NC widget tree for the game viewport.
+    // Returns a declarative widget tree describing the game window.
     // If defined, the framework renders real themed NC panels/labels instead of
     // using the raw render() string. Games can embed {type: "gameview"} nodes to
-    // include the raw render() output within an NC layout. If renderNC returns null
-    // or is not defined, the framework falls back to render(). See "NC Widget Tree" below.
-    renderNC: function(playerID, width, height) {
+    // include the raw render() output within the layout. If layout returns null
+    // or is not defined, the framework falls back to render(). See "Widget Tree Layout" below.
+    layout: function(playerID, width, height) {
         return {
             type: 'hsplit',
             children: [
@@ -397,7 +397,7 @@ LOBBY (game unloaded, back to teams + chat)
 - **Load**: Framework snapshots teams for the game (lobby stays independent), loads saved state, calls `init(savedState)`. `teams()` returns game teams.
 - **Splash screen**: If `renderSplash(buf, playerID, x, y, w, h)` is defined and returns true, that custom rendering is used. Otherwise, the framework renders the game name in figlet ASCII art centered in the viewport. The admin can press Enter to skip, or it auto-starts after 10s.
 - **Splash→Playing**: Framework calls `start()`. Game sets up its playing state.
-- **Playing**: Normal game mode — `update(dt)` is called once per tick, then `render()`/`renderNC()`, `onInput()`, `statusBar()`, `commandBar()` are called per player.
+- **Playing**: Normal game mode — `update(dt)` is called once per tick, then `render()`/`layout()`, `onInput()`, `statusBar()`, `commandBar()` are called per player.
 - **Game over**: Triggered when JS calls `gameOver(results, state)`. The framework renders a "GAME OVER" screen with the ranked results list. Players press Enter to acknowledge; after 15 seconds the game unloads automatically.
 - **Late joiners**: Players connecting during a game see the lobby and can chat. Lobby teams are independent — players can organize for the next round.
 - **Reconnect**: If a player disconnects mid-game and reconnects with the same name, they rejoin the game automatically. Game teams persist through disconnects.
@@ -559,9 +559,9 @@ GitHub blob URLs are automatically converted to raw download URLs. The file is c
 
 ---
 
-## NC Widget Tree (`renderNC`)
+## Widget Tree Layout (`layout`)
 
-If your game defines `renderNC(playerID, width, height)`, it should return a tree of widget nodes. The framework renders these as real themed NC-style panels with proper borders, respecting the player's current theme. This is optional — games that only define `render()` work unchanged.
+If your game defines `layout(playerID, width, height)`, it should return a tree of widget nodes. The framework renders these as real themed NC-style panels with proper borders, respecting the player's current theme. This is optional — games that only define `render()` work unchanged.
 
 ### Node types
 
@@ -585,7 +585,7 @@ Every node can have:
 ### Example: hybrid layout
 
 ```js
-renderNC: function(playerID, width, height) {
+layout: function(playerID, width, height) {
     return {
         type: 'hsplit',
         children: [
@@ -612,7 +612,7 @@ renderNC: function(playerID, width, height) {
 }
 ```
 
-This renders the raw game view in the top-left, a stats panel below it, and a players panel on the right — all using the framework's themed NC borders. Existing games that don't define `renderNC` are unaffected.
+This renders the raw game view in the top-left, a stats panel below it, and a players panel on the right — all using the framework's themed NC borders. Existing games that don't define `layout` are unaffected.
 
 ---
 
