@@ -16,7 +16,7 @@ Games are written in JavaScript (goja) and loaded at runtime from `dist/games/`.
 
 **Binaries are NOT checked into git.** They are built and published automatically by GitHub Actions on every push to `main`.
 
-- **GitHub Actions** (`.github/workflows/release.yml`): builds `null-space.exe` + `pinggy-helper.exe`, packages the full `dist/` folder into `null-space.zip`, and publishes a rolling `latest` release.
+- **GitHub Actions** (`.github/workflows/release.yml`): builds `null-space-server.exe` + `null-space-client.exe` + `pinggy-helper.exe`, packages the full `dist/` folder into `null-space.zip`, and publishes a rolling `latest` release.
 - **`install.ps1`** (repo root): one-liner installer for operators — downloads and extracts the latest release zip, creates desktop shortcuts. Usage: `irm https://github.com/simonthoresen/null-space/raw/main/install.ps1 | iex`
 - **`start.ps1`** (in `dist/`): auto-updates on each launch — checks the GitHub release for a newer version and downloads the full zip (binaries, games, fonts) before starting.
 - **Version tracking**: `dist/.version` stores the commit SHA of the installed release. Not tracked in git.
@@ -24,20 +24,20 @@ Games are written in JavaScript (goja) and loaded at runtime from `dist/games/`.
 ## Commands
 
 ```bash
-make build          # compile to dist/null-space.exe + dist/pinggy-helper.exe
+make build          # compile to dist/null-space-{server,client}.exe + dist/pinggy-helper.exe
 make run            # go run with --data-dir dist (dev shortcut)
 make clean          # remove compiled binaries from dist/
 
-go run ./cmd/null-space --data-dir dist   # equivalent to make run, add --password etc.
+go run ./cmd/null-space-server --data-dir dist   # equivalent to make run, add --password etc.
 go test ./...
 
 ssh -p 23234 localhost   # connect as a client (host plays this way too)
 
 # Local mode — no SSH, runs full client TUI directly in the terminal.
 # Useful as a render test-bed and as a local single-player mode.
-go run ./cmd/null-space --local --data-dir dist
-go run ./cmd/null-space --local --data-dir dist --game example
-go run ./cmd/null-space --local --data-dir dist --game example --player alice
+go run ./cmd/null-space-server --local --data-dir dist
+go run ./cmd/null-space-server --local --data-dir dist --game example
+go run ./cmd/null-space-server --local --data-dir dist --game example --player alice
 ```
 
 **Environment variables:**
@@ -164,9 +164,13 @@ Row 2: StatusBar    (fixed 1)   ← left text + right-aligned time
 | `internal/engine/game_list.go` | Game discovery, path resolution, team range probing |
 | `internal/network/` | UPnP, Pinggy status, public IP detection, downloads |
 | `common/` | Game interface, types, ImageBuffer, Clock |
-| `cmd/null-space/` | Entry point: boot sequence, console setup, signal handling |
+| `cmd/null-space-server/` | Server entry point: boot sequence, console setup, signal handling |
+| `cmd/null-space-client/` | Graphical client: SSH + Ebitengine sprite rendering for charmap games |
 | `cmd/pinggy-helper/` | Standalone helper that runs the Pinggy SSH tunnel |
-| `dist/start.ps1` | PowerShell launcher: auto-updates from GitHub Releases, starts pinggy-helper, then null-space.exe |
+| `internal/client/` | Client internals: SSH transport, ANSI parser, charmap atlas, Ebitengine renderer |
+| `common/charmap.go` | Charmap format: PUA codepoint range, CharMapDef/CharMapEntry types, loader |
+| `dist/charmaps/` | Charmap assets: per-game subdirectories with charmap.json + atlas PNG |
+| `dist/start.ps1` | PowerShell launcher: auto-updates from GitHub Releases, starts pinggy-helper, then null-space-server.exe |
 | `install.ps1` | One-liner installer: downloads latest release zip, extracts to a folder, creates desktop shortcuts |
 | `.github/workflows/release.yml` | CI: builds binaries and publishes rolling `latest` release on every push to main |
 
@@ -341,7 +345,7 @@ Status tokens are always **8 chars wide** with the text centered:
 [ SKIP ]   (SKIP = 4 chars, no padding)
 ```
 
-Implementation: `startBootStep(label)` / `finishBootStep(status)` in `cmd/null-space/main.go`. Terminal width via `github.com/charmbracelet/x/term`. The PS1 script has matching `Write-BootStepStart` / `Write-BootStepEnd` helpers.
+Implementation: `startBootStep(label)` / `finishBootStep(status)` in `cmd/null-space-server/main.go`. Terminal width via `github.com/charmbracelet/x/term`. The PS1 script has matching `Write-BootStepStart` / `Write-BootStepEnd` helpers.
 
 Startup sequence (PS1 steps first, then Go binary):
 ```

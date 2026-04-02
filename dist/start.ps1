@@ -187,7 +187,7 @@ function Start-TunnelWatcher {
             Start-Sleep -Milliseconds 500
             if (-not (Get-Process -Id $TunnelPid -ErrorAction SilentlyContinue)) {
                 $targets = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-                    Where-Object { $_.ParentProcessId -eq $ConsolePid -and $_.Name -in @('null-space.exe') }
+                    Where-Object { $_.ParentProcessId -eq $ConsolePid -and $_.Name -in @('null-space-server.exe') }
                 foreach ($t in $targets) {
                     Stop-Process -Id $t.ProcessId -Force -ErrorAction SilentlyContinue
                 }
@@ -245,7 +245,7 @@ function Update-FromRelease {
         # If no .version file, check whether the local exe is newer than the release.
         # This avoids overwriting a locally-built binary with an older release.
         if ($localVersion -eq "") {
-            $localExe = Join-Path $root "null-space.exe"
+            $localExe = Join-Path $root "null-space-server.exe"
             if (Test-Path $localExe) {
                 $localTime = (Get-Item $localExe).LastWriteTimeUtc
                 $releaseTime = [DateTimeOffset]::Parse($release.published_at).UtcDateTime
@@ -305,7 +305,7 @@ if ($Local) {
     Push-Location $root
     try {
         Write-RunLogLine "starting in local single-player mode"
-        & (Join-Path $root "null-space.exe") --local @positionals
+        & (Join-Path $root "null-space-server.exe") --local @positionals
         if ($LASTEXITCODE) { exit $LASTEXITCODE }
     } finally {
         Pop-Location
@@ -390,7 +390,7 @@ $serverExitCode = 0
 Push-Location $root
 try {
     Write-RunLogLine "starting null-space server"
-    & (Join-Path $root "null-space.exe") @serverArgs
+    & (Join-Path $root "null-space-server.exe") @serverArgs
     if ($LASTEXITCODE) { $serverExitCode = $LASTEXITCODE }
 } finally {
     Pop-Location

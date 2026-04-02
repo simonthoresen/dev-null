@@ -25,7 +25,8 @@ jobs:
         run: |
           cd dist
           7z a -tzip ../null-space.zip \
-            null-space.exe \
+            null-space-server.exe \
+            null-space-client.exe \
             pinggy-helper.exe \
             start.ps1 \
             fonts/ \
@@ -53,7 +54,8 @@ jobs:
           git push origin latest
           gh release create latest \
             null-space.zip \
-            dist/null-space.exe \
+            dist/null-space-server.exe \
+            dist/null-space-client.exe \
             dist/pinggy-helper.exe \
             --title "Latest Build (${{ steps.sha.outputs.short }})" \
             --notes "Auto-built from main at ${{ github.sha }}.
