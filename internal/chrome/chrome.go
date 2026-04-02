@@ -76,10 +76,6 @@ const (
 	modeInput = 1
 )
 
-const (
-	lobbyFocusChat  = 0
-	lobbyFocusTeams = 1
-)
 
 // Model is the Bubble Tea model for a player's chrome (lobby, game viewport, etc.).
 type Model struct {
@@ -110,7 +106,6 @@ type Model struct {
 	tabIndex      int
 
 	// Lobby team panel state
-	lobbyFocus    int  // lobbyFocusChat or lobbyFocusTeams
 	teamEditing   bool // true when renaming a team
 	teamEditInput textinput.Model
 
@@ -234,6 +229,37 @@ func NewModel(api ServerAPI, playerID string) Model {
 	lobbyInputCtrl.OnSubmit = m.dispatchInput
 	lobbyInputCtrl.OnTab = m.lobbyTabComplete
 
+	// Wire team panel callbacks.
+	lobbyTeamPanel.OnMoveToTeam = func(teamIdx int) {
+		m.api.State().MovePlayerToTeam(m.playerID, teamIdx)
+		m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+	}
+	lobbyTeamPanel.OnCreateTeam = func() {
+		m.api.State().MovePlayerToTeam(m.playerID, m.api.State().TeamCount())
+		m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+	}
+	lobbyTeamPanel.OnCycleColor = func(direction int) {
+		idx := m.api.State().PlayerTeamIndex(m.playerID)
+		m.api.State().NextTeamColor(idx, direction)
+		m.api.BroadcastMsg(common.TeamUpdatedMsg{})
+	}
+	lobbyTeamPanel.OnStartRename = func() {
+		idx := m.api.State().PlayerTeamIndex(m.playerID)
+		teams := m.api.State().GetTeams()
+		if idx >= 0 && idx < len(teams) {
+			m.teamEditing = true
+			m.teamEditInput.SetValue(teams[idx].Name)
+			m.teamEditInput.Focus()
+			m.teamEditInput.CursorEnd()
+		}
+	}
+	lobbyTeamPanel.IsSoleMember = func() bool {
+		return m.api.State().IsSoleMemberOfTeam(m.playerID)
+	}
+	lobbyTeamPanel.IsFirstInTeam = func() bool {
+		return m.api.State().IsFirstInTeam(m.playerID)
+	}
+
 	m.syncChat()
 	// Always start in lobby/input mode. GameLoadedMsg will transition
 	// participating players into game mode. Late joiners stay in lobby.
@@ -335,7 +361,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.invalidateMenuCache()
 		SetInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
 		m.mode = modeIdle
-		m.lobbyFocus = lobbyFocusChat
 		m.lobbyInput.Model.Blur()
 		m.input.Blur()
 		m.resizeViewports()
@@ -344,8 +369,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case common.GameUnloadedMsg:
 		m.inActiveGame = false
 		m.invalidateMenuCache()
-		m.lobbyFocus = lobbyFocusChat
-		m.lobbyWindow.FocusIdx = 4
+		m.lobbyWindow.FocusIdx = 4 // lobbyInput
 		cmd := m.lobbyInput.Model.Focus()
 		m.resizeViewports()
 		return m, cmd
@@ -385,12 +409,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var clickedPlayer string
 			if m.lobbyWindow.HandleClick(msg.X, msg.Y) {
 				if m.lobbyWindow.FocusIdx == 2 {
-					// Clicked in team panel.
+					// Clicked in team panel — check if a player name was clicked.
 					cx, cy, _, _ := m.lobbyWindow.ChildRect(2)
 					clickedPlayer = m.handleTeamPanelClick(msg.X-cx, msg.Y-cy)
 					if clickedPlayer != "" {
 						// Player name clicked — insert into chat input.
-						m.lobbyFocus = lobbyFocusChat
 						m.lobbyWindow.FocusIdx = 4
 						m.lobbyInput.Model.Focus()
 						if m.lobbyInput.Model.Value() == "" {
@@ -404,19 +427,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						return m, nil
 					}
-					// Non-player row — switch focus to teams.
-					if m.lobbyFocus == lobbyFocusChat {
-						m.lobbyFocus = lobbyFocusTeams
-						m.lobbyInput.Model.Blur()
-					}
-					return m, nil
-				}
-				// Clicked chat panel or elsewhere — switch to chat.
-				if m.lobbyFocus == lobbyFocusTeams {
-					m.lobbyFocus = lobbyFocusChat
-					m.lobbyWindow.FocusIdx = 4
-					cmd := m.lobbyInput.Model.Focus()
-					return m, cmd
 				}
 			}
 		}
@@ -487,17 +497,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Lobby: delegate to the NCWindow which routes to the focused child
-	// (NCCommandInput or NCTeamPanel).
+	// (NCCommandInput or NCTeamPanel). Tab cycling is handled by the window.
 	if !m.inActiveGame {
-		if m.lobbyFocus == lobbyFocusTeams {
-			return m.handleTeamKey(msg)
-		}
-		// Chat/input focused — route through NCWindow to the NCCommandInput.
 		cmd := m.lobbyWindow.HandleUpdate(msg)
-		// Sync lobbyFocus from window's FocusIdx in case Tab cycled focus.
-		if m.lobbyWindow.FocusIdx == 2 {
-			m.lobbyFocus = lobbyFocusTeams
-		}
 		// Reset tab candidates on non-tab keys.
 		if msg.String() != "tab" {
 			m.tabCandidates = nil
@@ -619,12 +621,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.input.CursorEnd()
 		return m, nil
 	case "tab":
-		// In lobby with chat focused: toggle to team panel (if input is empty).
-		if !m.inActiveGame && m.input.Value() == "" {
-			m.lobbyFocus = lobbyFocusTeams
-			m.input.Blur()
-			return m, nil
-		}
 		if strings.HasPrefix(m.input.Value(), "/") {
 			if m.tabCandidates == nil {
 				m.tabPrefix, m.tabCandidates = m.api.TabCandidates(m.input.Value(), m.api.State().PlayerNames())
@@ -643,80 +639,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.input, cmd = m.input.Update(msg)
 		return m, cmd
 	}
-}
-
-func (m Model) handleTeamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "tab", "esc":
-		// Switch back to chat.
-		m.lobbyFocus = lobbyFocusChat
-		m.lobbyWindow.FocusIdx = 4 // lobbyInput
-		cmd := m.lobbyInput.Model.Focus()
-		return m, cmd
-	case "up":
-		idx := m.api.State().PlayerTeamIndex(m.playerID)
-		if idx == 0 {
-			// At first team — become unassigned.
-			m.api.State().MovePlayerToTeam(m.playerID, -1)
-			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
-		} else if idx > 0 {
-			// Move to team above.
-			m.api.State().MovePlayerToTeam(m.playerID, idx-1)
-			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
-		}
-		// idx == -1 (unassigned) — block, already at top.
-		return m, nil
-	case "down":
-		idx := m.api.State().PlayerTeamIndex(m.playerID)
-		teamCount := m.api.State().TeamCount()
-		if idx < 0 {
-			// Unassigned — join first team, or create one if none exist.
-			if teamCount > 0 {
-				m.api.State().MovePlayerToTeam(m.playerID, 0)
-			} else {
-				m.api.State().MovePlayerToTeam(m.playerID, 0) // creates new team
-			}
-			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
-		} else if idx < teamCount-1 {
-			// Move to team below.
-			m.api.State().MovePlayerToTeam(m.playerID, idx+1)
-			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
-		} else if !m.api.State().IsSoleMemberOfTeam(m.playerID) {
-			// On last team with others — create new solo team.
-			m.api.State().MovePlayerToTeam(m.playerID, teamCount)
-			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
-		}
-		// Sole member of last team — block to avoid drop/recreate.
-		return m, nil
-	case "enter":
-		// If first player of team, start renaming.
-		if m.api.State().IsFirstInTeam(m.playerID) {
-			idx := m.api.State().PlayerTeamIndex(m.playerID)
-			teams := m.api.State().GetTeams()
-			if idx >= 0 && idx < len(teams) {
-				m.teamEditing = true
-				m.teamEditInput.SetValue(teams[idx].Name)
-				m.teamEditInput.Focus()
-				m.teamEditInput.CursorEnd()
-			}
-		}
-		return m, nil
-	case "left":
-		if m.api.State().IsFirstInTeam(m.playerID) {
-			idx := m.api.State().PlayerTeamIndex(m.playerID)
-			m.api.State().NextTeamColor(idx, -1)
-			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
-		}
-		return m, nil
-	case "right":
-		if m.api.State().IsFirstInTeam(m.playerID) {
-			idx := m.api.State().PlayerTeamIndex(m.playerID)
-			m.api.State().NextTeamColor(idx, 1)
-			m.api.BroadcastMsg(common.TeamUpdatedMsg{})
-		}
-		return m, nil
-	}
-	return m, nil
 }
 
 func (m Model) handleTeamEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -937,7 +859,7 @@ func (m Model) View() tea.View {
 
 	isLobby := !m.inActiveGame || phase == common.PhaseNone
 
-	if isLobby && m.lobbyFocus == lobbyFocusChat {
+	if isLobby && m.lobbyWindow.FocusIdx == 4 {
 		if cx, cy, visible := m.lobbyWindow.CursorPosition(); visible {
 			if cursor := m.lobbyInput.Model.Cursor(); cursor != nil {
 				cursor.Position.X = cx
@@ -1000,13 +922,6 @@ func (m Model) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef) {
 		m.lobbyTeamPanel.EditValue = m.teamEditInput.Value()
 	}
 	m.lobbyTeamPanel.ShowCreate = !m.api.State().IsSoleMemberOfTeam(m.playerID)
-
-	// Set focus to match lobbyFocus.
-	if m.lobbyFocus == lobbyFocusTeams {
-		m.lobbyWindow.FocusIdx = 2 // team panel child index
-	} else {
-		m.lobbyWindow.FocusIdx = 4 // lobbyInput child index
-	}
 
 	// Update status bar.
 	modeLabel := "remote"

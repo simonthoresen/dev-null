@@ -26,6 +26,14 @@ type TeamPanel struct {
 	// Whether the [+ Create Team] button should show.
 	ShowCreate bool
 
+	// Callbacks — set by chrome to wire team operations.
+	OnMoveToTeam  func(teamIdx int)          // move player to team (-1 = unassigned)
+	OnCreateTeam  func()                     // create a new team with the player
+	OnCycleColor  func(direction int)        // cycle team color (-1 = left, +1 = right)
+	OnStartRename func()                     // start renaming the current team
+	IsSoleMember  func() bool                // true if player is the only member of their team
+	IsFirstInTeam func() bool                // true if player is the first member of their team
+
 	WantTab     bool
 	WantBackTab bool
 }
@@ -42,12 +50,51 @@ func (tp *TeamPanel) HandleClick(rx, ry int) {}
 func (tp *TeamPanel) Update(msg tea.Msg) {
 	tp.WantTab = false
 	tp.WantBackTab = false
-	if km, ok := msg.(tea.KeyPressMsg); ok {
-		switch km.String() {
-		case "tab", "esc":
-			tp.WantTab = true
-		case "shift+tab":
-			tp.WantBackTab = true
+	km, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return
+	}
+	switch km.String() {
+	case "tab", "esc":
+		tp.WantTab = true
+	case "shift+tab":
+		tp.WantBackTab = true
+	case "up":
+		if tp.OnMoveToTeam == nil {
+			return
+		}
+		if tp.MyTeamIdx == 0 {
+			tp.OnMoveToTeam(-1) // become unassigned
+		} else if tp.MyTeamIdx > 0 {
+			tp.OnMoveToTeam(tp.MyTeamIdx - 1)
+		}
+	case "down":
+		if tp.OnMoveToTeam == nil {
+			return
+		}
+		teamCount := len(tp.Teams)
+		if tp.MyTeamIdx < 0 {
+			// Unassigned — join first team (or create one).
+			tp.OnMoveToTeam(0)
+		} else if tp.MyTeamIdx < teamCount-1 {
+			tp.OnMoveToTeam(tp.MyTeamIdx + 1)
+		} else if tp.IsSoleMember != nil && !tp.IsSoleMember() {
+			// Last team with others — create new solo team.
+			if tp.OnCreateTeam != nil {
+				tp.OnCreateTeam()
+			}
+		}
+	case "enter":
+		if tp.OnStartRename != nil && tp.IsFirstInTeam != nil && tp.IsFirstInTeam() {
+			tp.OnStartRename()
+		}
+	case "left":
+		if tp.OnCycleColor != nil && tp.IsFirstInTeam != nil && tp.IsFirstInTeam() {
+			tp.OnCycleColor(-1)
+		}
+	case "right":
+		if tp.OnCycleColor != nil && tp.IsFirstInTeam != nil && tp.IsFirstInTeam() {
+			tp.OnCycleColor(+1)
 		}
 	}
 }
