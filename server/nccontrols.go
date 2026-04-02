@@ -9,6 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"null-space/common"
 )
 
 // ─── NCLabel ──────────────────────────────────────────────────────────────────
@@ -22,7 +24,7 @@ type NCLabel struct {
 func (l *NCLabel) Update(_ tea.Msg)    {}
 func (l *NCLabel) Focusable() bool     { return false }
 func (l *NCLabel) MinSize() (int, int) { return ansi.StringWidth(l.Text), 1 }
-func (l *NCLabel) Render(buf *ImageBuffer, x, y, w, h int, _ bool, layer *ThemeLayer) {
+func (l *NCLabel) Render(buf *common.ImageBuffer, x, y, w, h int, _ bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 	text := l.Text
@@ -46,7 +48,7 @@ func (l *NCLabel) Render(buf *ImageBuffer, x, y, w, h int, _ bool, layer *ThemeL
 			break
 		}
 		if col >= x {
-			buf.SetChar(col, y, r, fg, bg, AttrNone)
+			buf.SetChar(col, y, r, fg, bg, common.AttrNone)
 		}
 		col++
 	}
@@ -199,7 +201,7 @@ func (ci *NCCommandInput) Update(msg tea.Msg) {
 	*ci.Model = updated
 }
 
-func (ti *NCTextInput) Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
+func (ti *NCTextInput) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
 	inputBg := layer.InputBgC()
 	inputFg := layer.InputFgC()
 	ti.bg = inputBg
@@ -224,8 +226,8 @@ func (ti *NCTextInput) Render(buf *ImageBuffer, x, y, width, height int, focused
 	ti.Model.SetVirtualCursor(false)
 
 	// Brackets.
-	buf.SetChar(x, y, '[', baseFg, baseBg, AttrNone)
-	buf.SetChar(x+width-1, y, ']', baseFg, baseBg, AttrNone)
+	buf.SetChar(x, y, '[', baseFg, baseBg, common.AttrNone)
+	buf.SetChar(x+width-1, y, ']', baseFg, baseBg, common.AttrNone)
 
 	hasCursor := ti.Model.Focused()
 	if hasCursor {
@@ -238,7 +240,7 @@ func (ti *NCTextInput) Render(buf *ImageBuffer, x, y, width, height int, focused
 		buf.PaintANSI(x+1, y, fieldW, 1, trimmedView, inputFg, inputBg)
 		// Fill remaining with dots.
 		for i := 0; i < dotsW; i++ {
-			buf.SetChar(x+1+usedW+i, y, '·', inputFg, inputBg, AttrFaint)
+			buf.SetChar(x+1+usedW+i, y, '·', inputFg, inputBg, common.AttrFaint)
 		}
 		return
 	}
@@ -248,7 +250,7 @@ func (ti *NCTextInput) Render(buf *ImageBuffer, x, y, width, height int, focused
 	if val == "" {
 		// All dots.
 		for i := 0; i < fieldW; i++ {
-			buf.SetChar(x+1+i, y, '·', inputFg, inputBg, AttrFaint)
+			buf.SetChar(x+1+i, y, '·', inputFg, inputBg, common.AttrFaint)
 		}
 		return
 	}
@@ -258,12 +260,12 @@ func (ti *NCTextInput) Render(buf *ImageBuffer, x, y, width, height int, focused
 		if col >= fieldW {
 			break
 		}
-		buf.SetChar(x+1+col, y, r, inputFg, inputBg, AttrNone)
+		buf.SetChar(x+1+col, y, r, inputFg, inputBg, common.AttrNone)
 		col++
 	}
 	dotsW := max(0, fieldW-valW)
 	for i := 0; i < dotsW; i++ {
-		buf.SetChar(x+1+valW+i, y, '·', inputFg, inputBg, AttrFaint)
+		buf.SetChar(x+1+valW+i, y, '·', inputFg, inputBg, common.AttrFaint)
 	}
 }
 
@@ -334,7 +336,7 @@ func (v *NCTextView) clampScroll() {
 	}
 }
 
-func (v *NCTextView) Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
+func (v *NCTextView) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 	v.height = height
@@ -349,7 +351,7 @@ func (v *NCTextView) Render(buf *ImageBuffer, x, y, width, height int, focused b
 	}
 
 	// Fill background.
-	buf.Fill(x, y, width, height, ' ', fg, bg, AttrNone)
+	buf.Fill(x, y, width, height, ' ', fg, bg, common.AttrNone)
 
 	// Determine visible slice.
 	var visibleLines []string
@@ -474,7 +476,7 @@ func (a *NCTextArea) Update(msg tea.Msg) {
 	}
 }
 
-func (a *NCTextArea) Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
+func (a *NCTextArea) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
 	a.height = height
 	fieldW := max(1, width-2) // -2 for "[" and "]"
 	baseFg := layer.FgC()
@@ -500,8 +502,8 @@ func (a *NCTextArea) Render(buf *ImageBuffer, x, y, width, height int, focused b
 		row := y + i
 
 		// Brackets.
-		buf.SetChar(x, row, '[', baseFg, baseBg, AttrNone)
-		buf.SetChar(x+width-1, row, ']', baseFg, baseBg, AttrNone)
+		buf.SetChar(x, row, '[', baseFg, baseBg, common.AttrNone)
+		buf.SetChar(x+width-1, row, ']', baseFg, baseBg, common.AttrNone)
 
 		var lineContent string
 		if lineIdx < len(a.Lines) {
@@ -514,17 +516,17 @@ func (a *NCTextArea) Render(buf *ImageBuffer, x, y, width, height int, focused b
 				if col >= fieldW {
 					break
 				}
-				buf.SetChar(x+1+col, row, r, inputFg, inputBg, AttrNone)
+				buf.SetChar(x+1+col, row, r, inputFg, inputBg, common.AttrNone)
 				col++
 			}
 			// Dots for remaining.
 			for col < fieldW {
-				buf.SetChar(x+1+col, row, '·', inputFg, inputBg, AttrFaint)
+				buf.SetChar(x+1+col, row, '·', inputFg, inputBg, common.AttrFaint)
 				col++
 			}
 		} else {
 			for col := 0; col < fieldW; col++ {
-				buf.SetChar(x+1+col, row, '·', inputFg, inputBg, AttrFaint)
+				buf.SetChar(x+1+col, row, '·', inputFg, inputBg, common.AttrFaint)
 			}
 		}
 	}
@@ -560,14 +562,14 @@ func (b *NCButton) Update(msg tea.Msg) {
 		}
 	}
 }
-func (b *NCButton) Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
+func (b *NCButton) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
-	attr := PixelAttr(AttrNone)
+	attr := common.PixelAttr(common.AttrNone)
 	if focused {
 		fg = layer.HighlightFgC()
 		bg = layer.HighlightBgC()
-		attr = AttrBold
+		attr = common.AttrBold
 	}
 	label := "[ " + b.Label + " ]"
 	col := x
@@ -612,14 +614,14 @@ func (cb *NCCheckbox) Update(msg tea.Msg) {
 		}
 	}
 }
-func (cb *NCCheckbox) Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
+func (cb *NCCheckbox) Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
-	attr := PixelAttr(AttrNone)
+	attr := common.PixelAttr(common.AttrNone)
 	if focused {
 		fg = layer.HighlightFgC()
 		bg = layer.HighlightBgC()
-		attr = AttrBold
+		attr = common.AttrBold
 	}
 	mark := ' '
 	if cb.Checked {
@@ -648,12 +650,12 @@ type NCHDivider struct {
 func (d *NCHDivider) Update(_ tea.Msg)     {}
 func (d *NCHDivider) Focusable() bool      { return false }
 func (d *NCHDivider) MinSize() (int, int)  { return 1, 1 }
-func (d *NCHDivider) Render(buf *ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
+func (d *NCHDivider) Render(buf *common.ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
-	ch := runeOf(layer.IH())
+	ch := common.RuneOf(layer.IH())
 	for col := x; col < x+width; col++ {
-		buf.SetChar(col, y, ch, fg, bg, AttrNone)
+		buf.SetChar(col, y, ch, fg, bg, common.AttrNone)
 	}
 }
 
@@ -669,12 +671,12 @@ type NCVDivider struct {
 func (d *NCVDivider) Update(_ tea.Msg)     {}
 func (d *NCVDivider) Focusable() bool      { return false }
 func (d *NCVDivider) MinSize() (int, int)  { return 1, 1 }
-func (d *NCVDivider) Render(buf *ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
+func (d *NCVDivider) Render(buf *common.ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
-	ch := runeOf(layer.IV())
+	ch := common.RuneOf(layer.IV())
 	for row := y; row < y+height; row++ {
-		buf.SetChar(x, row, ch, fg, bg, AttrNone)
+		buf.SetChar(x, row, ch, fg, bg, common.AttrNone)
 	}
 }
 
@@ -696,7 +698,7 @@ func (p *NCPanel) Focusable() bool     { return false } // panels aren't directl
 func (p *NCPanel) MinSize() (int, int) { return 4, 3 }  // min border box
 func (p *NCPanel) Update(msg tea.Msg)  {}               // updates go to children directly
 
-func (p *NCPanel) Render(buf *ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
+func (p *NCPanel) Render(buf *common.ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
 	p.innerW = max(1, width-2)
 	p.innerH = max(1, height-2)
 	p.screenX = x
@@ -708,37 +710,37 @@ func (p *NCPanel) Render(buf *ImageBuffer, x, y, width, height int, _ bool, laye
 	hlBg := layer.HighlightBgC()
 
 	// Fill with background.
-	buf.Fill(x, y, width, height, ' ', fg, bg, AttrNone)
+	buf.Fill(x, y, width, height, ' ', fg, bg, common.AttrNone)
 
 	// Top border with optional title (same pattern as NCWindow).
-	buf.SetChar(x, y, runeOf(layer.OTL()), fg, bg, AttrNone)
-	buf.SetChar(x+width-1, y, runeOf(layer.OTR()), fg, bg, AttrNone)
+	buf.SetChar(x, y, common.RuneOf(layer.OTL()), fg, bg, common.AttrNone)
+	buf.SetChar(x+width-1, y, common.RuneOf(layer.OTR()), fg, bg, common.AttrNone)
 	if p.Title != "" {
 		titleText := " " + p.Title + " "
-		buf.SetChar(x+1, y, runeOf(layer.IH()), fg, bg, AttrNone)
-		n := buf.WriteString(x+2, y, titleText, hlFg, hlBg, AttrBold)
+		buf.SetChar(x+1, y, common.RuneOf(layer.IH()), fg, bg, common.AttrNone)
+		n := buf.WriteString(x+2, y, titleText, hlFg, hlBg, common.AttrBold)
 		for col := x + 2 + n; col < x+width-1; col++ {
-			buf.SetChar(col, y, runeOf(layer.OH()), fg, bg, AttrNone)
+			buf.SetChar(col, y, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
 		}
 	} else {
 		for col := x + 1; col < x+width-1; col++ {
-			buf.SetChar(col, y, runeOf(layer.OH()), fg, bg, AttrNone)
+			buf.SetChar(col, y, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
 		}
 	}
 
 	// Bottom border.
 	boty := y + height - 1
-	buf.SetChar(x, boty, runeOf(layer.OBL()), fg, bg, AttrNone)
-	buf.SetChar(x+width-1, boty, runeOf(layer.OBR()), fg, bg, AttrNone)
+	buf.SetChar(x, boty, common.RuneOf(layer.OBL()), fg, bg, common.AttrNone)
+	buf.SetChar(x+width-1, boty, common.RuneOf(layer.OBR()), fg, bg, common.AttrNone)
 	for col := x + 1; col < x+width-1; col++ {
-		buf.SetChar(col, boty, runeOf(layer.OH()), fg, bg, AttrNone)
+		buf.SetChar(col, boty, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
 	}
 
 	// Left/right borders.
-	vr := runeOf(layer.OV())
+	vr := common.RuneOf(layer.OV())
 	for row := y + 1; row < boty; row++ {
-		buf.SetChar(x, row, vr, fg, bg, AttrNone)
-		buf.SetChar(x+width-1, row, vr, fg, bg, AttrNone)
+		buf.SetChar(x, row, vr, fg, bg, common.AttrNone)
+		buf.SetChar(x+width-1, row, vr, fg, bg, common.AttrNone)
 	}
 
 	// Render children stacked vertically in the inner area.
@@ -763,13 +765,13 @@ func (p *NCPanel) Render(buf *ImageBuffer, x, y, width, height int, _ bool, laye
 // ─── Scrollbar helper ─────────────────────────────────────────────────────────
 
 // renderScrollbarBuf writes a scrollbar track directly into the buffer.
-func renderScrollbarBuf(buf *ImageBuffer, x, y, total, visible, offset int, fg, bg color.Color) {
+func renderScrollbarBuf(buf *common.ImageBuffer, x, y, total, visible, offset int, fg, bg color.Color) {
 	if visible <= 0 {
 		return
 	}
 	if total <= visible {
 		for i := 0; i < visible; i++ {
-			buf.SetChar(x, y+i, ' ', fg, bg, AttrNone)
+			buf.SetChar(x, y+i, ' ', fg, bg, common.AttrNone)
 		}
 		return
 	}
@@ -788,7 +790,7 @@ func renderScrollbarBuf(buf *ImageBuffer, x, y, total, visible, offset int, fg, 
 		if i >= thumbPos && i < thumbPos+thumbSize {
 			ch = '█'
 		}
-		buf.SetChar(x, y+i, ch, fg, bg, AttrNone)
+		buf.SetChar(x, y+i, ch, fg, bg, common.AttrNone)
 	}
 }
 
@@ -826,10 +828,10 @@ func renderScrollbar(total, visible, offset int, style lipgloss.Style) []string 
 
 // ─── NCGameView ──────────────────────────────────────────────────────────────
 
-// NCGameView wraps a game's View() function as an NCControl. When focused,
+// NCGameView wraps a game's Render() function as an NCControl. When focused,
 // non-Tab keys are forwarded to the game via OnKey.
 type NCGameView struct {
-	ViewFn               func(w, h int) string
+	RenderFn             func(buf *common.ImageBuffer, x, y, w, h int)
 	OnKey                func(key string) // bound to game.OnInput(playerID, key)
 	focusable            bool
 	WantTab, WantBackTab bool
@@ -865,15 +867,14 @@ func (g *NCGameView) Update(msg tea.Msg) {
 	}
 }
 
-func (g *NCGameView) Render(buf *ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
-	fg := layer.FgC()
-	bg := layer.BgC()
-	if g.ViewFn == nil {
-		buf.Fill(x, y, width, height, ' ', fg, bg, AttrNone)
+func (g *NCGameView) Render(buf *common.ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
+	if g.RenderFn == nil {
+		fg := layer.FgC()
+		bg := layer.BgC()
+		buf.Fill(x, y, width, height, ' ', fg, bg, common.AttrNone)
 		return
 	}
-	raw := g.ViewFn(width, height)
-	buf.PaintANSI(x, y, width, height, raw, fg, bg)
+	g.RenderFn(buf, x, y, width, height)
 }
 
 // ─── NCTable ─────────────────────────────────────────────────────────────────
@@ -887,7 +888,7 @@ func (t *NCTable) Update(_ tea.Msg)           {}
 func (t *NCTable) Focusable() bool            { return false }
 func (t *NCTable) MinSize() (int, int)        { return 1, len(t.Rows) }
 
-func (t *NCTable) Render(buf *ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
+func (t *NCTable) Render(buf *common.ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 
@@ -923,14 +924,14 @@ func (t *NCTable) Render(buf *ImageBuffer, x, y, width, height int, _ bool, laye
 			if c < len(dataRow) {
 				cell = dataRow[c]
 			}
-			n := buf.WriteString(col, row, cell, fg, bg, AttrNone)
+			n := buf.WriteString(col, row, cell, fg, bg, common.AttrNone)
 			// Pad to column width.
 			for i := n; i < colWidths[c]; i++ {
-				buf.SetChar(col+i, row, ' ', fg, bg, AttrNone)
+				buf.SetChar(col+i, row, ' ', fg, bg, common.AttrNone)
 			}
 			col += colWidths[c]
 			if c < numCols-1 {
-				buf.SetChar(col, row, ' ', fg, bg, AttrNone)
+				buf.SetChar(col, row, ' ', fg, bg, common.AttrNone)
 				col++
 			}
 		}
@@ -958,7 +959,7 @@ func (c *NCContainer) Update(_ tea.Msg)     {}
 func (c *NCContainer) Focusable() bool      { return false }
 func (c *NCContainer) MinSize() (int, int)  { return 1, 1 }
 
-func (c *NCContainer) Render(buf *ImageBuffer, bx, by, width, height int, _ bool, layer *ThemeLayer) {
+func (c *NCContainer) Render(buf *common.ImageBuffer, bx, by, width, height int, _ bool, layer *ThemeLayer) {
 	if len(c.Children) == 0 {
 		return
 	}

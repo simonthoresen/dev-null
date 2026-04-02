@@ -798,21 +798,20 @@ func (m chromeModel) View() tea.View {
 	// Build menus once per frame — passed to sub-views and overlay rendering.
 	menus := m.cachedMenus()
 
-	buf := NewImageBuffer(m.width, m.height)
+	buf := common.NewImageBuffer(m.width, m.height)
 
-	var content string
 	if !m.inActiveGame || phase == common.PhaseNone {
-		content = m.viewLobby(menus, mbStyle, chStyle, ciStyle, defaultChatBg)
+		content := m.viewLobby(menus, mbStyle, chStyle, ciStyle, defaultChatBg)
+		buf.PaintANSI(0, 0, m.width, m.height, content, nil, nil)
 	} else if phase == common.PhaseSplash {
-		content = m.viewSplash(menus, game, gameName, mbStyle, chStyle, ciStyle)
+		content := m.viewSplash(menus, game, gameName, mbStyle, chStyle, ciStyle)
+		buf.PaintANSI(0, 0, m.width, m.height, content, nil, nil)
 	} else if phase == common.PhaseGameOver {
-		content = m.viewGameOver(menus, game, gameName, mbStyle, chStyle, ciStyle)
+		content := m.viewGameOver(menus, game, gameName, mbStyle, chStyle, ciStyle)
+		buf.PaintANSI(0, 0, m.width, m.height, content, nil, nil)
 	} else {
-		content = m.viewPlaying(menus, game, gameName, mbStyle, chStyle, ciStyle, defaultChatBg)
+		m.renderPlaying(buf, menus, game, gameName, mbStyle, chStyle, ciStyle, defaultChatBg)
 	}
-
-	// Paint the sub-view string into the buffer.
-	buf.PaintANSI(0, 0, m.width, m.height, content, nil, nil)
 
 	// Overlay layers: render to sub-buffers, blit, then shadow via RecolorRect.
 	shadowFg := m.theme.ShadowFgC()
@@ -820,19 +819,19 @@ func (m chromeModel) View() tea.View {
 	if m.overlay.openMenu >= 0 {
 		menuLayer := m.theme.LayerAt(1)
 		if dd := m.overlay.renderDropdown(menus, 1, menuLayer); dd.content != "" {
-			sub := NewImageBuffer(dd.width, dd.height)
+			sub := common.NewImageBuffer(dd.width, dd.height)
 			sub.PaintANSI(0, 0, dd.width, dd.height, dd.content, menuLayer.FgC(), menuLayer.BgC())
 			buf.Blit(dd.col, dd.row, sub)
-			blitShadow(buf, dd.col, dd.row, dd.width, dd.height, shadowFg, shadowBg)
+			common.BlitShadow(buf, dd.col, dd.row, dd.width, dd.height, shadowFg, shadowBg)
 		}
 	}
 	if m.overlay.hasDialog() {
 		dlgLayer := m.theme.LayerAt(2)
 		if dlg := m.overlay.renderDialog(m.width, m.height, dlgLayer); dlg.content != "" {
-			sub := NewImageBuffer(dlg.width, dlg.height)
+			sub := common.NewImageBuffer(dlg.width, dlg.height)
 			sub.PaintANSI(0, 0, dlg.width, dlg.height, dlg.content, dlgLayer.FgC(), dlgLayer.BgC())
 			buf.Blit(dlg.col, dlg.row, sub)
-			blitShadow(buf, dlg.col, dlg.row, dlg.width, dlg.height, shadowFg, shadowBg)
+			common.BlitShadow(buf, dlg.col, dlg.row, dlg.width, dlg.height, shadowFg, shadowBg)
 		}
 	}
 
@@ -1032,12 +1031,11 @@ func (m chromeModel) viewGameOver(menus []common.MenuDef, game common.Game, game
 	return lipgloss.JoinVertical(lipgloss.Left, menuBar, ncBar, viewport, cmdBar, statusBar)
 }
 
-func (m chromeModel) viewPlaying(menus []common.MenuDef, game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style, chatBg color.Color) string {
-	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.LayerAt(1))
-	menuBar := mbStyle.Width(m.width).Render(truncateStyled(gameName, m.width))
-	gameStatusBar := mbStyle.Bold(false).Width(m.width).Render(game.StatusBar(m.playerID))
+func (m chromeModel) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style, chatBg color.Color) {
+	// Row layout: menuBar(1) + ncBar(1) + gameStatusBar(1) + game(gameH) + chat(chatH) + cmdBar(1) + statusBar(1)
+	// = 5 + gameH + chatH = m.height
 
-	// Available rows: total - NC bar - menu bar - game status bar - command bar - status bar
+	// Available rows: total - menu bar - NC bar - game status bar - command bar - status bar
 	gameH := m.width * 9 / 16
 	chatH := m.height - 5 - gameH
 	minChatH := max(5, (m.height-5)/3)
@@ -1049,20 +1047,41 @@ func (m chromeModel) viewPlaying(menus []common.MenuDef, game common.Game, gameN
 		}
 	}
 
-	var gameView string
+	row := 0
+
+	// Row 0: menu bar.
+	menuBar := mbStyle.Width(m.width).Render(truncateStyled(gameName, m.width))
+	buf.PaintANSI(0, row, m.width, 1, menuBar, nil, nil)
+	row++
+
+	// Row 1: NC action bar.
+	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.LayerAt(1))
+	buf.PaintANSI(0, row, m.width, 1, ncBar, nil, nil)
+	row++
+
+	// Row 2: game status bar.
+	gameStatusBar := mbStyle.Bold(false).Width(m.width).Render(game.StatusBar(m.playerID))
+	buf.PaintANSI(0, row, m.width, 1, gameStatusBar, nil, nil)
+	row++
+
+	// Rows 3..3+gameH: game viewport — render directly into the buffer.
 	if ncTree := game.RenderNC(m.playerID, m.width, gameH); ncTree != nil {
-		// Game provides a declarative NC widget tree — build/reconcile real NC controls.
 		m.gameWindow = ReconcileGameWindow(m.gameWindow, ncTree,
-			func(w, h int) string { return game.Render(m.playerID, w, h) },
+			func(gbuf *common.ImageBuffer, bx, by, bw, bh int) { game.Render(gbuf, m.playerID, bx, by, bw, bh) },
 			func(action string) { game.OnInput(m.playerID, action) })
-		// y=3: ncBar(1) + menuBar(1) + gameStatusBar(1) above the game viewport.
-		gameView = m.gameWindow.Window.Render(0, 3, m.width, gameH, m.theme.LayerAt(0))
+		m.gameWindow.Window.RenderToBuf(buf, 0, row, m.width, gameH, m.theme.LayerAt(0))
 	} else {
 		m.gameWindow = nil
-		gameView = fitBlock(game.Render(m.playerID, m.width, gameH), m.width, gameH)
+		game.Render(buf, m.playerID, 0, row, m.width, gameH)
 	}
-	chatView := renderChatLines(m.chatLines, m.width, chatH, m.chatScrollOffset, chStyle, chatBg)
+	row += gameH
 
+	// Chat rows.
+	chatView := renderChatLines(m.chatLines, m.width, chatH, m.chatScrollOffset, chStyle, chatBg)
+	buf.PaintANSI(0, row, m.width, chatH, chatView, nil, nil)
+	row += chatH
+
+	// Command bar.
 	var cmdBar string
 	if m.mode == modeInput {
 		cmdBar = truncateStyled(m.input.View(), m.width)
@@ -1073,10 +1092,12 @@ func (m chromeModel) viewPlaying(menus []common.MenuDef, game common.Game, gameN
 		}
 		cmdBar = ciStyle.Width(m.width).Render(idleText)
 	}
+	buf.PaintANSI(0, row, m.width, 1, cmdBar, nil, nil)
+	row++
 
+	// Status bar.
 	statusBar := mbStyle.Width(m.width).Align(lipgloss.Right).Render(time.Now().Format("2006-01-02 15:04:05"))
-
-	return lipgloss.JoinVertical(lipgloss.Left, menuBar, ncBar, gameStatusBar, gameView, chatView, cmdBar, statusBar)
+	buf.PaintANSI(0, row, m.width, 1, statusBar, nil, nil)
 }
 
 // renderTeamPanel draws the team list panel for the lobby.

@@ -562,9 +562,9 @@ func (r *jsRuntime) Update(dt float64) {
 	_, _ = r.updateFn(goja.Undefined(), r.vm.ToValue(dt))
 }
 
-func (r *jsRuntime) Render(playerID string, width, height int) string {
+func (r *jsRuntime) Render(buf *common.ImageBuffer, playerID string, x, y, width, height int) {
 	if r.renderFn == nil {
-		return ""
+		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -575,9 +575,9 @@ func (r *jsRuntime) Render(playerID string, width, height int) string {
 	val, err := r.renderFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
 	if err != nil {
 		slog.Error("JS Render error", "error", err)
-		return ""
+		return
 	}
-	return val.String()
+	buf.PaintANSI(x, y, width, height, val.String(), nil, nil)
 }
 
 func (r *jsRuntime) RenderNC(playerID string, width, height int) *common.WidgetNode {

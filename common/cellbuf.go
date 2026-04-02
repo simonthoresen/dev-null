@@ -1,4 +1,4 @@
-package server
+package common
 
 import (
 	"fmt"
@@ -140,7 +140,7 @@ func (b *ImageBuffer) RecolorRect(x, y, w, h int, fg, bg color.Color, attr Pixel
 
 // blitShadow renders an L-shaped drop shadow around a box in the buffer.
 // Right strip: 1 cell wide. Bottom strip: boxW cells wide, offset by 1.
-func blitShadow(buf *ImageBuffer, boxCol, boxRow, boxW, boxH int, shadowFg, shadowBg color.Color) {
+func BlitShadow(buf *ImageBuffer, boxCol, boxRow, boxW, boxH int, shadowFg, shadowBg color.Color) {
 	// Right strip (skip first row to offset).
 	for dy := 1; dy < boxH; dy++ {
 		r := boxRow + dy
@@ -161,6 +161,15 @@ func blitShadow(buf *ImageBuffer, boxCol, boxRow, boxW, boxH int, shadowFg, shad
 			cell.Attr = AttrNone
 		}
 	}
+}
+
+// RuneOf returns the first rune from a string, or ' ' if empty.
+func RuneOf(s string) rune {
+	r, _ := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError || r == 0 {
+		return ' '
+	}
+	return r
 }
 
 // ─── ANSI Parsing ────────────────────────────────────────────────────────────
@@ -434,7 +443,7 @@ func (b *ImageBuffer) ToString() string {
 			}
 
 			// Emit SGR if style changed.
-			if first || !colorEq(c.Fg, curFg) || !colorEq(c.Bg, curBg) || c.Attr != curAttr {
+			if first || !ColorEq(c.Fg, curFg) || !ColorEq(c.Bg, curBg) || c.Attr != curAttr {
 				sgr := buildSGR(c.Fg, c.Bg, c.Attr)
 				if sgr != "" {
 					sb.WriteString(sgr)
@@ -454,9 +463,9 @@ func (b *ImageBuffer) ToString() string {
 	return sb.String()
 }
 
-// colorEq compares two color.Color values for equality.
+// ColorEq compares two color.Color values for equality.
 // Two nil colors are equal; a nil and non-nil are not.
-func colorEq(a, b color.Color) bool {
+func ColorEq(a, b color.Color) bool {
 	if a == nil && b == nil {
 		return true
 	}

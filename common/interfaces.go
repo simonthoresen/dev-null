@@ -62,7 +62,7 @@ type Game interface {
 	Update(dt float64)                     // called once per tick with seconds since last update
 	OnPlayerLeave(playerID string)
 	OnInput(playerID, key string)
-	Render(playerID string, width, height int) string
+	Render(buf *ImageBuffer, playerID string, x, y, width, height int)
 	// RenderNC returns a declarative widget tree for the game viewport.
 	// If it returns nil, the framework falls back to wrapping Render() in a
 	// default gameview node. Games can mix NC panels with raw Render() output

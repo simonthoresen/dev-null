@@ -96,9 +96,9 @@ func TestReconcileGameView(t *testing.T) {
 	tree := &common.WidgetNode{Type: "gameview"}
 	called := false
 	gw := ReconcileGameWindow(nil, tree,
-		func(w, h int) string {
+		func(buf *common.ImageBuffer, x, y, w, h int) {
 			called = true
-			return "GAME OUTPUT"
+			buf.WriteString(x, y, "GAME OUTPUT", nil, nil, common.AttrNone)
 		}, nil)
 	output := gw.Window.Render(0, 0, 20, 3, DefaultTheme().LayerAt(0))
 	if !called {
@@ -210,9 +210,9 @@ func TestReconcileCacheSkipsStaticSubtree(t *testing.T) {
 	}
 
 	viewCallCount := 0
-	viewFn := func(w, h int) string {
+	viewFn := func(buf *common.ImageBuffer, x, y, w, h int) {
 		viewCallCount++
-		return "frame"
+		buf.WriteString(x, y, "frame", nil, nil, common.AttrNone)
 	}
 
 	gw1 := ReconcileGameWindow(nil, tree, viewFn, nil)
@@ -266,7 +266,7 @@ func TestReconcileCacheInvalidatesOnChange(t *testing.T) {
 		},
 	}
 
-	gw1 := ReconcileGameWindow(nil, tree1, func(w, h int) string { return "" }, nil)
+	gw1 := ReconcileGameWindow(nil, tree1, func(buf *common.ImageBuffer, x, y, w, h int) {}, nil)
 
 	// Change the label text — hash should differ, so it gets rebuilt.
 	tree2 := &common.WidgetNode{
@@ -277,7 +277,7 @@ func TestReconcileCacheInvalidatesOnChange(t *testing.T) {
 		},
 	}
 
-	gw2 := ReconcileGameWindow(gw1, tree2, func(w, h int) string { return "" }, nil)
+	gw2 := ReconcileGameWindow(gw1, tree2, func(buf *common.ImageBuffer, x, y, w, h int) {}, nil)
 
 	cached1 := gw1.controls["0.0"]
 	cached2 := gw2.controls["0.0"]

@@ -15,7 +15,7 @@ import (
 type GameNCWindow struct {
 	Window   *NCWindow
 	controls map[string]ncCachedControl // keyed by tree path for reuse
-	viewFn   func(w, h int) string      // game's View() function
+	renderFn func(buf *common.ImageBuffer, x, y, w, h int) // game's Render() function
 	onInput  func(action string)        // bound to game.OnInput(playerID, ...)
 }
 
@@ -45,12 +45,12 @@ func (gw *GameNCWindow) HasFocusable() bool {
 func ReconcileGameWindow(
 	prev *GameNCWindow,
 	tree *common.WidgetNode,
-	viewFn func(w, h int) string,
+	renderFn func(buf *common.ImageBuffer, x, y, w, h int),
 	onInput func(action string),
 ) *GameNCWindow {
 	gw := &GameNCWindow{
 		controls: make(map[string]ncCachedControl),
-		viewFn:   viewFn,
+		renderFn: renderFn,
 		onInput:  onInput,
 	}
 
@@ -285,7 +285,7 @@ func (gw *GameNCWindow) buildTextView(node *common.WidgetNode, path string, prev
 
 func (gw *GameNCWindow) buildGameView(node *common.WidgetNode) *NCGameView {
 	return &NCGameView{
-		ViewFn:    gw.viewFn,
+		RenderFn:  gw.renderFn,
 		OnKey:     gw.onInput,
 		focusable: node.IsFocusable,
 	}

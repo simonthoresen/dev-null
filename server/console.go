@@ -376,7 +376,7 @@ func (m *consoleModel) View() tea.View {
 	primary := t.LayerAt(0)   // desktop
 	secondary := t.LayerAt(1) // menus, status bar
 
-	buf := NewImageBuffer(m.width, m.height)
+	buf := common.NewImageBuffer(m.width, m.height)
 
 	// NC action bar (row 0) — PaintANSI the string into the buffer.
 	menus := m.consoleMenus()
@@ -407,33 +407,33 @@ func (m *consoleModel) View() tea.View {
 	statusText := fmt.Sprintf("game: %s | players: %d | uptime %s | %s", gameLabel, m.app.state.PlayerCount(), m.app.uptime(), time.Now().Format("15:04:05"))
 	sbFg := secondary.FgC()
 	sbBg := secondary.BgC()
-	buf.Fill(0, m.height-1, m.width, 1, ' ', sbFg, sbBg, AttrNone)
+	buf.Fill(0, m.height-1, m.width, 1, ' ', sbFg, sbBg, common.AttrNone)
 	// Right-align status text.
 	statusRow := m.height - 1
 	startX := m.width - len(statusText)
 	if startX < 0 {
 		startX = 0
 	}
-	buf.WriteString(startX, statusRow, statusText, sbFg, sbBg, AttrNone)
+	buf.WriteString(startX, statusRow, statusText, sbFg, sbBg, common.AttrNone)
 
 	// Overlay layers: render to sub-buffers, blit, then recolor for shadow.
 	shadowFg := t.ShadowFgC()
 	shadowBg := t.ShadowBgC()
 	if m.overlay.openMenu >= 0 {
 		if dd := m.overlay.renderDropdown(menus, 0, secondary); dd.content != "" {
-			sub := NewImageBuffer(dd.width, dd.height)
+			sub := common.NewImageBuffer(dd.width, dd.height)
 			sub.PaintANSI(0, 0, dd.width, dd.height, dd.content, secondary.FgC(), secondary.BgC())
 			buf.Blit(dd.col, dd.row, sub)
-			blitShadow(buf, dd.col, dd.row, dd.width, dd.height, shadowFg, shadowBg)
+			common.BlitShadow(buf, dd.col, dd.row, dd.width, dd.height, shadowFg, shadowBg)
 		}
 	}
 	if m.overlay.hasDialog() {
 		if dlg := m.overlay.renderDialog(m.width, m.height, t.LayerAt(2)); dlg.content != "" {
-			sub := NewImageBuffer(dlg.width, dlg.height)
+			sub := common.NewImageBuffer(dlg.width, dlg.height)
 			dlgLayer := t.LayerAt(2)
 			sub.PaintANSI(0, 0, dlg.width, dlg.height, dlg.content, dlgLayer.FgC(), dlgLayer.BgC())
 			buf.Blit(dlg.col, dlg.row, sub)
-			blitShadow(buf, dlg.col, dlg.row, dlg.width, dlg.height, shadowFg, shadowBg)
+			common.BlitShadow(buf, dlg.col, dlg.row, dlg.width, dlg.height, shadowFg, shadowBg)
 		}
 	}
 

@@ -1,10 +1,10 @@
 package server
 
 import (
-	"unicode/utf8"
-
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+
+	"null-space/common"
 )
 
 // ─── Core interfaces ──────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ type NCControl interface {
 	// Render writes the control's content into buf at position (x, y)
 	// within the given (width × height) region. focused is true when this
 	// control currently has keyboard focus.
-	Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer)
+	Render(buf *common.ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer)
 	// Update handles a tea.Msg. Only called when this control has focus.
 	Update(msg tea.Msg)
 	// MinSize returns the minimum (width, height) this control needs.
@@ -86,13 +86,13 @@ type NCWindow struct {
 // Returns the string representation for backward compatibility with callers
 // that have not yet been migrated to use ImageBuffer directly.
 func (w *NCWindow) Render(x, y, width, height int, layer *ThemeLayer) string {
-	buf := NewImageBuffer(width, height)
+	buf := common.NewImageBuffer(width, height)
 	w.RenderToBuf(buf, x, y, width, height, layer)
 	return buf.ToString()
 }
 
 // RenderToBuf draws the window into the given buffer at absolute position (x, y).
-func (w *NCWindow) RenderToBuf(buf *ImageBuffer, x, y, width, height int, layer *ThemeLayer) {
+func (w *NCWindow) RenderToBuf(buf *common.ImageBuffer, x, y, width, height int, layer *ThemeLayer) {
 	w.screenX = x
 	w.screenY = y
 	w.width = width
@@ -106,37 +106,37 @@ func (w *NCWindow) RenderToBuf(buf *ImageBuffer, x, y, width, height int, layer 
 	hlBg := layer.HighlightBgC()
 
 	// Fill inner area with base bg.
-	buf.Fill(x, y, width, height, ' ', fg, bg, AttrNone)
+	buf.Fill(x, y, width, height, ' ', fg, bg, common.AttrNone)
 
 	// Top border row.
-	buf.SetChar(x, y, runeOf(layer.OTL()), fg, bg, AttrNone)
-	buf.SetChar(x+width-1, y, runeOf(layer.OTR()), fg, bg, AttrNone)
+	buf.SetChar(x, y, common.RuneOf(layer.OTL()), fg, bg, common.AttrNone)
+	buf.SetChar(x+width-1, y, common.RuneOf(layer.OTR()), fg, bg, common.AttrNone)
 	if w.Title != "" {
 		titleText := " " + w.Title + " "
-		buf.SetChar(x+1, y, runeOf(layer.IH()), fg, bg, AttrNone)
-		n := buf.WriteString(x+2, y, titleText, hlFg, hlBg, AttrBold)
+		buf.SetChar(x+1, y, common.RuneOf(layer.IH()), fg, bg, common.AttrNone)
+		n := buf.WriteString(x+2, y, titleText, hlFg, hlBg, common.AttrBold)
 		for col := x + 2 + n; col < x+width-1; col++ {
-			buf.SetChar(col, y, runeOf(layer.OH()), fg, bg, AttrNone)
+			buf.SetChar(col, y, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
 		}
 	} else {
 		for col := x + 1; col < x+width-1; col++ {
-			buf.SetChar(col, y, runeOf(layer.OH()), fg, bg, AttrNone)
+			buf.SetChar(col, y, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
 		}
 	}
 
 	// Bottom border row.
 	boty := y + height - 1
-	buf.SetChar(x, boty, runeOf(layer.OBL()), fg, bg, AttrNone)
-	buf.SetChar(x+width-1, boty, runeOf(layer.OBR()), fg, bg, AttrNone)
+	buf.SetChar(x, boty, common.RuneOf(layer.OBL()), fg, bg, common.AttrNone)
+	buf.SetChar(x+width-1, boty, common.RuneOf(layer.OBR()), fg, bg, common.AttrNone)
 	for col := x + 1; col < x+width-1; col++ {
-		buf.SetChar(col, boty, runeOf(layer.OH()), fg, bg, AttrNone)
+		buf.SetChar(col, boty, common.RuneOf(layer.OH()), fg, bg, common.AttrNone)
 	}
 
 	// Left and right border columns.
-	vr := runeOf(layer.OV())
+	vr := common.RuneOf(layer.OV())
 	for row := y + 1; row < boty; row++ {
-		buf.SetChar(x, row, vr, fg, bg, AttrNone)
-		buf.SetChar(x+width-1, row, vr, fg, bg, AttrNone)
+		buf.SetChar(x, row, vr, fg, bg, common.AttrNone)
+		buf.SetChar(x+width-1, row, vr, fg, bg, common.AttrNone)
 	}
 
 	// Compute grid layout.
@@ -153,14 +153,6 @@ func (w *NCWindow) RenderToBuf(buf *ImageBuffer, x, y, width, height int, layer 
 	}
 }
 
-// runeOf returns the first rune from a string, or ' ' if empty.
-func runeOf(s string) rune {
-	r, _ := utf8.DecodeRuneInString(s)
-	if r == utf8.RuneError || r == 0 {
-		return ' '
-	}
-	return r
-}
 
 // computeGrid determines column widths and row heights.
 func (w *NCWindow) computeGrid() {

@@ -1,4 +1,4 @@
-package server
+package common
 
 import (
 	"image/color"
@@ -43,7 +43,7 @@ func TestSetChar(t *testing.T) {
 	buf := NewImageBuffer(3, 1)
 	buf.SetChar(1, 0, 'X', red, blue, AttrBold)
 	c := buf.Pixels[1]
-	if c.Char != 'X' || !colorEq(c.Fg, red) || !colorEq(c.Bg, blue) || c.Attr != AttrBold {
+	if c.Char != 'X' || !ColorEq(c.Fg, red) || !ColorEq(c.Bg, blue) || c.Attr != AttrBold {
 		t.Errorf("SetChar did not write correctly: %+v", c)
 	}
 	// Out of bounds should be silent.
@@ -57,7 +57,7 @@ func TestFill(t *testing.T) {
 	// Check filled cells.
 	for _, pos := range [][2]int{{1, 1}, {2, 1}, {1, 2}, {2, 2}} {
 		c := buf.at(pos[0], pos[1])
-		if c.Char != '#' || !colorEq(c.Fg, red) {
+		if c.Char != '#' || !ColorEq(c.Fg, red) {
 			t.Errorf("Fill at (%d,%d): got %+v", pos[0], pos[1], *c)
 		}
 	}
@@ -106,7 +106,7 @@ func TestBlit(t *testing.T) {
 	// Check blitted cells.
 	for _, pos := range [][2]int{{1, 1}, {2, 1}, {1, 2}, {2, 2}} {
 		c := dst.at(pos[0], pos[1])
-		if c.Char != 'X' || !colorEq(c.Fg, red) || !colorEq(c.Bg, blue) {
+		if c.Char != 'X' || !ColorEq(c.Fg, red) || !ColorEq(c.Bg, blue) {
 			t.Errorf("Blit at (%d,%d): got %+v", pos[0], pos[1], *c)
 		}
 	}
@@ -133,14 +133,14 @@ func TestRecolorRect(t *testing.T) {
 	buf.WriteString(0, 0, "ABC", red, blue, AttrBold)
 	buf.RecolorRect(1, 0, 1, 1, green, white, AttrFaint)
 
-	if buf.at(0, 0).Char != 'A' || !colorEq(buf.at(0, 0).Fg, red) {
+	if buf.at(0, 0).Char != 'A' || !ColorEq(buf.at(0, 0).Fg, red) {
 		t.Error("col 0 should be unchanged")
 	}
 	c := buf.at(1, 0)
 	if c.Char != 'B' {
 		t.Error("char should be preserved")
 	}
-	if !colorEq(c.Fg, green) || !colorEq(c.Bg, white) || c.Attr != AttrFaint {
+	if !ColorEq(c.Fg, green) || !ColorEq(c.Bg, white) || c.Attr != AttrFaint {
 		t.Errorf("RecolorRect did not update style: %+v", *c)
 	}
 }
@@ -218,7 +218,7 @@ func TestPaintANSIReset(t *testing.T) {
 		t.Error("expected non-nil fg on 'R'")
 	}
 	// 'N' should have default fg (red, as passed to PaintANSI).
-	if !colorEq(buf.at(1, 0).Fg, red) {
+	if !ColorEq(buf.at(1, 0).Fg, red) {
 		t.Error("expected default fg after reset")
 	}
 }
@@ -281,19 +281,19 @@ func TestToStringRLE(t *testing.T) {
 }
 
 func TestColorEq(t *testing.T) {
-	if !colorEq(nil, nil) {
+	if !ColorEq(nil, nil) {
 		t.Error("nil == nil should be true")
 	}
-	if colorEq(nil, red) {
+	if ColorEq(nil, red) {
 		t.Error("nil != red")
 	}
-	if colorEq(red, nil) {
+	if ColorEq(red, nil) {
 		t.Error("red != nil")
 	}
-	if !colorEq(red, color.RGBA{R: 255, A: 255}) {
+	if !ColorEq(red, color.RGBA{R: 255, A: 255}) {
 		t.Error("same red should be equal")
 	}
-	if colorEq(red, green) {
+	if ColorEq(red, green) {
 		t.Error("red != green")
 	}
 }
