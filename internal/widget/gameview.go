@@ -8,7 +8,8 @@ import (
 )
 
 // GameView wraps a game's Render() function as a Control. When focused,
-// non-Tab keys are forwarded to the game via OnKey.
+// non-Tab keys are forwarded to the game via OnKey. Enter triggers a
+// focus cycle (to move to the command input for chat).
 type GameView struct {
 	RenderFn             func(buf *common.ImageBuffer, x, y, w, h int)
 	OnKey                func(key string) // bound to game.OnInput(playerID, key)
@@ -16,6 +17,7 @@ type GameView struct {
 	WantTab, WantBackTab bool
 }
 
+func (g *GameView) SetFocusable(v bool) { g.focusable = v }
 func (g *GameView) Focusable() bool     { return g.focusable }
 func (g *GameView) MinSize() (int, int) { return 1, 1 }
 func (g *GameView) TabWant() (bool, bool) {
@@ -30,6 +32,9 @@ func (g *GameView) Update(msg tea.Msg) {
 	g.WantBackTab = false
 	if km, ok := msg.(tea.KeyPressMsg); ok {
 		switch km.String() {
+		case "enter":
+			// Enter moves focus to the command input for chat.
+			g.WantTab = true
 		case "tab":
 			g.WantTab = true
 		case "shift+tab":

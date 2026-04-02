@@ -138,6 +138,7 @@ type CommandInput struct {
 	TextInput // embeds the basic text input and rendering
 
 	OnTab func(current string) (string, bool) // tab completion callback
+	OnEsc func()                              // called on Esc (after clearing value)
 
 	History      []string
 	MaxHistory   int
@@ -178,6 +179,9 @@ func (ci *CommandInput) Update(msg tea.Msg) {
 			ci.Model.SetValue("")
 			ci.historyIdx = -1
 			ci.historyDraft = ""
+			if ci.OnEsc != nil {
+				ci.OnEsc()
+			}
 			return
 		case "up":
 			if len(ci.History) == 0 {

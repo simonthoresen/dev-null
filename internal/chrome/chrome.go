@@ -71,10 +71,6 @@ func SetInputStyle(input *textinput.Model, bg, fg color.Color) {
 	input.SetVirtualCursor(false) // use real terminal cursor; see comment above
 }
 
-const (
-	modeIdle  = 0
-	modeInput = 1
-)
 
 
 // Model is the Bubble Tea model for a player's chrome (lobby, game viewport, etc.).
@@ -82,24 +78,18 @@ type Model struct {
 	api      ServerAPI
 	playerID string
 	IsLocal  bool // true for local mode, false for SSH
-	width    int
-	height   int
-	mode     int
+	width  int
+	height int
 
 	// inActiveGame is true when this player is participating in the current game.
 	// Late joiners (connected after GameLoadedMsg) stay in lobby mode.
 	inActiveGame bool
 
-	chat  viewport.Model
-	input textinput.Model
+	chat viewport.Model
 
 	chatLines        []string // buffered chat lines visible to this player (max 200)
 	chatScrollOffset int      // lines scrolled up from bottom (0 = bottom)
 	chatH            int      // current chat panel height (updated in resizeViewports)
-
-	inputHistory []string // submitted inputs, oldest first (max 50)
-	historyIdx   int      // index into inputHistory while browsing; -1 = not browsing
-	historyDraft string   // input text saved before starting history browse
 
 	tabPrefix     string
 	tabCandidates []string
@@ -136,6 +126,15 @@ type Model struct {
 	lobbyScreen    *widget.Screen
 	lobbyMenuBar   *widget.MenuBar
 	lobbyStatusBar *widget.StatusBar
+
+	// Playing view NC controls.
+	playingScreen    *widget.Screen
+	playingMenuBar   *widget.MenuBar
+	playingStatusBar *widget.StatusBar
+	playingWindow    *widget.Window
+	playingGameView  *widget.GameView
+	playingChatView  *widget.TextView
+	playingInput     *widget.CommandInput
 
 	// Cached menu tree — rebuilt only on invalidation.
 	menuCache     []common.MenuDef
@@ -206,28 +205,88 @@ func NewModel(api ServerAPI, playerID string) Model {
 		StatusBar: lobbyStatusBar,
 	}
 
+	// Playing view NC controls.
+	playingInputModel := new(textinput.Model)
+	*playingInputModel = textinput.New()
+	playingInputModel.Prompt = ""
+	playingInputModel.Placeholder = ""
+	playingInputModel.CharLimit = 256
+	playingInputModel.SetWidth(78)
+	playingInputCtrl := &widget.CommandInput{TextInput: widget.TextInput{Model: playingInputModel}}
+
+	playingGameView := &widget.GameView{}
+	playingGameView.SetFocusable(true)
+	playingChatView := &widget.TextView{BottomAlign: true, Scrollable: true}
+	playingWindow := &widget.Window{
+		FocusIdx: 0, // gameview focused by default
+		Children: []widget.GridChild{
+			{Control: playingGameView, TabIndex: 0, Constraint: widget.GridConstraint{
+				Col: 0, Row: 0, WeightX: 1, Fill: widget.FillBoth,
+			}},
+			{Control: &widget.HDivider{Connected: true}, Constraint: widget.GridConstraint{
+				Col: 0, Row: 1, MinH: 1, Fill: widget.FillHorizontal,
+			}},
+			{Control: playingChatView, TabIndex: 1, Constraint: widget.GridConstraint{
+				Col: 0, Row: 2, WeightX: 1, WeightY: 1, Fill: widget.FillBoth,
+			}},
+			{Control: &widget.HDivider{Connected: true}, Constraint: widget.GridConstraint{
+				Col: 0, Row: 3, MinH: 1, Fill: widget.FillHorizontal,
+			}},
+			{Control: playingInputCtrl, TabIndex: 2, Constraint: widget.GridConstraint{
+				Col: 0, Row: 4, WeightX: 1, Fill: widget.FillHorizontal,
+			}},
+		},
+	}
+	playingMenuBar := &widget.MenuBar{}
+	playingStatusBar := &widget.StatusBar{}
+	playingScreen := &widget.Screen{
+		MenuBar:   playingMenuBar,
+		Window:    playingWindow,
+		StatusBar: playingStatusBar,
+	}
+
 	m := Model{
-		api:            api,
-		playerID:       playerID,
-		chat:           chat,
-		input:          input,
-		teamEditInput:  teamInput,
-		historyIdx:     -1,
-		theme:          theme.Default(),
+		api:           api,
+		playerID:      playerID,
+		chat:          chat,
+		teamEditInput: teamInput,
+		theme:         theme.Default(),
 		overlay:        widget.OverlayState{OpenMenu: -1},
 		lobbyWindow:    lobbyWindow,
 		lobbyChatView:  lobbyChatView,
 		lobbyTeamPanel: lobbyTeamPanel,
 		lobbyInput:     lobbyInputCtrl,
-		lobbyScreen:    lobbyScreen,
-		lobbyMenuBar:   lobbyMenuBar,
-		lobbyStatusBar: lobbyStatusBar,
+		lobbyScreen:      lobbyScreen,
+		lobbyMenuBar:     lobbyMenuBar,
+		lobbyStatusBar:   lobbyStatusBar,
+		playingScreen:    playingScreen,
+		playingMenuBar:   playingMenuBar,
+		playingStatusBar: playingStatusBar,
+		playingWindow:    playingWindow,
+		playingGameView:  playingGameView,
+		playingChatView:  playingChatView,
+		playingInput:     playingInputCtrl,
 	}
 	lobbyMenuBar.Overlay = &m.overlay
+	playingMenuBar.Overlay = &m.overlay
 
 	// Wire lobby command input callbacks.
 	lobbyInputCtrl.OnSubmit = m.dispatchInput
 	lobbyInputCtrl.OnTab = m.lobbyTabComplete
+
+	// Wire playing command input callbacks.
+	playingInputCtrl.OnSubmit = func(text string) {
+		m.dispatchInput(text)
+		// Return focus to gameview after submitting.
+		m.playingWindow.FocusIdx = 0
+		m.playingInput.Model.Blur()
+	}
+	playingInputCtrl.OnEsc = func() {
+		// Return focus to gameview on Esc.
+		m.playingWindow.FocusIdx = 0
+		m.playingInput.Model.Blur()
+	}
+	playingInputCtrl.OnTab = m.lobbyTabComplete // same tab completion logic
 
 	// Wire team panel callbacks.
 	lobbyTeamPanel.OnMoveToTeam = func(teamIdx int) {
@@ -261,10 +320,6 @@ func NewModel(api ServerAPI, playerID string) Model {
 	}
 
 	m.syncChat()
-	// Always start in lobby/input mode. GameLoadedMsg will transition
-	// participating players into game mode. Late joiners stay in lobby.
-	SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
-	m.mode = modeInput
 	m.lobbyInput.Model.Focus()
 	return m
 }
@@ -359,10 +414,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// This player was connected when the game loaded — they're in the game.
 		m.inActiveGame = true
 		m.invalidateMenuCache()
-		SetInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
-		m.mode = modeIdle
 		m.lobbyInput.Model.Blur()
-		m.input.Blur()
+		// Focus the playing gameview.
+		m.playingWindow.FocusIdx = 0
 		m.resizeViewports()
 		return m, nil
 
@@ -371,6 +425,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.invalidateMenuCache()
 		m.lobbyWindow.FocusIdx = 4 // lobbyInput
 		cmd := m.lobbyInput.Model.Focus()
+		m.playingInput.Model.Blur()
 		m.resizeViewports()
 		return m, cmd
 
@@ -380,9 +435,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Phase == common.PhaseNone {
 			m.inActiveGame = false
-			SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
-			m.mode = modeInput
-			cmd := m.input.Focus()
+			m.lobbyWindow.FocusIdx = 4
+			cmd := m.lobbyInput.Model.Focus()
 			m.resizeViewports()
 			return m, cmd
 		}
@@ -396,11 +450,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseClickMsg:
 		// NC overlay gets first crack at mouse clicks (menus, dialogs).
 		if msg.Button == tea.MouseLeft {
-			ncBarRow := 0 // NC bar is at row 0 in lobby, row 1 in-game
-			if m.inActiveGame {
-				ncBarRow = 1
-			}
-			if m.overlay.HandleClick(msg.X, msg.Y, ncBarRow, m.width, m.height, m.cachedMenus(), m.playerID) {
+			if m.overlay.HandleClick(msg.X, msg.Y, 0, m.width, m.height, m.cachedMenus(), m.playerID) {
 				return m, nil
 			}
 		}
@@ -441,18 +491,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Forward other messages to textinput for cursor blink etc.
 	if !m.inActiveGame {
-		// Lobby: forward to lobby command input.
 		updated, cmd := m.lobbyInput.Model.Update(msg)
 		*m.lobbyInput.Model = updated
 		return m, cmd
 	}
-	if m.mode == modeInput {
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
-		return m, cmd
-	}
-
-	return m, nil
+	// Playing: forward to playing command input (for cursor blink).
+	updated, cmd := m.playingInput.Model.Update(msg)
+	*m.playingInput.Model = updated
+	return m, cmd
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -528,117 +574,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.mode == modeIdle {
-		key := msg.String()
-
-		// If a game NC control has focus, route keys to it.
-		if m.gameWindow != nil && m.gameWindow.Window.FocusIdx >= 0 {
-			if key == "esc" {
-				// Esc blurs all game controls, returning to raw OnInput mode.
-				m.gameWindow.Window.FocusIdx = -1
-				return m, nil
-			}
-			cmd := m.gameWindow.Window.HandleUpdate(msg)
-			return m, cmd
-		}
-
-		// Tab/Shift-Tab cycle focus among game controls (if any).
-		if key == "tab" && m.gameWindow != nil && m.gameWindow.HasFocusable() {
-			cmd := m.gameWindow.Window.CycleFocus()
-			return m, cmd
-		}
-		if key == "shift+tab" && m.gameWindow != nil && m.gameWindow.HasFocusable() {
-			cmd := m.gameWindow.Window.CycleFocusBack()
-			return m, cmd
-		}
-
-		switch key {
-		case "enter":
-			SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
-			m.mode = modeInput
-			cmd := m.input.Focus()
-			return m, cmd
-		default:
-			// route to game
-			m.api.State().RLock()
-			game := m.api.State().ActiveGame
-			m.api.State().RUnlock()
-			if game != nil {
-				// Bubble Tea v2 returns "space" for spacebar; normalize to " "
-				// so game scripts can use the intuitive key === " " check.
-				if key == "space" {
-					key = " "
-				}
-				game.OnInput(m.playerID, key)
-			}
-			return m, nil
-		}
+	// Playing: delegate to the playing NCWindow which routes to the focused child
+	// (GameView, NCCommandInput, or NC-tree controls).
+	cmd := m.playingWindow.HandleUpdate(msg)
+	// Reset tab candidates on non-tab keys.
+	if msg.String() != "tab" {
+		m.tabCandidates = nil
 	}
-
-	// modeInput
-	switch msg.String() {
-	case "esc":
-		m.tabCandidates = nil
-		m.historyIdx = -1
-		m.historyDraft = ""
-		m.input.SetValue("")
-		if m.inActiveGame {
-			SetInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
-			m.mode = modeIdle
-			m.input.Blur()
-		}
-		return m, nil
-	case "enter":
-		m.tabCandidates = nil
-		m.historyIdx = -1
-		m.historyDraft = ""
-		m.submitInput()
-		return m, nil
-	case "up":
-		if len(m.inputHistory) == 0 {
-			return m, nil
-		}
-		if m.historyIdx == -1 {
-			m.historyDraft = m.input.Value()
-			m.historyIdx = len(m.inputHistory) - 1
-		} else if m.historyIdx > 0 {
-			m.historyIdx--
-		}
-		m.input.SetValue(m.inputHistory[m.historyIdx])
-		m.input.CursorEnd()
-		return m, nil
-	case "down":
-		if m.historyIdx == -1 {
-			return m, nil
-		}
-		if m.historyIdx < len(m.inputHistory)-1 {
-			m.historyIdx++
-			m.input.SetValue(m.inputHistory[m.historyIdx])
-		} else {
-			m.historyIdx = -1
-			m.input.SetValue(m.historyDraft)
-		}
-		m.input.CursorEnd()
-		return m, nil
-	case "tab":
-		if strings.HasPrefix(m.input.Value(), "/") {
-			if m.tabCandidates == nil {
-				m.tabPrefix, m.tabCandidates = m.api.TabCandidates(m.input.Value(), m.api.State().PlayerNames())
-				m.tabIndex = 0
-			}
-			if len(m.tabCandidates) > 0 {
-				m.input.SetValue(m.tabPrefix + m.tabCandidates[m.tabIndex])
-				m.input.CursorEnd()
-				m.tabIndex = (m.tabIndex + 1) % len(m.tabCandidates)
-			}
-		}
-		return m, nil
-	default:
-		m.tabCandidates = nil
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
-		return m, cmd
-	}
+	return m, cmd
 }
 
 func (m Model) handleTeamEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -788,23 +731,12 @@ func (m Model) View() tea.View {
 	m.api.State().RUnlock()
 
 	barLayer := m.theme.LayerAt(1) // secondary: menu bar, status bar, command bar
-	bodyLayer := m.theme.LayerAt(0) // primary: content areas
 
 	mbStyle := barLayer.HighlightStyle()
-	chStyle := bodyLayer.BaseStyle()
 	ciStyle := barLayer.BaseStyle()
 
-	if !m.inActiveGame || phase == common.PhaseNone {
-		if m.mode == modeInput {
-			SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
-		}
-		if m.teamEditing {
-			SetInputStyle(&m.teamEditInput, m.theme.LayerAt(0).InputBgC(), m.theme.LayerAt(0).InputFgC())
-		}
-	} else if m.mode == modeInput {
-		SetInputStyle(&m.input, m.theme.LayerAt(1).HighlightBgC(), m.theme.LayerAt(1).HighlightFgC())
-	} else {
-		SetInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
+	if (!m.inActiveGame || phase == common.PhaseNone) && m.teamEditing {
+		SetInputStyle(&m.teamEditInput, m.theme.LayerAt(0).InputBgC(), m.theme.LayerAt(0).InputFgC())
 	}
 
 	// Build menus once per frame — passed to sub-views and overlay rendering.
@@ -821,7 +753,7 @@ func (m Model) View() tea.View {
 		content := m.viewGameOver(menus, game, gameName, mbStyle, ciStyle)
 		buf.PaintANSI(0, 0, m.width, m.height, content, nil, nil)
 	} else {
-		m.renderPlaying(buf, menus, game, gameName, mbStyle, chStyle, ciStyle)
+		m.renderPlaying(buf, menus, game, gameName)
 	}
 
 	// Post-processing shaders: run in sequence on the fully-rendered buffer.
@@ -832,11 +764,7 @@ func (m Model) View() tea.View {
 	shadowBg := m.theme.ShadowBgC()
 	if m.overlay.OpenMenu >= 0 {
 		menuLayer := m.theme.LayerAt(1)
-		ncBarRow := 0 // menu bar row (Screen puts it at row 0)
-		if m.inActiveGame && phase != common.PhaseNone {
-			ncBarRow = 1 // playing view: game name row + menu bar
-		}
-		if dd := m.overlay.RenderDropdown(menus, ncBarRow, menuLayer); dd.Content != "" {
+		if dd := m.overlay.RenderDropdown(menus, 0, menuLayer); dd.Content != "" {
 			sub := common.NewImageBuffer(dd.Width, dd.Height)
 			sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, menuLayer.FgC(), menuLayer.BgC())
 			buf.Blit(dd.Col, dd.Row, sub)
@@ -867,10 +795,14 @@ func (m Model) View() tea.View {
 				view.Cursor = cursor
 			}
 		}
-	} else if m.mode == modeInput && !isLobby {
-		if cursor := m.input.Cursor(); cursor != nil {
-			cursor.Position.Y = m.height - 2 // row above framework status bar
-			view.Cursor = cursor
+	} else if !isLobby && m.playingWindow.FocusIdx == 4 {
+		// Playing command input has focus — show cursor.
+		if cx, cy, visible := m.playingWindow.CursorPosition(); visible {
+			if cursor := m.playingInput.Model.Cursor(); cursor != nil {
+				cursor.Position.X = cx
+				cursor.Position.Y = cy
+				view.Cursor = cursor
+			}
 		}
 	}
 	if isLobby && m.teamEditing {
@@ -1005,73 +937,51 @@ func (m Model) viewGameOver(menus []common.MenuDef, game common.Game, gameName s
 	return lipgloss.JoinVertical(lipgloss.Left, menuBar, ncBar, viewport, cmdBar, statusBar)
 }
 
-func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, game common.Game, gameName string, mbStyle, chStyle, ciStyle lipgloss.Style) {
-	// Row layout: menuBar(1) + ncBar(1) + gameStatusBar(1) + game(gameH) + chat(chatH) + cmdBar(1) + statusBar(1)
-	// = 5 + gameH + chatH = m.height
-
-	// Available rows: total - menu bar - NC bar - game status bar - command bar - status bar
+func (m Model) renderPlaying(buf *common.ImageBuffer, menus []common.MenuDef, game common.Game, gameName string) {
+	// Compute game viewport height (16:9 aspect ratio with min chat height).
+	// Window interior = total - menuBar(1) - statusBar(1) - topBorder(1) - bottomBorder(1) = height - 4
+	// Interior rows: gameView + divider(1) + chat + divider(1) + cmdInput(1) = gameH + chatH + 3
+	interiorH := m.height - 4 // screen chrome (menu bar, status bar) + window borders
 	gameH := m.width * 9 / 16
-	chatH := m.height - 5 - gameH
-	minChatH := max(5, (m.height-5)/3)
+	chatH := interiorH - 3 - gameH // 3 = two dividers + command input
+	minChatH := max(5, interiorH/3)
 	if chatH < minChatH {
 		chatH = minChatH
-		gameH = m.height - 4 - chatH
-		if gameH < 0 {
-			gameH = 0
-		}
+		gameH = interiorH - 3 - chatH
+	}
+	if gameH < 1 {
+		gameH = 1
 	}
 
-	row := 0
+	// Update gameview constraint for aspect-ratio sizing.
+	m.playingWindow.Children[0].Constraint.MinH = gameH
 
-	// Row 0: menu bar.
-	menuBar := mbStyle.Width(m.width).Render(truncateStyled(gameName, m.width))
-	buf.PaintANSI(0, row, m.width, 1, menuBar, nil, nil)
-	row++
-
-	// Row 1: NC action bar.
-	ncBar := m.overlay.RenderMenuBar(m.width, menus, m.theme.LayerAt(1))
-	buf.PaintANSI(0, row, m.width, 1, ncBar, nil, nil)
-	row++
-
-	// Row 2: game status bar.
-	gameStatusBar := mbStyle.Bold(false).Width(m.width).Render(game.StatusBar(m.playerID))
-	buf.PaintANSI(0, row, m.width, 1, gameStatusBar, nil, nil)
-	row++
-
-	// Rows 3..3+gameH: game viewport — render directly into the buffer.
-	if ncTree := game.RenderNC(m.playerID, m.width, gameH); ncTree != nil {
-		m.gameWindow = widget.ReconcileGameWindow(m.gameWindow, ncTree,
-			func(gbuf *common.ImageBuffer, bx, by, bw, bh int) { game.Render(gbuf, m.playerID, bx, by, bw, bh) },
-			func(action string) { game.OnInput(m.playerID, action) })
-		m.gameWindow.Window.RenderToBuf(buf, 0, row, m.width, gameH, m.theme.LayerAt(0))
-	} else {
-		m.gameWindow = nil
-		game.Render(buf, m.playerID, 0, row, m.width, gameH)
+	// Wire game rendering into the gameview.
+	m.playingGameView.RenderFn = func(gbuf *common.ImageBuffer, x, y, w, h int) {
+		game.Render(gbuf, m.playerID, x, y, w, h)
 	}
-	row += gameH
-
-	// Chat rows.
-	chatView := renderChatLines(m.chatLines, m.width, chatH, m.chatScrollOffset, chStyle)
-	buf.PaintANSI(0, row, m.width, chatH, chatView, nil, nil)
-	row += chatH
-
-	// Command bar.
-	var cmdBar string
-	if m.mode == modeInput {
-		cmdBar = truncateStyled(m.input.View(), m.width)
-	} else {
-		idleText := game.CommandBar(m.playerID)
-		if idleText == "" {
-			idleText = fmt.Sprintf("[Enter] to chat  | game: %s", gameName)
-		}
-		cmdBar = ciStyle.Width(m.width).Render(idleText)
+	m.playingGameView.OnKey = func(key string) {
+		game.OnInput(m.playerID, key)
 	}
-	buf.PaintANSI(0, row, m.width, 1, cmdBar, nil, nil)
-	row++
 
-	// Status bar.
-	statusBar := mbStyle.Width(m.width).Align(lipgloss.Right).Render(time.Now().Format("2006-01-02 15:04:05"))
-	buf.PaintANSI(0, row, m.width, 1, statusBar, nil, nil)
+	// TODO: handle RenderNC (NC-tree games) — for now, use direct render.
+	// When RenderNC is supported, the gameview child would be replaced with
+	// the reconciled NC tree controls.
+
+	// Update chat view.
+	m.playingChatView.Lines = m.chatLines
+	m.playingChatView.ScrollOffset = m.chatScrollOffset
+
+	// Update menu bar and status bar.
+	m.playingMenuBar.Menus = menus
+	m.playingStatusBar.LeftText = " " + game.StatusBar(m.playerID)
+	m.playingStatusBar.RightText = time.Now().Format("2006-01-02 15:04:05") + " "
+
+	// Render the full screen.
+	m.playingScreen.RenderToBuf(buf, 0, 0, m.width, m.height, m.theme)
+
+	// Sync chatScrollOffset back.
+	m.chatScrollOffset = m.playingChatView.ScrollOffset
 }
 
 // defaultSplashScreen renders a simple splash screen with the game name centered in a box.
@@ -1216,28 +1126,23 @@ func (m *Model) resizeViewports() {
 	phase := m.api.State().GetGamePhase()
 
 	if !m.inActiveGame || phase == common.PhaseNone {
-		// Lobby — NC bar (1) + window bottom border (1) + hdivider (1) + cmd bar (1) + status bar (1) = 5 overhead rows.
-		// But the NCWindow handles its own internal sizing. We just need chatH for scroll math.
+		// Lobby — chatH for scroll math.
 		windowH := m.height - 2 // minus menu bar and status bar
-		chatH := max(1, windowH-4) // -1 bottom border, -1 hdivider, -1 cmd bar, -1 vdivider overhead = approx
+		chatH := max(1, windowH-4) // approx: borders + divider + cmd bar
 		m.chatH = chatH
-		m.input.SetWidth(max(1, m.width-4))
 	} else if phase == common.PhasePlaying {
-		// NC bar + menu bar + game status bar + command bar + status bar = 5 overhead rows.
+		// Playing — Screen (menu bar + status bar = 2), window borders (2), dividers (2), cmd bar (1) = 7 overhead.
+		interiorH := m.height - 4
 		gameH := m.width * 9 / 16
-		chatH := m.height - 5 - gameH
-		minChatH := max(5, (m.height-5)/3)
+		chatH := interiorH - 3 - gameH
+		minChatH := max(5, interiorH/3)
 		if chatH < minChatH {
 			chatH = minChatH
 		}
 		m.chatH = chatH
-		m.chat.SetWidth(m.width)
-		m.chat.SetHeight(chatH)
 	} else {
-		// Splash or GameOver — no chat viewport needed.
 		m.chatH = 0
 	}
-	m.input.SetWidth(max(1, m.width-2))
 }
 
 // allMenus returns the full ordered list of menus for the NC action bar:
@@ -1354,20 +1259,8 @@ func (m *Model) showShaderDialog() {
 	})
 }
 
-func (m *Model) submitInput() {
-	text := strings.TrimSpace(m.input.Value())
-	m.input.SetValue("")
-	// In-game: return to idle after submit so keys route to the game.
-	if m.inActiveGame {
-		SetInputStyle(&m.input, m.theme.LayerAt(1).BgC(), m.theme.LayerAt(1).FgC())
-		m.mode = modeIdle
-		m.input.Blur()
-	}
-	m.dispatchInput(text)
-}
-
 // dispatchInput processes submitted text (commands, chat, plugins).
-// Called by both the lobby NCCommandInput and the playing-mode textinput.
+// Called by both the lobby and playing NCCommandInput controls.
 func (m *Model) dispatchInput(text string) {
 	if text == "" {
 		return
