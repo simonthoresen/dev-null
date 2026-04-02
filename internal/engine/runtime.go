@@ -94,11 +94,6 @@ type JSRuntime struct {
 	initFn           goja.Callable
 	startFn          goja.Callable
 
-	// suspend/resume
-	canSuspendProp bool
-	suspendFn      goja.Callable
-	resumeFn       goja.Callable
-
 	// gameOver() callback state — set by JS, detected by tick loop
 	gameOverPending bool
 	gameOverResults []domain.GameResult // results passed to gameOver()
@@ -228,13 +223,6 @@ func (r *JSRuntime) extractGameObject() error {
 			}
 		}
 	}
-
-	// Suspend/resume support (all optional)
-	if v := gameObj.Get("canSuspend"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
-		r.canSuspendProp = v.ToBoolean()
-	}
-	r.suspendFn = extractCallable(gameObj, "suspend")
-	r.resumeFn = extractCallable(gameObj, "resume")
 
 	// Read charmap property (string name, e.g. "pacman").
 	// Loads dist/charmaps/<name>/charmap.json if present.
@@ -526,44 +514,41 @@ func (r *JSRuntime) GameOverStateExport() any {
 	return r.gameOverState.Export()
 }
 
-// --- Suspend/resume ---
-
-func (r *JSRuntime) CanSuspend() bool {
-	return r.canSuspendProp
-}
-
-func (r *JSRuntime) Suspend() any {
-	if r.suspendFn == nil {
-		return nil
-	}
+// State returns the current value of the JS Game.state property.
+// The framework reads this for suspend (persisting session state) and for
+// client-side state replication. Returns nil if Game.state is not set.
+func (r *JSRuntime) State() any {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	defer r.recoverJS("Suspend")
-	defer TraceJS(r.vm, "Suspend")()
-	cancel := WatchdogJS(r.vm, "Suspend")
-	defer cancel()
-	val, err := r.suspendFn(goja.Undefined())
-	if err != nil {
-		slog.Error("JS Suspend error", "error", err)
+	gameVal := r.vm.Get("Game")
+	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
 		return nil
 	}
-	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
+	obj := gameVal.ToObject(r.vm)
+	if obj == nil {
 		return nil
 	}
-	return val.Export()
+	v := obj.Get("state")
+	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
+		return nil
+	}
+	return v.Export()
 }
 
-func (r *JSRuntime) Resume(sessionState any) {
-	if r.resumeFn == nil {
+// SetState replaces the JS Game.state property. Used by the framework to
+// restore state on cold resume after reloading the game JS.
+func (r *JSRuntime) SetState(state any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	gameVal := r.vm.Get("Game")
+	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	defer r.recoverJS("Resume")
-	defer TraceJS(r.vm, "Resume")()
-	cancel := WatchdogJS(r.vm, "Resume")
-	defer cancel()
-	_, _ = r.resumeFn(goja.Undefined(), r.vm.ToValue(sessionState))
+	obj := gameVal.ToObject(r.vm)
+	if obj == nil {
+		return
+	}
+	obj.Set("state", r.vm.ToValue(state))
 }
 
 // ChatCh returns the channel used by JS chat()/chatPlayer() to send messages.

@@ -294,12 +294,9 @@ func (a *Server) suspendGame(saveName string) error {
 	if game == nil || phase != domain.PhasePlaying {
 		return fmt.Errorf("no game is currently playing")
 	}
-	if !game.CanSuspend() {
-		return fmt.Errorf("this game does not support suspend/resume")
-	}
 
-	// Call suspend() on the game to get session state.
-	sessionState := game.Suspend()
+	// Read Game.state directly — no special suspend hook needed.
+	sessionState := game.State()
 
 	// Build the save.
 	a.state.RLock()
@@ -366,13 +363,11 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 	isWarm := currentGame != nil && currentName == gameName && currentPhase == domain.PhaseSuspended
 
 	if isWarm {
-		// Warm resume — runtime is alive, just unpause.
+		// Warm resume — runtime is alive, Game.state is intact. Just unpause.
 		// Re-register game commands.
 		for _, cmd := range currentGame.Commands() {
 			a.registry.Register(cmd)
 		}
-
-		currentGame.Resume(nil)
 
 		a.state.Lock()
 		a.state.GamePhase = domain.PhasePlaying
@@ -444,14 +439,18 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 		}
 	}()
 
-	// Call init with global saved state (high scores etc), then start, then resume.
+	// Call init with global saved state (high scores etc), then start.
 	globalState, err := state.LoadGameState(a.dataDir, gameName)
 	if err != nil {
 		a.serverLog(fmt.Sprintf("warning: could not load global state: %v", err))
 	}
 	rt.Init(globalState)
 	rt.Start()
-	rt.Resume(save.GameState)
+
+	// Restore Game.state from the suspend save.
+	if save.GameState != nil {
+		rt.SetState(save.GameState)
+	}
 
 	// Register game commands.
 	for _, cmd := range rt.Commands() {

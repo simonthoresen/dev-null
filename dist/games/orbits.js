@@ -9,12 +9,6 @@
 //
 // Each team gets its own camera. Players on the same team share a camera.
 
-var state = {
-    time: 0,
-    cameras: {},  // teamIndex → {x, y, zoom, tilt}
-    players: {},  // playerID → teamIndex
-    teamColors: []
-};
 
 // Orbital parameters
 var SUN = { radius: 30, color: "#FFD700" };
@@ -36,34 +30,41 @@ function defaultCamera() {
 }
 
 function getCamera(playerID) {
-    var teamIdx = state.players[playerID];
+    var teamIdx = Game.state.players[playerID];
     if (teamIdx === undefined) teamIdx = 0;
-    if (!state.cameras[teamIdx]) {
-        state.cameras[teamIdx] = defaultCamera();
+    if (!Game.state.cameras[teamIdx]) {
+        Game.state.cameras[teamIdx] = defaultCamera();
     }
-    return state.cameras[teamIdx];
+    return Game.state.cameras[teamIdx];
 }
 
 var Game = {
     gameName: "Orbits",
     teamRange: { min: 1, max: 8 },
 
+    state: {
+        time: 0,
+        cameras: {},  // teamIndex → {x, y, zoom, tilt}
+        players: {},  // playerID → teamIndex
+        teamColors: []
+    },
+
     init: function(savedState) {},
 
     start: function() {
         var t = teams();
-        state.teamColors = [];
+        Game.state.teamColors = [];
         for (var i = 0; i < t.length; i++) {
-            state.teamColors.push(t[i].color || "#FFFFFF");
-            state.cameras[i] = defaultCamera();
+            Game.state.teamColors.push(t[i].color || "#FFFFFF");
+            Game.state.cameras[i] = defaultCamera();
             for (var j = 0; j < t[i].players.length; j++) {
-                state.players[t[i].players[j].id] = i;
+                Game.state.players[t[i].players[j].id] = i;
             }
         }
     },
 
     onPlayerLeave: function(playerID) {
-        delete state.players[playerID];
+        delete Game.state.players[playerID];
     },
 
     onInput: function(playerID, key) {
@@ -83,7 +84,7 @@ var Game = {
     },
 
     update: function(dt) {
-        state.time += dt;
+        Game.state.time += dt;
     },
 
     // Cell-based render: fallback for regular SSH clients.
@@ -99,14 +100,14 @@ var Game = {
         var sunY = Math.round(cy - cam.y * cam.zoom * 0.1);
 
         // Planet orbit
-        var planetAngle = state.time * PLANET.speed;
+        var planetAngle = Game.state.time * PLANET.speed;
         var planetWX = Math.cos(planetAngle) * PLANET.orbitRadius * 0.1;
         var planetWY = Math.sin(planetAngle) * PLANET.orbitRadius * 0.1 * (1 - Math.abs(cam.tilt) * 0.5);
         var planetX = Math.round(sunX + planetWX * cam.zoom);
         var planetY = Math.round(sunY + planetWY * cam.zoom);
 
         // Moon orbit around planet
-        var moonAngle = state.time * MOON.speed;
+        var moonAngle = Game.state.time * MOON.speed;
         var moonWX = Math.cos(moonAngle) * MOON.orbitRadius * 0.1;
         var moonWY = Math.sin(moonAngle) * MOON.orbitRadius * 0.1 * (1 - Math.abs(cam.tilt) * 0.5);
         var moonX = Math.round(planetX + moonWX * cam.zoom);
@@ -126,7 +127,7 @@ var Game = {
         }
 
         // HUD
-        var teamIdx = state.players[playerID] || 0;
+        var teamIdx = Game.state.players[playerID] || 0;
         buf.writeString(ox, oy, "Team " + (teamIdx + 1) + " | WASD:move ↑↓:tilt +/-:zoom", "#888888", null);
     },
 
@@ -178,7 +179,7 @@ var Game = {
         ctx.fillCircle(sunPos.x, sunPos.y, SUN.radius * scale * 0.6);
 
         // Planet position
-        var planetAngle = state.time * PLANET.speed;
+        var planetAngle = Game.state.time * PLANET.speed;
         var planetWX = Math.cos(planetAngle) * PLANET.orbitRadius;
         var planetWY = Math.sin(planetAngle) * PLANET.orbitRadius;
 
@@ -192,7 +193,7 @@ var Game = {
         ctx.fillCircle(planetPos.x, planetPos.y, PLANET.radius * scale * 0.5);
 
         // Moon position
-        var moonAngle = state.time * MOON.speed;
+        var moonAngle = Game.state.time * MOON.speed;
         var moonWX = planetWX + Math.cos(moonAngle) * MOON.orbitRadius;
         var moonWY = planetWY + Math.sin(moonAngle) * MOON.orbitRadius;
 
@@ -211,8 +212,8 @@ var Game = {
         );
 
         // HUD overlay
-        var teamIdx = state.players[playerID] || 0;
-        var teamColor = state.teamColors[teamIdx] || "#FFFFFF";
+        var teamIdx = Game.state.players[playerID] || 0;
+        var teamColor = Game.state.teamColors[teamIdx] || "#FFFFFF";
         ctx.setFillStyle("#000000AA");
         ctx.fillRect(4, 4, 260, 22);
         ctx.setFillStyle(teamColor);
@@ -258,11 +259,11 @@ var Game = {
 
     statusBar: function(playerID) {
         var cam = getCamera(playerID);
-        var teamIdx = state.players[playerID] || 0;
+        var teamIdx = Game.state.players[playerID] || 0;
         return "Team " + (teamIdx + 1)
             + " | Zoom: " + cam.zoom.toFixed(1) + "x"
             + " | Tilt: " + (cam.tilt * 100).toFixed(0) + "%"
-            + " | Time: " + state.time.toFixed(1) + "s";
+            + " | Time: " + Game.state.time.toFixed(1) + "s";
     },
 
     commandBar: function(playerID) {

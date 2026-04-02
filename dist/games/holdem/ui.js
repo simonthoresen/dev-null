@@ -4,7 +4,7 @@
 // ─── Main View (returns widget tree for viewNC) ────────────────────────
 
 function buildViewNC(teamID, width, height) {
-    var seat = state.seats[teamID];
+    var seat = Game.state.seats[teamID];
 
     var playersW = Math.min(30, Math.floor(width * 0.35));
 
@@ -30,26 +30,26 @@ function buildTablePanel(teamID) {
 
     // Phase
     var phaseStr = '';
-    if (state.phase === 'waiting') phaseStr = DIM + 'Waiting for players...' + RST;
-    else if (state.phase === 'preflop') phaseStr = 'Pre-Flop';
-    else if (state.phase === 'flop') phaseStr = 'Flop';
-    else if (state.phase === 'turn') phaseStr = 'Turn';
-    else if (state.phase === 'river') phaseStr = 'River';
-    else if (state.phase === 'showdown') phaseStr = YEL + BOLD + 'Showdown!' + RST;
-    else if (state.phase === 'between') phaseStr = DIM + (state.lastWinMsg || 'Next hand...') + RST;
+    if (Game.state.phase === 'waiting') phaseStr = DIM + 'Waiting for players...' + RST;
+    else if (Game.state.phase === 'preflop') phaseStr = 'Pre-Flop';
+    else if (Game.state.phase === 'flop') phaseStr = 'Flop';
+    else if (Game.state.phase === 'turn') phaseStr = 'Turn';
+    else if (Game.state.phase === 'river') phaseStr = 'River';
+    else if (Game.state.phase === 'showdown') phaseStr = YEL + BOLD + 'Showdown!' + RST;
+    else if (Game.state.phase === 'between') phaseStr = DIM + (Game.state.lastWinMsg || 'Next hand...') + RST;
 
     children.push({ type: 'label', text: phaseStr, align: 'center', height: 1 });
     children.push({ type: 'label', text: '', height: 1 });
 
     // Community cards
     var commStr = '';
-    if (state.phase === 'waiting') {
+    if (Game.state.phase === 'waiting') {
         commStr = DIM + '[  ] [  ] [  ]  [  ]  [  ]' + RST;
     } else {
         for (var ci = 0; ci < 5; ci++) {
             if (ci > 0) commStr += ' ';
-            if (ci < state.community.length) {
-                commStr += cardBox(state.community[ci]);
+            if (ci < Game.state.community.length) {
+                commStr += cardBox(Game.state.community[ci]);
             } else {
                 commStr += DIM + '[  ]' + RST;
             }
@@ -59,28 +59,28 @@ function buildTablePanel(teamID) {
     children.push({ type: 'label', text: '', height: 1 });
 
     // Pot
-    if (state.phase !== 'waiting') {
-        children.push({ type: 'label', text: FGGOLD + BOLD + 'Pot: ' + state.pot + RST, align: 'center', height: 1 });
+    if (Game.state.phase !== 'waiting') {
+        children.push({ type: 'label', text: FGGOLD + BOLD + 'Pot: ' + Game.state.pot + RST, align: 'center', height: 1 });
     }
 
     // Last action
-    if (state.lastAction) {
-        children.push({ type: 'label', text: DIM + state.lastAction + RST, align: 'center', height: 1 });
+    if (Game.state.lastAction) {
+        children.push({ type: 'label', text: DIM + Game.state.lastAction + RST, align: 'center', height: 1 });
     }
 
     // Showdown results
-    if (state.phase === 'showdown' && state.showdownResults) {
+    if (Game.state.phase === 'showdown' && Game.state.showdownResults) {
         children.push({ type: 'label', text: '', height: 1 });
-        for (var ri = 0; ri < state.showdownResults.length; ri++) {
-            var sr = state.showdownResults[ri];
+        for (var ri = 0; ri < Game.state.showdownResults.length; ri++) {
+            var sr = Game.state.showdownResults[ri];
             var srLine = sr.name + ': ' + cardBox(sr.cards[0]) + cardBox(sr.cards[1]);
             srLine += ' ' + GRN + sr.hand.name + RST;
             children.push({ type: 'label', text: srLine, align: 'center', height: 1 });
         }
     }
 
-    var title = 'Hand #' + state.handNum + '  Blinds ' + SMALL_BLIND + '/' + BIG_BLIND;
-    if (state.phase === 'waiting') title = "Texas Hold'em";
+    var title = 'Hand #' + Game.state.handNum + '  Blinds ' + SMALL_BLIND + '/' + BIG_BLIND;
+    if (Game.state.phase === 'waiting') title = "Texas Hold'em";
 
     return {
         type: 'panel', title: title, weight: 1,
@@ -91,7 +91,7 @@ function buildTablePanel(teamID) {
 // ─── Hand Panel (your team's cards) ────────────────────────────────────
 
 function buildHandPanel(teamID) {
-    var seat = state.seats[teamID];
+    var seat = Game.state.seats[teamID];
     var children = [];
 
     if (!seat) {
@@ -101,8 +101,8 @@ function buildHandPanel(teamID) {
     } else if (seat.hand.length === 2) {
         children.push({ type: 'label', text: '  ' + cardBox(seat.hand[0]) + '  ' + cardBox(seat.hand[1]) + '  ', align: 'center' });
 
-        if (state.community.length >= 3) {
-            var allCards = seat.hand.concat(state.community);
+        if (Game.state.community.length >= 3) {
+            var allCards = seat.hand.concat(Game.state.community);
             var eval_ = evaluateHand(allCards);
             children.push({ type: 'label', text: GRN + eval_.name + RST, align: 'center' });
         }
@@ -128,19 +128,19 @@ function buildHandPanel(teamID) {
 function buildPlayersPanel(teamID, panelWidth) {
     var rows = [];
 
-    for (var si = 0; si < state.seatOrder.length; si++) {
-        var sid = state.seatOrder[si];
-        var seat = state.seats[sid];
+    for (var si = 0; si < Game.state.seatOrder.length; si++) {
+        var sid = Game.state.seatOrder[si];
+        var seat = Game.state.seats[sid];
         if (!seat) continue;
 
         var isMe = sid === teamID;
-        var isDealer = state.dealerIdx === si;
-        var isAction = state.actionOn === si;
+        var isDealer = Game.state.dealerIdx === si;
+        var isAction = Game.state.actionOn === si;
 
         // Name with indicators
         var nameStr = '';
         if (isDealer) nameStr += YEL + 'D ' + RST;
-        if (isAction && state.phase !== 'waiting' && state.phase !== 'showdown' && state.phase !== 'between') {
+        if (isAction && Game.state.phase !== 'waiting' && Game.state.phase !== 'showdown' && Game.state.phase !== 'between') {
             nameStr += WHT + BOLD + '\u25b6 ' + RST;
         }
         var displayName = seat.name;
@@ -148,7 +148,7 @@ function buildPlayersPanel(teamID, panelWidth) {
         nameStr += (isMe ? CYN + BOLD : WHT) + displayName + RST;
 
         if (seat.bustedOut) nameStr = DIM + '\u2620 ' + seat.name + RST;
-        else if (seat.folded && state.phase !== 'waiting' && state.phase !== 'between') {
+        else if (seat.folded && Game.state.phase !== 'waiting' && Game.state.phase !== 'between') {
             nameStr = DIM + seat.name + ' (fold)' + RST;
         }
 
@@ -159,7 +159,7 @@ function buildPlayersPanel(teamID, panelWidth) {
 
         // Cards
         var cardLine = '';
-        if (state.phase === 'showdown' && !seat.folded && seat.hand.length === 2) {
+        if (Game.state.phase === 'showdown' && !seat.folded && seat.hand.length === 2) {
             cardLine = cardBox(seat.hand[0]) + cardBox(seat.hand[1]);
         } else if (isMe && seat.hand.length === 2) {
             cardLine = cardBox(seat.hand[0]) + cardBox(seat.hand[1]);
@@ -182,10 +182,10 @@ function buildPlayersPanel(teamID, panelWidth) {
 // ─── Status Bar ────────────────────────────────────────────────────────
 
 function renderStatusBar(teamID) {
-    var seat = state.seats[teamID];
+    var seat = Game.state.seats[teamID];
     var chips = seat ? '$' + seat.chips : '';
-    var phase = state.phase === 'waiting' ? 'Waiting' :
-                state.phase.charAt(0).toUpperCase() + state.phase.slice(1);
+    var phase = Game.state.phase === 'waiting' ? 'Waiting' :
+                Game.state.phase.charAt(0).toUpperCase() + Game.state.phase.slice(1);
     var nPlayers = activePlayers().length;
     return "Hold'em  |  " + phase + '  |  Blinds ' + SMALL_BLIND + '/' + BIG_BLIND +
            '  |  ' + chips + '  |  ' + nPlayers + ' seats';
@@ -194,20 +194,20 @@ function renderStatusBar(teamID) {
 // ─── Command Bar ───────────────────────────────────────────────────────
 
 function renderCommandBar(teamID) {
-    var seat = state.seats[teamID];
+    var seat = Game.state.seats[teamID];
     if (!seat) return '[Enter] Chat';
 
-    if (state.phase === 'waiting') {
+    if (Game.state.phase === 'waiting') {
         var need = 2 - activePlayers().length;
         if (need > 0) return 'Waiting for ' + need + ' more team(s)...  [Enter] Chat';
         return 'Starting soon...  [Enter] Chat';
     }
-    if (state.phase === 'showdown' || state.phase === 'between') return '[Enter] Chat';
+    if (Game.state.phase === 'showdown' || Game.state.phase === 'between') return '[Enter] Chat';
     if (seat.bustedOut) return 'Eliminated  [Enter] Chat';
     if (seat.folded) return 'Folded  [Enter] Chat';
 
-    if (state.actionOn >= 0 && state.seatOrder[state.actionOn] === teamID) {
-        var toCall = state.currentBet - seat.bet;
+    if (Game.state.actionOn >= 0 && Game.state.seatOrder[Game.state.actionOn] === teamID) {
+        var toCall = Game.state.currentBet - seat.bet;
         var actions = '';
         if (toCall > 0) {
             actions = '[Space/C] Call ' + toCall + '  [F] Fold';
@@ -215,15 +215,15 @@ function renderCommandBar(teamID) {
             actions = '[Space/C] Check';
         }
         if (seat.chips > toCall) {
-            actions += '  [R] Raise ' + state.raiseAmount + '  [\u2191\u2193] Adjust';
+            actions += '  [R] Raise ' + Game.state.raiseAmount + '  [\u2191\u2193] Adjust';
         }
         actions += '  [A] All-in ' + seat.chips;
         return actions;
     }
 
     var waitName = '...';
-    if (state.actionOn >= 0 && state.seats[state.seatOrder[state.actionOn]]) {
-        waitName = state.seats[state.seatOrder[state.actionOn]].name;
+    if (Game.state.actionOn >= 0 && Game.state.seats[Game.state.seatOrder[Game.state.actionOn]]) {
+        waitName = Game.state.seats[Game.state.seatOrder[Game.state.actionOn]].name;
     }
     return 'Waiting for ' + waitName + '  [Enter] Chat';
 }

@@ -17,79 +17,57 @@ var AI_THINK_MIN = 10;
 var AI_THINK_MAX = 30;
 
 // ─── Game State ────────────────────────────────────────────────────────
-var state = {
-    seats: {},        // seatID -> { name, chips, hand, folded, bet, allIn, bustedOut, isAI, aiThinkTimer }
-    seatOrder: [],    // seat IDs in order
-    teamToSeat: {},   // teamName -> seatID (for team->seat mapping)
-    playerToTeam: {}, // playerID -> teamName
-    phase: 'waiting', // waiting, preflop, flop, turn, river, showdown, between
-    deck: [],
-    community: [],
-    pot: 0,
-    currentBet: 0,
-    actionOn: -1,     // index into seatOrder
-    dealerIdx: 0,
-    handNum: 0,
-    lastAction: '',
-    showdownTimer: 0,
-    showdownResults: null,
-    actionTimer: 0,
-    minRaise: BIG_BLIND,
-    raiseAmount: BIG_BLIND,
-    lastWinMsg: '',
-    eliminated: []
-};
 
 // ─── Seat Management ───────────────────────────────────────────────────
 
 function activePlayers() {
-    return state.seatOrder.filter(function(id) {
-        var s = state.seats[id];
+    return Game.state.seatOrder.filter(function(id) {
+        var s = Game.state.seats[id];
         return s && !s.bustedOut;
     });
 }
 
 function playersInHand() {
-    return state.seatOrder.filter(function(id) {
-        var s = state.seats[id];
+    return Game.state.seatOrder.filter(function(id) {
+        var s = Game.state.seats[id];
         return s && !s.folded && !s.bustedOut;
     });
 }
 
 function playersCanAct() {
-    return state.seatOrder.filter(function(id) {
-        var s = state.seats[id];
+    return Game.state.seatOrder.filter(function(id) {
+        var s = Game.state.seats[id];
         return s && !s.folded && !s.bustedOut && !s.allIn;
     });
 }
 
 function seatIndexOf(seatID) {
-    return state.seatOrder.indexOf(seatID);
+    return Game.state.seatOrder.indexOf(seatID);
 }
 
 function nextActiveSeat(fromIdx) {
     var active = activePlayers();
-    for (var i = 1; i <= state.seatOrder.length; i++) {
-        var idx = (fromIdx + i) % state.seatOrder.length;
-        if (active.indexOf(state.seatOrder[idx]) >= 0) return idx;
+    for (var i = 1; i <= Game.state.seatOrder.length; i++) {
+        var idx = (fromIdx + i) % Game.state.seatOrder.length;
+        if (active.indexOf(Game.state.seatOrder[idx]) >= 0) return idx;
     }
     return fromIdx;
 }
 
 function nextCanActSeat(fromIdx) {
     var canAct = playersCanAct();
-    for (var i = 1; i <= state.seatOrder.length; i++) {
-        var idx = (fromIdx + i) % state.seatOrder.length;
-        if (canAct.indexOf(state.seatOrder[idx]) >= 0) return idx;
+    for (var i = 1; i <= Game.state.seatOrder.length; i++) {
+        var idx = (fromIdx + i) % Game.state.seatOrder.length;
+        if (canAct.indexOf(Game.state.seatOrder[idx]) >= 0) return idx;
     }
     return -1;
 }
 
 function nextCanActSeatExcluding(fromIdx, excludeID) {
     var canAct = playersCanAct();
-    for (var i = 1; i <= state.seatOrder.length; i++) {
-        var idx = (fromIdx + i) % state.seatOrder.length;
-        var id = state.seatOrder[idx];
+    for (var i = 1; i <= Game.state.seatOrder.length; i++) {
+        var idx = (fromIdx + i) % Game.state.seatOrder.length;
+        var id = Game.state.seatOrder[idx];
         if (id !== excludeID && canAct.indexOf(id) >= 0) return idx;
     }
     return -1;
@@ -101,8 +79,8 @@ function isAI(seatID) {
 
 // Resolve a playerID to their team's seatID
 function playerSeat(playerID) {
-    var teamName = state.playerToTeam[playerID];
-    if (teamName) return state.teamToSeat[teamName];
+    var teamName = Game.state.playerToTeam[playerID];
+    if (teamName) return Game.state.teamToSeat[teamName];
     return null;
 }
 
@@ -111,32 +89,32 @@ function playerSeat(playerID) {
 function startHand() {
     var active = activePlayers();
     if (active.length < 2) {
-        state.phase = 'waiting';
+        Game.state.phase = 'waiting';
         if (active.length === 1) {
-            var winner = state.seats[active[0]];
-            state.lastWinMsg = winner.name + ' wins the tournament!';
+            var winner = Game.state.seats[active[0]];
+            Game.state.lastWinMsg = winner.name + ' wins the tournament!';
             chat(winner.name + ' wins the tournament!');
         }
         return;
     }
 
-    state.handNum++;
-    var level = Math.floor((state.handNum - 1) / BLIND_INCREASE_HANDS);
+    Game.state.handNum++;
+    var level = Math.floor((Game.state.handNum - 1) / BLIND_INCREASE_HANDS);
     SMALL_BLIND = 10 * Math.pow(2, level);
     BIG_BLIND = SMALL_BLIND * 2;
 
-    state.deck = shuffle(makeDeck());
-    state.community = [];
-    state.pot = 0;
-    state.currentBet = 0;
-    state.lastAction = '';
-    state.showdownResults = null;
-    state.minRaise = BIG_BLIND;
-    state.raiseAmount = BIG_BLIND;
-    state.eliminated = [];
+    Game.state.deck = shuffle(makeDeck());
+    Game.state.community = [];
+    Game.state.pot = 0;
+    Game.state.currentBet = 0;
+    Game.state.lastAction = '';
+    Game.state.showdownResults = null;
+    Game.state.minRaise = BIG_BLIND;
+    Game.state.raiseAmount = BIG_BLIND;
+    Game.state.eliminated = [];
 
-    for (var i = 0; i < state.seatOrder.length; i++) {
-        var s = state.seats[state.seatOrder[i]];
+    for (var i = 0; i < Game.state.seatOrder.length; i++) {
+        var s = Game.state.seats[Game.state.seatOrder[i]];
         if (!s) continue;
         s.hand = [];
         s.folded = s.bustedOut;
@@ -144,116 +122,116 @@ function startHand() {
         s.allIn = false;
     }
 
-    state.dealerIdx = nextActiveSeat(state.dealerIdx);
+    Game.state.dealerIdx = nextActiveSeat(Game.state.dealerIdx);
 
-    var sbIdx = active.length === 2 ? state.dealerIdx : nextActiveSeat(state.dealerIdx);
+    var sbIdx = active.length === 2 ? Game.state.dealerIdx : nextActiveSeat(Game.state.dealerIdx);
     var bbIdx = nextActiveSeat(sbIdx);
     postBlind(sbIdx, SMALL_BLIND);
     postBlind(bbIdx, BIG_BLIND);
-    state.currentBet = BIG_BLIND;
+    Game.state.currentBet = BIG_BLIND;
 
     for (var d = 0; d < 2; d++) {
         for (var j = 0; j < active.length; j++) {
-            var seat = state.seats[active[j]];
-            if (!seat.folded) seat.hand.push(state.deck.pop());
+            var seat = Game.state.seats[active[j]];
+            if (!seat.folded) seat.hand.push(Game.state.deck.pop());
         }
     }
 
-    state.actionOn = nextCanActSeat(bbIdx);
-    state.phase = 'preflop';
-    state.actionTimer = ACTION_TIMEOUT;
+    Game.state.actionOn = nextCanActSeat(bbIdx);
+    Game.state.phase = 'preflop';
+    Game.state.actionTimer = ACTION_TIMEOUT;
 
-    var dealerName = state.seats[state.seatOrder[state.dealerIdx]].name;
-    log('Hand #' + state.handNum + ' -- Dealer: ' + dealerName + ' -- Blinds: ' + SMALL_BLIND + '/' + BIG_BLIND);
+    var dealerName = Game.state.seats[Game.state.seatOrder[Game.state.dealerIdx]].name;
+    log('Hand #' + Game.state.handNum + ' -- Dealer: ' + dealerName + ' -- Blinds: ' + SMALL_BLIND + '/' + BIG_BLIND);
 }
 
 function postBlind(seatIdx, amount) {
-    var id = state.seatOrder[seatIdx];
-    var s = state.seats[id];
+    var id = Game.state.seatOrder[seatIdx];
+    var s = Game.state.seats[id];
     var actual = Math.min(amount, s.chips);
     s.chips -= actual;
     s.bet = actual;
-    state.pot += actual;
+    Game.state.pot += actual;
     if (s.chips === 0) s.allIn = true;
 }
 
 // ─── Betting Actions ───────────────────────────────────────────────────
 
 function doFold(seatID) {
-    var s = state.seats[seatID];
+    var s = Game.state.seats[seatID];
     if (!s) return;
     s.folded = true;
-    state.lastAction = s.name + ' folds';
-    log(state.lastAction);
+    Game.state.lastAction = s.name + ' folds';
+    log(Game.state.lastAction);
     advanceAction();
 }
 
 function doCheck(seatID) {
-    var s = state.seats[seatID];
+    var s = Game.state.seats[seatID];
     if (!s) return;
-    state.lastAction = s.name + ' checks';
-    log(state.lastAction);
+    Game.state.lastAction = s.name + ' checks';
+    log(Game.state.lastAction);
     advanceAction();
 }
 
 function doCall(seatID) {
-    var s = state.seats[seatID];
+    var s = Game.state.seats[seatID];
     if (!s) return;
-    var toCall = state.currentBet - s.bet;
+    var toCall = Game.state.currentBet - s.bet;
     var actual = Math.min(toCall, s.chips);
     s.chips -= actual;
     s.bet += actual;
-    state.pot += actual;
+    Game.state.pot += actual;
     if (s.chips === 0) s.allIn = true;
-    state.lastAction = s.name + ' calls' + (s.allIn ? ' (all-in)' : '');
-    log(state.lastAction);
+    Game.state.lastAction = s.name + ' calls' + (s.allIn ? ' (all-in)' : '');
+    log(Game.state.lastAction);
     advanceAction();
 }
 
 function doRaise(seatID, amount) {
-    var s = state.seats[seatID];
+    var s = Game.state.seats[seatID];
     if (!s) return;
-    var totalBet = state.currentBet + amount;
+    var totalBet = Game.state.currentBet + amount;
     var totalCost = totalBet - s.bet;
     var actual = Math.min(totalCost, s.chips);
     s.chips -= actual;
     s.bet += actual;
-    state.pot += actual;
+    Game.state.pot += actual;
     if (s.chips === 0) s.allIn = true;
-    if (s.bet > state.currentBet) {
-        state.minRaise = s.bet - state.currentBet;
-        state.currentBet = s.bet;
+    if (s.bet > Game.state.currentBet) {
+        Game.state.minRaise = s.bet - Game.state.currentBet;
+        Game.state.currentBet = s.bet;
     }
-    state.lastAction = s.name + ' raises to ' + state.currentBet + (s.allIn ? ' (all-in)' : '');
-    log(state.lastAction);
-    state.actionOn = nextCanActSeatExcluding(seatIndexOf(seatID), seatID);
-    if (state.actionOn === -1) {
+    Game.state.lastAction = s.name + ' raises to ' + Game.state.currentBet + (s.allIn ? ' (all-in)' : '');
+    log(Game.state.lastAction);
+    Game.state.actionOn = nextCanActSeatExcluding(seatIndexOf(seatID), seatID);
+    if (Game.state.actionOn === -1) {
         finishBettingRound();
     } else {
-        state.actionTimer = ACTION_TIMEOUT;
+        Game.state.actionTimer = ACTION_TIMEOUT;
     }
 }
 
 function doAllIn(seatID) {
-    var s = state.seats[seatID];
+    var s = Game.state.seats[seatID];
     if (!s) return;
     var amount = s.chips;
     s.chips = 0;
     s.bet += amount;
-    state.pot += amount;
+    Game.state.pot += amount;
     s.allIn = true;
-    if (s.bet > state.currentBet) {
-        state.minRaise = Math.max(state.minRaise, s.bet - state.currentBet);
-        state.currentBet = s.bet;
-        state.lastAction = s.name + ' all-in for ' + s.bet;
-        state.actionOn = nextCanActSeatExcluding(seatIndexOf(seatID), seatID);
-        if (state.actionOn === -1) { finishBettingRound(); return; }
-        state.actionTimer = ACTION_TIMEOUT;
+    if (s.bet > Game.state.currentBet) {
+        Game.state.minRaise = Math.max(Game.state.minRaise, s.bet - Game.state.currentBet);
+        Game.state.currentBet = s.bet;
+        Game.state.lastAction = s.name + ' all-in for ' + s.bet;
+        Game.state.actionOn = nextCanActSeatExcluding(seatIndexOf(seatID), seatID);
+        if (Game.state.actionOn === -1) { finishBettingRound(); return; }
+        Game.state.actionTimer = ACTION_TIMEOUT;
     } else {
-        state.lastAction = s.name + ' all-in for ' + s.bet;
+        Game.state.lastAction = s.name + ' all-in for ' + s.bet;
         advanceAction();
     }
-    log(state.lastAction);
+    log(Game.state.lastAction);
 }
 
 function advanceAction() {
@@ -266,70 +244,70 @@ function advanceAction() {
     var canAct = playersCanAct();
     if (canAct.length === 0) { finishBettingRound(); return; }
 
-    var nextIdx = nextCanActSeat(state.actionOn);
+    var nextIdx = nextCanActSeat(Game.state.actionOn);
     if (nextIdx === -1) { finishBettingRound(); return; }
 
-    var nextID = state.seatOrder[nextIdx];
-    var nextS = state.seats[nextID];
+    var nextID = Game.state.seatOrder[nextIdx];
+    var nextS = Game.state.seats[nextID];
 
     var allMatched = true;
     for (var i = 0; i < canAct.length; i++) {
-        if (state.seats[canAct[i]].bet < state.currentBet) { allMatched = false; break; }
+        if (Game.state.seats[canAct[i]].bet < Game.state.currentBet) { allMatched = false; break; }
     }
-    if (allMatched && state.currentBet > 0 && nextS.bet === state.currentBet) {
+    if (allMatched && Game.state.currentBet > 0 && nextS.bet === Game.state.currentBet) {
         finishBettingRound();
         return;
     }
 
-    state.actionOn = nextIdx;
-    state.actionTimer = ACTION_TIMEOUT;
+    Game.state.actionOn = nextIdx;
+    Game.state.actionTimer = ACTION_TIMEOUT;
 }
 
 function finishBettingRound() {
-    for (var i = 0; i < state.seatOrder.length; i++) {
-        var s = state.seats[state.seatOrder[i]];
+    for (var i = 0; i < Game.state.seatOrder.length; i++) {
+        var s = Game.state.seats[Game.state.seatOrder[i]];
         if (s) s.bet = 0;
     }
-    state.currentBet = 0;
-    state.minRaise = BIG_BLIND;
-    state.raiseAmount = BIG_BLIND;
+    Game.state.currentBet = 0;
+    Game.state.minRaise = BIG_BLIND;
+    Game.state.raiseAmount = BIG_BLIND;
 
     var inHand = playersInHand();
     if (inHand.length === 1) { awardPot(inHand[0]); endHand(); return; }
 
-    if (state.phase === 'preflop') {
-        state.phase = 'flop';
-        state.deck.pop();
-        state.community.push(state.deck.pop(), state.deck.pop(), state.deck.pop());
-    } else if (state.phase === 'flop') {
-        state.phase = 'turn';
-        state.deck.pop();
-        state.community.push(state.deck.pop());
-    } else if (state.phase === 'turn') {
-        state.phase = 'river';
-        state.deck.pop();
-        state.community.push(state.deck.pop());
-    } else if (state.phase === 'river') {
+    if (Game.state.phase === 'preflop') {
+        Game.state.phase = 'flop';
+        Game.state.deck.pop();
+        Game.state.community.push(Game.state.deck.pop(), Game.state.deck.pop(), Game.state.deck.pop());
+    } else if (Game.state.phase === 'flop') {
+        Game.state.phase = 'turn';
+        Game.state.deck.pop();
+        Game.state.community.push(Game.state.deck.pop());
+    } else if (Game.state.phase === 'turn') {
+        Game.state.phase = 'river';
+        Game.state.deck.pop();
+        Game.state.community.push(Game.state.deck.pop());
+    } else if (Game.state.phase === 'river') {
         doShowdown();
         return;
     }
 
     var canAct = playersCanAct();
     if (canAct.length <= 1) { finishBettingRound(); return; }
-    state.actionOn = nextCanActSeat(state.dealerIdx);
-    state.actionTimer = ACTION_TIMEOUT;
+    Game.state.actionOn = nextCanActSeat(Game.state.dealerIdx);
+    Game.state.actionTimer = ACTION_TIMEOUT;
 }
 
 // ─── Showdown ──────────────────────────────────────────────────────────
 
 function doShowdown() {
-    state.phase = 'showdown';
+    Game.state.phase = 'showdown';
     var inHand = playersInHand();
     var results = [];
     for (var i = 0; i < inHand.length; i++) {
         var id = inHand[i];
-        var s = state.seats[id];
-        var allCards = s.hand.concat(state.community);
+        var s = Game.state.seats[id];
+        var allCards = s.hand.concat(Game.state.community);
         var eval_ = evaluateHand(allCards);
         results.push({ id: id, name: s.name, hand: eval_, cards: s.hand });
     }
@@ -341,41 +319,41 @@ function doShowdown() {
         else break;
     }
 
-    var share = Math.floor(state.pot / winners.length);
-    var remainder = state.pot - share * winners.length;
+    var share = Math.floor(Game.state.pot / winners.length);
+    var remainder = Game.state.pot - share * winners.length;
     var winMsg = '';
     for (var w = 0; w < winners.length; w++) {
-        var ws = state.seats[winners[w].id];
+        var ws = Game.state.seats[winners[w].id];
         ws.chips += share + (w === 0 ? remainder : 0);
         if (winMsg) winMsg += ', ';
         winMsg += ws.name;
     }
-    winMsg += ' wins ' + state.pot + ' with ' + results[0].hand.name;
-    state.lastWinMsg = winMsg;
+    winMsg += ' wins ' + Game.state.pot + ' with ' + results[0].hand.name;
+    Game.state.lastWinMsg = winMsg;
     chat(winMsg);
     log(winMsg);
-    state.showdownResults = results;
-    state.showdownTimer = 50;
+    Game.state.showdownResults = results;
+    Game.state.showdownTimer = 50;
 }
 
 function awardPot(winnerID) {
-    var s = state.seats[winnerID];
-    s.chips += state.pot;
-    state.lastWinMsg = s.name + ' wins ' + state.pot;
-    chat(state.lastWinMsg);
-    log(state.lastWinMsg);
-    state.pot = 0;
+    var s = Game.state.seats[winnerID];
+    s.chips += Game.state.pot;
+    Game.state.lastWinMsg = s.name + ' wins ' + Game.state.pot;
+    chat(Game.state.lastWinMsg);
+    log(Game.state.lastWinMsg);
+    Game.state.pot = 0;
 }
 
 function endHand() {
-    state.phase = 'between';
-    state.showdownTimer = 30;
-    state.eliminated = [];
-    for (var i = 0; i < state.seatOrder.length; i++) {
-        var s = state.seats[state.seatOrder[i]];
+    Game.state.phase = 'between';
+    Game.state.showdownTimer = 30;
+    Game.state.eliminated = [];
+    for (var i = 0; i < Game.state.seatOrder.length; i++) {
+        var s = Game.state.seats[Game.state.seatOrder[i]];
         if (s && s.chips <= 0 && !s.bustedOut) {
             s.bustedOut = true;
-            state.eliminated.push(s.name);
+            Game.state.eliminated.push(s.name);
             chat(s.name + ' is eliminated!');
         }
     }
@@ -385,8 +363,8 @@ function endHand() {
 
 function addAIPlayer() {
     var usedNames = {};
-    for (var i = 0; i < state.seatOrder.length; i++) {
-        var s = state.seats[state.seatOrder[i]];
+    for (var i = 0; i < Game.state.seatOrder.length; i++) {
+        var s = Game.state.seats[Game.state.seatOrder[i]];
         if (s) usedNames[s.name] = true;
     }
     var name = null;
@@ -395,11 +373,11 @@ function addAIPlayer() {
     }
     if (!name) name = 'Bot' + Math.floor(Math.random() * 1000);
     var id = AI_PREFIX + name.toLowerCase();
-    state.seats[id] = {
+    Game.state.seats[id] = {
         name: name, chips: STARTING_CHIPS, hand: [], folded: false,
         bet: 0, allIn: false, bustedOut: false, isAI: true, aiThinkTimer: 0
     };
-    state.seatOrder.push(id);
+    Game.state.seatOrder.push(id);
     chat(name + ' (bot) sits down');
 }
 
@@ -408,18 +386,18 @@ function fillAIPlayers() {
 }
 
 function aiDecide(seatID) {
-    var s = state.seats[seatID];
+    var s = Game.state.seats[seatID];
     if (!s || s.folded || s.allIn) return;
-    var toCall = state.currentBet - s.bet;
-    var strength = aiHandStrength(s.hand, state.community);
-    var potOdds = toCall > 0 ? toCall / (state.pot + toCall) : 0;
+    var toCall = Game.state.currentBet - s.bet;
+    var strength = aiHandStrength(s.hand, Game.state.community);
+    var potOdds = toCall > 0 ? toCall / (Game.state.pot + toCall) : 0;
     var rand = Math.random();
     var aggression = ((seatID.charCodeAt(seatID.length - 1) % 5) - 2) * 0.05;
     strength += aggression;
 
     if (toCall === 0) {
         if (strength > 0.65 && rand < 0.5) {
-            var raiseAmt = Math.max(state.minRaise, Math.floor(state.pot * (0.3 + strength * 0.5)));
+            var raiseAmt = Math.max(Game.state.minRaise, Math.floor(Game.state.pot * (0.3 + strength * 0.5)));
             raiseAmt = Math.min(raiseAmt, s.chips);
             if (strength > 0.85 && rand < 0.15) doAllIn(seatID);
             else doRaise(seatID, raiseAmt);
@@ -431,9 +409,9 @@ function aiDecide(seatID) {
         if (strength > 0.8 && rand < 0.3) {
             if (strength > 0.9 && rand < 0.1) doAllIn(seatID);
             else {
-                var r2 = Math.max(state.minRaise, Math.floor(state.pot * 0.5));
+                var r2 = Math.max(Game.state.minRaise, Math.floor(Game.state.pot * 0.5));
                 r2 = Math.min(r2, s.chips - toCall);
-                if (r2 >= state.minRaise) doRaise(seatID, r2);
+                if (r2 >= Game.state.minRaise) doRaise(seatID, r2);
                 else doCall(seatID);
             }
         } else if (strength > potOdds + 0.1 || (callRatio < 0.1 && strength > 0.25)) {
@@ -449,22 +427,22 @@ function aiDecide(seatID) {
 // ─── Tick ──────────────────────────────────────────────────────────────
 
 function tick() {
-    if (state.phase === 'showdown' || state.phase === 'between') {
-        state.showdownTimer--;
-        if (state.showdownTimer <= 0) {
+    if (Game.state.phase === 'showdown' || Game.state.phase === 'between') {
+        Game.state.showdownTimer--;
+        if (Game.state.showdownTimer <= 0) {
             endHand();
-            if (state.phase === 'between') {
-                state.showdownTimer = 0;
+            if (Game.state.phase === 'between') {
+                Game.state.showdownTimer = 0;
                 startHand();
             }
         }
         return;
     }
-    if (state.phase === 'waiting') return;
+    if (Game.state.phase === 'waiting') return;
 
-    if (state.actionOn >= 0 && state.actionOn < state.seatOrder.length) {
-        var id = state.seatOrder[state.actionOn];
-        var s = id ? state.seats[id] : null;
+    if (Game.state.actionOn >= 0 && Game.state.actionOn < Game.state.seatOrder.length) {
+        var id = Game.state.seatOrder[Game.state.actionOn];
+        var s = id ? Game.state.seats[id] : null;
 
         if (s && isAI(id) && !s.folded && !s.allIn) {
             if (!s.aiThinkTimer) {
@@ -475,11 +453,11 @@ function tick() {
                 s.aiThinkTimer = 0;
                 aiDecide(id);
             }
-        } else if (state.actionTimer > 0) {
-            state.actionTimer--;
-            if (state.actionTimer <= 0) {
+        } else if (Game.state.actionTimer > 0) {
+            Game.state.actionTimer--;
+            if (Game.state.actionTimer <= 0) {
                 if (s) {
-                    if (s.bet >= state.currentBet) doCheck(id);
+                    if (s.bet >= Game.state.currentBet) doCheck(id);
                     else doFold(id);
                 }
             }
@@ -491,6 +469,29 @@ function tick() {
 
 var Game = {
     gameName: "Texas Hold'em",
+
+    state: {
+        seats: {},        // seatID -> { name, chips, hand, folded, bet, allIn, bustedOut, isAI, aiThinkTimer }
+        seatOrder: [],    // seat IDs in order
+        teamToSeat: {},   // teamName -> seatID (for team->seat mapping)
+        playerToTeam: {}, // playerID -> teamName
+        phase: 'waiting', // waiting, preflop, flop, turn, river, showdown, between
+        deck: [],
+        community: [],
+        pot: 0,
+        currentBet: 0,
+        actionOn: -1,     // index into seatOrder
+        dealerIdx: 0,
+        handNum: 0,
+        lastAction: '',
+        showdownTimer: 0,
+        showdownResults: null,
+        actionTimer: 0,
+        minRaise: BIG_BLIND,
+        raiseAmount: BIG_BLIND,
+        lastWinMsg: '',
+        eliminated: []
+    },
 
     init: function(savedState) {
         var t = teams();
@@ -509,27 +510,27 @@ var Game = {
         for (var i = 0; i < t.length; i++) {
             var team = t[i];
             var seatID = 'team_' + i;
-            state.seats[seatID] = {
+            Game.state.seats[seatID] = {
                 name: team.name, chips: STARTING_CHIPS, hand: [], folded: false,
                 bet: 0, allIn: false, bustedOut: false, isAI: false, aiThinkTimer: 0
             };
-            state.seatOrder.push(seatID);
-            state.teamToSeat[team.name] = seatID;
+            Game.state.seatOrder.push(seatID);
+            Game.state.teamToSeat[team.name] = seatID;
             for (var j = 0; j < team.players.length; j++) {
-                state.playerToTeam[team.players[j].id] = team.name;
+                Game.state.playerToTeam[team.players[j].id] = team.name;
             }
         }
 
         fillAIPlayers();
         if (activePlayers().length >= 2) startHand();
-        log("Hold'em started with " + state.seatOrder.length + ' seats (' + t.length + ' teams)');
+        log("Hold'em started with " + Game.state.seatOrder.length + ' seats (' + t.length + ' teams)');
     },
 
     onPlayerLeave: function(playerID) {
         // Teams persist; individual player leaving doesn't eliminate the team
         var seatID = playerSeat(playerID);
         if (seatID) {
-            var seat = state.seats[seatID];
+            var seat = Game.state.seats[seatID];
             if (seat) {
                 // Check if all team members are gone (would need team tracking)
                 // For now, team stays alive
@@ -540,14 +541,14 @@ var Game = {
     onInput: function(playerID, key) {
         var seatID = playerSeat(playerID);
         if (!seatID) return;
-        var seat = state.seats[seatID];
+        var seat = Game.state.seats[seatID];
         if (!seat || seat.bustedOut) return;
 
-        if (state.phase === 'showdown' || state.phase === 'between' || state.phase === 'waiting') return;
-        if (state.actionOn < 0 || state.seatOrder[state.actionOn] !== seatID) return;
+        if (Game.state.phase === 'showdown' || Game.state.phase === 'between' || Game.state.phase === 'waiting') return;
+        if (Game.state.actionOn < 0 || Game.state.seatOrder[Game.state.actionOn] !== seatID) return;
         if (seat.folded || seat.allIn) return;
 
-        var toCall = state.currentBet - seat.bet;
+        var toCall = Game.state.currentBet - seat.bet;
 
         if (key === 'f' || key === 'F') {
             if (toCall > 0) doFold(seatID);
@@ -555,13 +556,13 @@ var Game = {
             if (toCall > 0) doCall(seatID);
             else doCheck(seatID);
         } else if (key === 'r' || key === 'R') {
-            if (seat.chips > toCall) doRaise(seatID, state.raiseAmount);
+            if (seat.chips > toCall) doRaise(seatID, Game.state.raiseAmount);
         } else if (key === 'a' || key === 'A') {
             doAllIn(seatID);
         } else if (key === 'up') {
-            state.raiseAmount = Math.min(seat.chips - toCall, state.raiseAmount + BIG_BLIND);
+            Game.state.raiseAmount = Math.min(seat.chips - toCall, Game.state.raiseAmount + BIG_BLIND);
         } else if (key === 'down') {
-            state.raiseAmount = Math.max(state.minRaise, state.raiseAmount - BIG_BLIND);
+            Game.state.raiseAmount = Math.max(Game.state.minRaise, Game.state.raiseAmount - BIG_BLIND);
         }
     },
 
@@ -576,7 +577,7 @@ var Game = {
     layout: function(playerID, width, height) {
         var seatID = playerSeat(playerID);
         if (!seatID) {
-            if (state.seatOrder.length > 0) seatID = state.seatOrder[0];
+            if (Game.state.seatOrder.length > 0) seatID = Game.state.seatOrder[0];
             else return { type: 'label', text: 'Waiting...', align: 'center' };
         }
         return buildViewNC(seatID, width, height);
@@ -600,8 +601,8 @@ registerCommand({
     description: 'Show chip counts for all seats',
     handler: function(playerID, isAdmin, args) {
         var msg = 'Chip counts:';
-        for (var i = 0; i < state.seatOrder.length; i++) {
-            var s = state.seats[state.seatOrder[i]];
+        for (var i = 0; i < Game.state.seatOrder.length; i++) {
+            var s = Game.state.seats[Game.state.seatOrder[i]];
             if (s) msg += '\n  ' + s.name + ': $' + s.chips + (s.bustedOut ? ' (out)' : '');
         }
         chatPlayer(playerID, msg);
@@ -613,15 +614,15 @@ registerCommand({
     description: 'Reset and start a new tournament (admin only)',
     adminOnly: true,
     handler: function(playerID, isAdmin, args) {
-        state.phase = 'waiting';
-        state.handNum = 0;
-        state.pot = 0;
-        state.community = [];
-        state.lastWinMsg = '';
+        Game.state.phase = 'waiting';
+        Game.state.handNum = 0;
+        Game.state.pot = 0;
+        Game.state.community = [];
+        Game.state.lastWinMsg = '';
         SMALL_BLIND = 10;
         BIG_BLIND = 20;
-        for (var i = 0; i < state.seatOrder.length; i++) {
-            var s = state.seats[state.seatOrder[i]];
+        for (var i = 0; i < Game.state.seatOrder.length; i++) {
+            var s = Game.state.seats[Game.state.seatOrder[i]];
             if (s) {
                 s.chips = STARTING_CHIPS;
                 s.bustedOut = false;

@@ -101,8 +101,11 @@ type Game interface {
 	HasCanvasMode() bool // true if game defines renderCanvas hook
 	Unload()
 
-	// Suspend/resume support — optional for JS games.
-	CanSuspend() bool        // true if the game supports suspend/resume
-	Suspend() any            // called on suspend; returns session state to persist
-	Resume(sessionState any) // called on resume; nil sessionState = warm resume (runtime still alive)
+	// State returns the game's current Game.state object (exported for
+	// suspend/resume and client-side state replication). Returns nil if the
+	// game has no state property.
+	State() any
+	// SetState replaces the game's Game.state object. Used by the framework
+	// to restore state on resume after a cold reload.
+	SetState(state any)
 }

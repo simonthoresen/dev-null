@@ -106,8 +106,13 @@ Players manage teams in the lobby panel (right side, fixed 32 chars). New player
 
 New teams default to "Team \<creator name\>" and the first unused palette color. Games can declare `teamRange: {min, max}` to enforce valid team counts. Games access teams via the `teams()` global, which returns `[{name, color, players: [{id, name}, ...]}, ...]`. Game teams are a snapshot taken at load time — lobby teams remain editable during a game. Unassigned players are excluded from the game snapshot.
 
-### State Persistence
-Games persist state by passing it as the second argument to `gameOver(results, state)`. On the next load, it's received as the argument to `init(savedState)`. State files are stored as JSON in `dist/state/<gamename>.json`.
+### Game State (`Game.state`)
+
+All mutable game data must live on `Game.state`. The framework reads this property for:
+- **Suspend/resume:** `Game.state` is serialized to JSON on suspend and restored via `SetState()` on cold resume. No special suspend/resume hooks needed — the framework handles it.
+- **Client-side state replication:** (future) enhanced clients receive state deltas and render locally.
+
+Games still persist cross-session data (high scores) via `gameOver(results, persistState)`. The `persistState` argument saves to `dist/state/<gamename>.json` and is received in `init(savedState)` on the next load. `Game.state` is session-scoped — it lives only during gameplay.
 
 ### UI Layout
 
@@ -231,10 +236,10 @@ type Game interface {
     HasCanvasMode() bool               // true if game defines renderCanvas
     Unload()
 
-    // Suspend/resume (optional — requires canSuspend: true in JS)
-    CanSuspend() bool        // true if game supports suspend/resume
-    Suspend() any            // returns session state to persist
-    Resume(sessionState any) // nil = warm resume, non-nil = cold resume from disk
+    // Game.state — the framework reads/writes this for suspend/resume
+    // and client-side state replication.
+    State() any              // returns current Game.state object
+    SetState(state any)      // replaces Game.state (cold resume)
 }
 ```
 `jsRuntime` implements `Game`. `init()` is mandatory; all other JS hooks are optional. `teams()` global returns game team snapshot during init/start/playing.

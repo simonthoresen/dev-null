@@ -14,21 +14,14 @@ var LEVEL_WIDTH = 60;
 var LEVEL_HEIGHT = 30;
 var HUNGER_TICK_RATE = 5; // lose 1 hunger every N ticks
 
-var state = {
-    players: {},        // playerID -> player object
-    levels: {},         // depth -> level object
-    tick: 0,
-    inventoryOpen: {},  // playerID -> boolean
-    highScores: []      // persistent high scores
-};
 
 // ─── Level Management ──────────────────────────────────────────────────────
 
 function getOrCreateLevel(depth) {
-    if (!state.levels[depth]) {
-        state.levels[depth] = generateLevel(LEVEL_WIDTH, LEVEL_HEIGHT, depth);
+    if (!Game.state.levels[depth]) {
+        Game.state.levels[depth] = generateLevel(LEVEL_WIDTH, LEVEL_HEIGHT, depth);
     }
-    return state.levels[depth];
+    return Game.state.levels[depth];
 }
 
 function movePlayerToDepth(player, depth) {
@@ -54,11 +47,19 @@ function movePlayerToDepth(player, depth) {
 var Game = {
     gameName: "NetHack",
 
+    state: {
+        players: {},        // playerID -> player object
+        levels: {},         // depth -> level object
+        tick: 0,
+        inventoryOpen: {},  // playerID -> boolean
+        highScores: []      // persistent high scores
+    },
+
     splashScreen: "",
 
     init: function(savedState) {
         if (savedState && savedState.highScores) {
-            state.highScores = savedState.highScores;
+            Game.state.highScores = savedState.highScores;
         }
 
         var t = teams();
@@ -71,10 +72,10 @@ var Game = {
         splash += "\n\nA multiplayer roguelike dungeon crawl";
         splash += "\nReach depth " + MAX_DEPTH + " — or die trying.";
         splash += "\n\nPlayers: " + playerCount;
-        if (state.highScores.length > 0) {
+        if (Game.state.highScores.length > 0) {
             splash += "\n\n--- Hall of Fame ---";
-            for (var i = 0; i < Math.min(5, state.highScores.length); i++) {
-                var hs = state.highScores[i];
+            for (var i = 0; i < Math.min(5, Game.state.highScores.length); i++) {
+                var hs = Game.state.highScores[i];
                 splash += "\n  " + hs.name + " - Depth " + hs.depth + " - " + hs.gold + " gold - " + hs.kills + " kills";
             }
         }
@@ -94,19 +95,19 @@ var Game = {
             }
         }
 
-        log("NetHack started with " + Object.keys(state.players).length + " players");
+        log("NetHack started with " + Object.keys(Game.state.players).length + " players");
     },
 
     onPlayerLeave: function(playerID) {
         // Keep player in game state for potential reconnection
-        var player = state.players[playerID];
+        var player = Game.state.players[playerID];
         if (player) {
             addMessage(player, 'You feel disconnected from reality...');
         }
     },
 
     onInput: function(playerID, key) {
-        var player = state.players[playerID];
+        var player = Game.state.players[playerID];
         if (!player) return;
 
         // Dead player input
@@ -118,7 +119,7 @@ var Game = {
         }
 
         // Inventory mode
-        if (state.inventoryOpen[playerID]) {
+        if (Game.state.inventoryOpen[playerID]) {
             handleInventoryInput(player, key);
             return;
         }
@@ -132,7 +133,7 @@ var Game = {
             case 'right': dx = 1;  break;
             case 'g':     handlePickup(player); return;
             case ',':     handlePickup(player); return;
-            case 'i':     state.inventoryOpen[playerID] = true; return;
+            case 'i':     Game.state.inventoryOpen[playerID] = true; return;
             case '>':     handleDescend(player); return;
             case '<':     handleAscend(player); return;
             case '.':     player.turnCount++; return; // wait
@@ -145,19 +146,19 @@ var Game = {
     },
 
     update: function(dt) {
-        state.tick++;
+        Game.state.tick++;
 
         // Update monsters
-        if (state.tick % 3 === 0) { // monsters move every 3 ticks (300ms)
-            for (var d in state.levels) {
-                updateMonsters(state.levels[d], state.players, state.tick);
+        if (Game.state.tick % 3 === 0) { // monsters move every 3 ticks (300ms)
+            for (var d in Game.state.levels) {
+                updateMonsters(Game.state.levels[d], Game.state.players, Game.state.tick);
             }
         }
 
         // Hunger system
-        if (state.tick % (HUNGER_TICK_RATE * 10) === 0) {
-            for (var pid in state.players) {
-                var p = state.players[pid];
+        if (Game.state.tick % (HUNGER_TICK_RATE * 10) === 0) {
+            for (var pid in Game.state.players) {
+                var p = Game.state.players[pid];
                 if (!p.dead) {
                     p.hunger--;
                     if (p.hunger <= 0) {
@@ -177,27 +178,27 @@ var Game = {
     },
 
     render: function(buf, playerID, ox, oy, width, height) {
-        var player = state.players[playerID];
+        var player = Game.state.players[playerID];
         if (!player) {
             renderSpectatorView(buf, width, height);
-        } else if (state.inventoryOpen[playerID]) {
+        } else if (Game.state.inventoryOpen[playerID]) {
             renderInventory(buf, player, width, height);
         } else {
             var level = getOrCreateLevel(player.depth);
-            renderView(buf, player, level, state.players, width, height);
+            renderView(buf, player, level, Game.state.players, width, height);
         }
     },
 
     statusBar: function(playerID) {
-        var player = state.players[playerID];
+        var player = Game.state.players[playerID];
         if (!player) return "NetHack - Spectating";
         return renderStatusBar(player);
     },
 
     commandBar: function(playerID) {
-        var player = state.players[playerID];
+        var player = Game.state.players[playerID];
         if (!player) return "[Enter] Chat";
-        return renderCommandBar(player, state.inventoryOpen[playerID]);
+        return renderCommandBar(player, Game.state.inventoryOpen[playerID]);
     }
 };
 
@@ -208,7 +209,7 @@ function spawnPlayer(id, name) {
     var spawn = findSpawnPoint(level);
     var player = createPlayer(id, name, spawn.x, spawn.y);
     player.explored = createExploredMap(level.width, level.height);
-    state.players[id] = player;
+    Game.state.players[id] = player;
     addMessage(player, 'Welcome to the dungeon, ' + name + '!');
     chat(name + ' enters the dungeon.');
 }
@@ -252,14 +253,14 @@ function recordDeath(player) {
         level: player.level
     };
 
-    state.highScores.push(score);
-    state.highScores.sort(function(a, b) {
+    Game.state.highScores.push(score);
+    Game.state.highScores.sort(function(a, b) {
         if (b.depth !== a.depth) return b.depth - a.depth;
         if (b.gold !== a.gold) return b.gold - a.gold;
         return b.kills - a.kills;
     });
-    if (state.highScores.length > 20) {
-        state.highScores = state.highScores.slice(0, 20);
+    if (Game.state.highScores.length > 20) {
+        Game.state.highScores = Game.state.highScores.slice(0, 20);
     }
 }
 
@@ -329,15 +330,15 @@ function handleDescend(player) {
 
         // Build results
         var results = [];
-        for (var pid in state.players) {
-            var p = state.players[pid];
+        for (var pid in Game.state.players) {
+            var p = Game.state.players[pid];
             results.push({
                 name: p.name,
                 result: 'Depth ' + p.depth + ' | ' + p.gold + ' gold | ' + p.kills + ' kills'
             });
         }
         results.sort(function(a, b) { return 0; }); // keep order
-        gameOver(results, { highScores: state.highScores });
+        gameOver(results, { highScores: Game.state.highScores });
         return;
     }
 
@@ -371,7 +372,7 @@ function handleAscend(player) {
 
 function handleInventoryInput(player, key) {
     if (key === 'esc') {
-        state.inventoryOpen[player.id] = false;
+        Game.state.inventoryOpen[player.id] = false;
         return;
     }
 
@@ -387,7 +388,7 @@ function handleInventoryInput(player, key) {
             } else {
                 useItem(player, index);
             }
-            state.inventoryOpen[player.id] = false;
+            Game.state.inventoryOpen[player.id] = false;
         }
     }
 }
@@ -435,13 +436,13 @@ registerCommand({
     name: "scores",
     description: "Show high scores",
     handler: function(playerID, isAdmin, args) {
-        if (state.highScores.length === 0) {
+        if (Game.state.highScores.length === 0) {
             chatPlayer(playerID, "No high scores yet.");
             return;
         }
         var lines = ["--- Hall of Fame ---"];
-        for (var i = 0; i < Math.min(10, state.highScores.length); i++) {
-            var hs = state.highScores[i];
+        for (var i = 0; i < Math.min(10, Game.state.highScores.length); i++) {
+            var hs = Game.state.highScores[i];
             lines.push((i + 1) + ". " + hs.name + " - Depth " + hs.depth + " - " + hs.gold + " gold - " + hs.kills + " kills");
         }
         chatPlayer(playerID, lines.join("\n"));

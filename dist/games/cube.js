@@ -1,13 +1,6 @@
 // cube.js — spinning 3D cube with shaded ASCII block graphics
 // Load with: /game load cube
 
-var state = {
-    tick: 0,
-    maxTicks: 300, // 30 seconds at 100ms per tick
-    angleX: 0,
-    angleY: 0,
-    angleZ: 0
-};
 
 // Shading characters from darkest to brightest
 var SHADES = [" ", ".", ":", "-", "=", "+", "*", "#", "%", "@"];
@@ -140,9 +133,9 @@ function fillTriangle(imgBuf, zbuf, w, h, p0, p1, p2, z0, z1, z2, shade) {
 }
 
 function renderCube(imgBuf, width, height) {
-    var ax = state.angleX;
-    var ay = state.angleY;
-    var az = state.angleZ;
+    var ax = Game.state.angleX;
+    var ay = Game.state.angleY;
+    var az = Game.state.angleZ;
 
     // Transform all vertices
     var transformed = [];
@@ -267,6 +260,14 @@ function progressBar(width, fraction) {
 var Game = {
     gameName: "Spinning Cube",
 
+    state: {
+        tick: 0,
+        maxTicks: 300, // 30 seconds at 100ms per tick
+        angleX: 0,
+        angleY: 0,
+        angleZ: 0
+    },
+
     splashScreen: "╔═══════════════════════════╗\n"
                +  "║     SPINNING CUBE         ║\n"
                +  "║                           ║\n"
@@ -280,14 +281,14 @@ var Game = {
                +  "╚═══════════════════════════╝",
 
     init: function(savedState) {
-        state.tick = 0;
-        state.angleX = 0;
-        state.angleY = 0;
-        state.angleZ = 0;
+        Game.state.tick = 0;
+        Game.state.angleX = 0;
+        Game.state.angleY = 0;
+        Game.state.angleZ = 0;
     },
 
     start: function() {
-        state.tick = 0;
+        Game.state.tick = 0;
         log("Spinning Cube started");
     },
 
@@ -296,17 +297,17 @@ var Game = {
     },
 
     update: function(dt) {
-        state.tick++;
+        Game.state.tick++;
 
-        if (state.tick >= state.maxTicks) {
+        if (Game.state.tick >= Game.state.maxTicks) {
             gameOver();
         }
 
         // Smooth rotation speeds (different per axis for interesting tumble)
-        var t = state.tick * 0.02;
-        state.angleX = t * 1.0;
-        state.angleY = t * 1.3;
-        state.angleZ = t * 0.7;
+        var t = Game.state.tick * 0.02;
+        Game.state.angleX = t * 1.0;
+        Game.state.angleY = t * 1.3;
+        Game.state.angleZ = t * 0.7;
     },
 
     render: function(buf, playerID, ox, oy, width, height) {
@@ -314,13 +315,13 @@ var Game = {
     },
 
     statusBar: function(playerID) {
-        var remaining = Math.max(0, Math.ceil((state.maxTicks - state.tick) / 10));
-        var elapsed = Math.floor(state.tick / 10);
+        var remaining = Math.max(0, Math.ceil((Game.state.maxTicks - Game.state.tick) / 10));
+        var elapsed = Math.floor(Game.state.tick / 10);
         return "Spinning Cube  |  " + elapsed + "s / 30s  |  " + remaining + "s remaining";
     },
 
     commandBar: function(playerID) {
-        var fraction = Math.min(1, state.tick / state.maxTicks);
+        var fraction = Math.min(1, Game.state.tick / Game.state.maxTicks);
         return progressBar(40, fraction) + "  [Enter] Chat";
     }
 };

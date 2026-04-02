@@ -12,18 +12,9 @@ var MAZE_H = 20;
 var TURN_SPEED = Math.PI / 4; // 45 degrees per key press
 var MOVE_SPEED = 1.0;
 
-var state = {
-    players: {},   // playerID -> player object
-    maze: null,
-    items: [],     // items on the ground: { x, y, item }
-    monsters: [],  // { x, y, hp, maxHp, name, atk, ch, color, loot }
-    tick: 0,
-    floor: 1,
-    messages: {}   // playerID -> [strings]
-};
 
 function createPlayer(id, name) {
-    var spawn = findSpawn(state.maze);
+    var spawn = findSpawn(Game.state.maze);
     return {
         id: id,
         name: name,
@@ -55,10 +46,10 @@ function createPlayer(id, name) {
 }
 
 function addMsg(playerID, text) {
-    if (!state.messages[playerID]) state.messages[playerID] = [];
-    state.messages[playerID].push(text);
-    if (state.messages[playerID].length > 50) {
-        state.messages[playerID] = state.messages[playerID].slice(-50);
+    if (!Game.state.messages[playerID]) Game.state.messages[playerID] = [];
+    Game.state.messages[playerID].push(text);
+    if (Game.state.messages[playerID].length > 50) {
+        Game.state.messages[playerID] = Game.state.messages[playerID].slice(-50);
     }
 }
 
@@ -84,10 +75,20 @@ function playerTotalDef(p) {
 var Game = {
     gameName: "Crawler",
 
+    state: {
+        players: {},   // playerID -> player object
+        maze: null,
+        items: [],     // items on the ground: { x, y, item }
+        monsters: [],  // { x, y, hp, maxHp, name, atk, ch, color, loot }
+        tick: 0,
+        floor: 1,
+        messages: {}   // playerID -> [strings]
+    },
+
     init: function(savedState) {
-        state.maze = generateMaze(MAZE_W, MAZE_H);
-        state.items = scatterItems(state.maze, state.floor);
-        state.monsters = spawnMonsters(state.maze, state.floor);
+        Game.state.maze = generateMaze(MAZE_W, MAZE_H);
+        Game.state.items = scatterItems(Game.state.maze, Game.state.floor);
+        Game.state.monsters = spawnMonsters(Game.state.maze, Game.state.floor);
     },
 
     start: function() {
@@ -95,7 +96,7 @@ var Game = {
         for (var i = 0; i < t.length; i++) {
             for (var j = 0; j < t[i].players.length; j++) {
                 var p = t[i].players[j];
-                state.players[p.id] = createPlayer(p.id, p.name);
+                Game.state.players[p.id] = createPlayer(p.id, p.name);
                 addMsg(p.id, "Welcome to the dungeon, " + p.name + "!");
                 addMsg(p.id, "WASD to move, Q/E to turn.");
                 addMsg(p.id, "Walk into monsters to attack.");
@@ -106,11 +107,11 @@ var Game = {
     onPlayerLeave: function(playerID) {},
 
     onInput: function(playerID, key) {
-        var p = state.players[playerID];
+        var p = Game.state.players[playerID];
         if (!p || p.dead) {
             if (p && p.dead && key === 'r') {
                 // Respawn
-                var spawn = findSpawn(state.maze);
+                var spawn = findSpawn(Game.state.maze);
                 p.x = spawn.x + 0.5;
                 p.y = spawn.y + 0.5;
                 p.angle = 0;
@@ -174,8 +175,8 @@ var Game = {
         var cellY = Math.floor(newY);
 
         // Check for monster collision (attack)
-        for (var m = 0; m < state.monsters.length; m++) {
-            var mon = state.monsters[m];
+        for (var m = 0; m < Game.state.monsters.length; m++) {
+            var mon = Game.state.monsters[m];
             if (mon.hp > 0 && mon.x === cellX && mon.y === cellY) {
                 attackMonster(p, mon, m);
                 return;
@@ -184,26 +185,26 @@ var Game = {
 
         // Wall collision with margin
         var margin = 0.2;
-        if (canWalk(state.maze, newX, newY, margin)) {
+        if (canWalk(Game.state.maze, newX, newY, margin)) {
             p.x = newX;
             p.y = newY;
 
             // Check stairs
             var cx = Math.floor(p.x);
             var cy = Math.floor(p.y);
-            if (state.maze.grid[cy][cx] === TILE_STAIRS) {
+            if (Game.state.maze.grid[cy][cx] === TILE_STAIRS) {
                 descendFloor();
             }
         }
     },
 
     update: function(dt) {
-        state.tick++;
+        Game.state.tick++;
 
         // Monster AI - move toward nearby players every 5 ticks
-        if (state.tick % 5 === 0) {
-            for (var m = 0; m < state.monsters.length; m++) {
-                var mon = state.monsters[m];
+        if (Game.state.tick % 5 === 0) {
+            for (var m = 0; m < Game.state.monsters.length; m++) {
+                var mon = Game.state.monsters[m];
                 if (mon.hp <= 0) continue;
                 monsterAI(mon);
             }
@@ -211,17 +212,17 @@ var Game = {
     },
 
     render: function(buf, playerID, ox, oy, w, h) {
-        var p = state.players[playerID];
+        var p = Game.state.players[playerID];
         if (!p) return;
         if (p.dead) {
             renderDeathScreen(buf, p, ox, oy, w, h);
             return;
         }
-        render3D(buf, p, state.maze, state.monsters, state.items, ox, oy, w, h);
+        render3D(buf, p, Game.state.maze, Game.state.monsters, Game.state.items, ox, oy, w, h);
     },
 
     layout: function(playerID, width, height) {
-        var p = state.players[playerID];
+        var p = Game.state.players[playerID];
         if (!p) return null;
 
         var invChildren = [];
@@ -273,7 +274,7 @@ var Game = {
         invChildren.push({ type: 'label', text: 'Gold: ' + p.gold + '  Lv: ' + p.level, height: 1 });
 
         // Messages as textview at bottom of game panel
-        var msgs = state.messages[playerID] || [];
+        var msgs = Game.state.messages[playerID] || [];
         var recentMsgs = msgs.slice(-20);
 
         return {
@@ -300,17 +301,17 @@ var Game = {
     },
 
     statusBar: function(playerID) {
-        var p = state.players[playerID];
+        var p = Game.state.players[playerID];
         if (!p) return "Crawler - Spectating";
         if (p.dead) return "DEAD - Press [r] to respawn";
         return 'HP:' + p.hp + '/' + p.maxHp +
-               '  Floor:' + state.floor +
+               '  Floor:' + Game.state.floor +
                '  Kills:' + p.kills +
                '  XP:' + p.xp;
     },
 
     commandBar: function(playerID) {
-        var p = state.players[playerID];
+        var p = Game.state.players[playerID];
         if (!p) return '';
         if (p.dead) return '[r] Respawn';
         return '[WASD] Move  [QE] Turn  [G] Grab  [1-8] Equip  [U] Use  [X] Drop';
@@ -333,15 +334,15 @@ function attackMonster(p, mon, idx) {
 
         // Drop loot
         if (mon.loot) {
-            var drop = rollLoot(mon.loot, state.floor);
+            var drop = rollLoot(mon.loot, Game.state.floor);
             if (drop) {
-                state.items.push({ x: mon.x, y: mon.y, item: drop });
+                Game.state.items.push({ x: mon.x, y: mon.y, item: drop });
                 addMsg(p.id, mon.name + " dropped " + drop.name + "!");
             }
         }
 
         // Gold drop
-        var goldDrop = Math.floor(Math.random() * 10 * state.floor) + 1;
+        var goldDrop = Math.floor(Math.random() * 10 * Game.state.floor) + 1;
         p.gold += goldDrop;
         addMsg(p.id, "You find " + goldDrop + " gold.");
 
@@ -358,7 +359,7 @@ function attackMonster(p, mon, idx) {
             chat(p.name + " reached level " + p.level + "!");
         }
 
-        state.monsters.splice(idx, 1);
+        Game.state.monsters.splice(idx, 1);
     }
 }
 
@@ -366,8 +367,8 @@ function monsterAI(mon) {
     // Find nearest player
     var nearest = null;
     var nearDist = 999;
-    for (var pid in state.players) {
-        var p = state.players[pid];
+    for (var pid in Game.state.players) {
+        var p = Game.state.players[pid];
         if (p.dead) continue;
         var dx = p.x - (mon.x + 0.5);
         var dy = p.y - (mon.y + 0.5);
@@ -407,13 +408,13 @@ function monsterAI(mon) {
 
     var nx = mon.x + dx;
     var ny = mon.y + dy;
-    if (nx >= 0 && nx < state.maze.w && ny >= 0 && ny < state.maze.h &&
-        state.maze.grid[ny][nx] !== TILE_WALL) {
+    if (nx >= 0 && nx < Game.state.maze.w && ny >= 0 && ny < Game.state.maze.h &&
+        Game.state.maze.grid[ny][nx] !== TILE_WALL) {
         // Check no other monster there
         var blocked = false;
-        for (var m = 0; m < state.monsters.length; m++) {
-            if (state.monsters[m] !== mon && state.monsters[m].hp > 0 &&
-                state.monsters[m].x === nx && state.monsters[m].y === ny) {
+        for (var m = 0; m < Game.state.monsters.length; m++) {
+            if (Game.state.monsters[m] !== mon && Game.state.monsters[m].hp > 0 &&
+                Game.state.monsters[m].x === nx && Game.state.monsters[m].y === ny) {
                 blocked = true;
                 break;
             }
@@ -430,11 +431,11 @@ function monsterAI(mon) {
 function pickupItem(p) {
     var cx = Math.floor(p.x);
     var cy = Math.floor(p.y);
-    for (var i = state.items.length - 1; i >= 0; i--) {
-        if (state.items[i].x === cx && state.items[i].y === cy) {
-            var it = state.items[i].item;
+    for (var i = Game.state.items.length - 1; i >= 0; i--) {
+        if (Game.state.items[i].x === cx && Game.state.items[i].y === cy) {
+            var it = Game.state.items[i].item;
             p.backpack.push(it);
-            state.items.splice(i, 1);
+            Game.state.items.splice(i, 1);
             addMsg(p.id, "Picked up " + it.name + ".");
             return;
         }
@@ -483,28 +484,28 @@ function dropItem(p) {
         return;
     }
     var it = p.backpack.pop();
-    state.items.push({ x: Math.floor(p.x), y: Math.floor(p.y), item: it });
+    Game.state.items.push({ x: Math.floor(p.x), y: Math.floor(p.y), item: it });
     addMsg(p.id, "Dropped " + it.name + ".");
 }
 
 // ─── Floor Transition ──────────────────────────────────────────────────────
 
 function descendFloor() {
-    state.floor++;
-    state.maze = generateMaze(MAZE_W, MAZE_H);
-    state.items = scatterItems(state.maze, state.floor);
-    state.monsters = spawnMonsters(state.maze, state.floor);
+    Game.state.floor++;
+    Game.state.maze = generateMaze(MAZE_W, MAZE_H);
+    Game.state.items = scatterItems(Game.state.maze, Game.state.floor);
+    Game.state.monsters = spawnMonsters(Game.state.maze, Game.state.floor);
 
-    for (var pid in state.players) {
-        var p = state.players[pid];
+    for (var pid in Game.state.players) {
+        var p = Game.state.players[pid];
         if (!p.dead) {
-            var spawn = findSpawn(state.maze);
+            var spawn = findSpawn(Game.state.maze);
             p.x = spawn.x + 0.5;
             p.y = spawn.y + 0.5;
-            addMsg(p.id, "You descend to floor " + state.floor + ".");
+            addMsg(p.id, "You descend to floor " + Game.state.floor + ".");
         }
     }
-    chat("The party descends to floor " + state.floor + "!");
+    chat("The party descends to floor " + Game.state.floor + "!");
 }
 
 function renderDeathScreen(buf, p, ox, oy, w, h) {
@@ -512,7 +513,7 @@ function renderDeathScreen(buf, p, ox, oy, w, h) {
         "YOU DIED",
         "",
         p.name + " - Level " + p.level,
-        "Floor " + state.floor,
+        "Floor " + Game.state.floor,
         "Kills: " + p.kills,
         "Gold: " + p.gold,
         "",
