@@ -17,6 +17,7 @@ type GameWindow struct {
 	Controls map[string]CachedControl // keyed by tree path for reuse
 	renderFn func(buf *common.ImageBuffer, x, y, w, h int) // game's Render() function
 	onInput  func(action string)        // bound to game.OnInput(playerID, ...)
+	rootHash uint64                     // hash of the root WidgetNode at build time
 }
 
 // CachedControl pairs a control with metadata for reuse decisions.
@@ -48,10 +49,20 @@ func ReconcileGameWindow(
 	renderFn func(buf *common.ImageBuffer, x, y, w, h int),
 	onInput func(action string),
 ) *GameWindow {
+	// Fast path: if the entire tree is unchanged (root hash matches and is
+	// non-zero), reuse the previous GameWindow — no allocations needed.
+	rootHash := tree.Hash()
+	if prev != nil && rootHash != 0 && rootHash == prev.rootHash {
+		prev.renderFn = renderFn
+		prev.onInput = onInput
+		return prev
+	}
+
 	gw := &GameWindow{
 		Controls: make(map[string]CachedControl),
 		renderFn: renderFn,
 		onInput:  onInput,
+		rootHash: rootHash,
 	}
 
 	prevControls := map[string]CachedControl{}
