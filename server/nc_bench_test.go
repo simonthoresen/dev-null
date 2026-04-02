@@ -1,18 +1,28 @@
 package server
 
 import (
+	"flag"
 	"fmt"
 	"testing"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 )
+
+var benchDuration = flag.Duration("nc.benchtime", 10*time.Second, "how long to run NC render benchmark")
 
 // BenchmarkComplexNCRender benchmarks rendering a fairly complicated NC widget
 // layout: a window with nested panels, text inputs, labels, buttons, checkboxes,
 // dividers, and a text view — similar to what a real game UI might produce.
 //
+// Usage:
+//
+//	go test ./server/ -run='^$' -bench=BenchmarkComplexNCRender
+//	go test ./server/ -run='^$' -bench=BenchmarkComplexNCRender -nc.benchtime=30s
+//
 // Performance history (AMD Ryzen 9 9950X, 120x40):
-//   2026-04-01  827 µs/op
+//
+//	2026-04-01  827 µs/op
 func BenchmarkComplexNCRender(b *testing.B) {
 	theme := DefaultTheme()
 	layer := theme.LayerAt(0)
@@ -25,10 +35,17 @@ func BenchmarkComplexNCRender(b *testing.B) {
 		b.Fatal("expected non-empty render output")
 	}
 
+	var iterations int
+	deadline := time.Now().Add(*benchDuration)
 	b.ResetTimer()
-	for b.Loop() {
+	for time.Now().Before(deadline) {
 		_ = window.Render(0, 0, 120, 40, layer)
+		iterations++
 	}
+	b.StopTimer()
+	elapsed := *benchDuration
+	b.ReportMetric(float64(elapsed.Nanoseconds())/float64(iterations), "ns/op")
+	b.Logf("%d iterations in %s (%.0f µs/op)", iterations, elapsed, float64(elapsed.Microseconds())/float64(iterations))
 }
 
 // buildComplexWindow constructs a realistic NC widget layout with multiple
@@ -46,9 +63,9 @@ func buildComplexWindow() *NCWindow {
 		statsLines[i] = fmt.Sprintf("Player %02d  HP: %3d  Score: %5d", i+1, 100-i*4, 1000+i*200)
 	}
 	statsView := &NCTextView{
-		Lines:      statsLines,
+		Lines:       statsLines,
 		BottomAlign: false,
-		Scrollable: true,
+		Scrollable:  true,
 	}
 
 	statsPanel := &NCPanel{
@@ -130,9 +147,9 @@ func buildComplexWindow() *NCWindow {
 		chatLines[i] = fmt.Sprintf("[%02d:%02d] Player%d: This is chat message number %d with some text", i/60, i%60, i%5+1, i+1)
 	}
 	chatView := &NCTextView{
-		Lines:      chatLines,
+		Lines:       chatLines,
 		BottomAlign: true,
-		Scrollable: true,
+		Scrollable:  true,
 	}
 
 	// Bottom divider
