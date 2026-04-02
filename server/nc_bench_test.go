@@ -10,6 +10,9 @@ import (
 // BenchmarkComplexNCRender benchmarks rendering a fairly complicated NC widget
 // layout: a window with nested panels, text inputs, labels, buttons, checkboxes,
 // dividers, and a text view — similar to what a real game UI might produce.
+//
+// Performance history (AMD Ryzen 9 9950X, 120x40):
+//   2026-04-01  827 µs/op
 func BenchmarkComplexNCRender(b *testing.B) {
 	theme := DefaultTheme()
 	layer := theme.LayerAt(0)
