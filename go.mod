@@ -13,6 +13,7 @@ require (
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/charmbracelet/x/xpty v0.1.0
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
+	github.com/fogleman/gg v1.3.0
 	github.com/hajimehoshi/bitmapfont/v4 v4.1.0
 	github.com/hajimehoshi/ebiten/v2 v2.9.9
 	github.com/huin/goupnp v1.3.0
@@ -40,6 +41,7 @@ require (
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/go-text/typesetting v0.3.0 // indirect
+	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/jezek/xgb v1.1.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect

@@ -790,6 +790,17 @@ func (m Model) View() tea.View {
 		}
 		if m.viewportW > 0 && m.viewportH > 0 {
 			oscPrefix += common.EncodeViewportOSC(m.viewportX, m.viewportY, m.viewportW, m.viewportH)
+
+			// Canvas frame: render and send if game has renderCanvas and scale > 0.
+			m.api.State().RLock()
+			canvasScale := m.api.State().CanvasScale
+			m.api.State().RUnlock()
+			if canvasScale > 0 && game.HasCanvasMode() && phase == common.PhasePlaying {
+				pixelW := m.viewportW * canvasScale
+				pixelH := m.viewportH * canvasScale
+				pngData := game.RenderCanvas(m.playerID, pixelW, pixelH)
+				oscPrefix += common.EncodeFrameOSC(pngData)
+			}
 		}
 	}
 

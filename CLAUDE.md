@@ -217,6 +217,8 @@ type Game interface {
     Commands() []Command
     Menus() []MenuDef
     CharMap() *CharMapDef              // nil if game doesn't use a charmap
+    RenderCanvas(playerID string, width, height int) []byte // PNG bytes, nil if no canvas hook
+    HasCanvasMode() bool               // true if game defines renderCanvas
     Unload()
 
     // Suspend/resume (optional — requires canSuspend: true in JS)
@@ -269,7 +271,7 @@ type Message struct {
 
 Games live in `dist/games/` as either single `.js` files or folders containing `main.js` (for multi-file games using `include()`). Loaded at runtime via `/game load <name>`. A HTTPS URL can be given instead of a name — `.js` files are cached in `dist/games/.cache/`, `.zip` files are extracted to `dist/games/<name>/`. GitHub blob URLs are converted to raw automatically.
 
-**Game** — exports a global `Game` object with hooks `update`, `onPlayerLeave`, `onInput`, `render`, `renderSplash`, `renderGameOver`, `renderNC`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `charmap`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport. `update(dt)` is called once per tick with elapsed seconds — all game logic belongs here. `render(buf, playerID, ox, oy, w, h)` receives an `ImageBuffer` and writes pixels directly via `buf.setChar(x, y, ch, fg, bg)`, `buf.writeString(x, y, text, fg, bg)`, `buf.fill(x, y, w, h, ch, fg, bg)`. Colors are `"#RRGGBB"` hex strings or `null`. Attribute constants: `ATTR_BOLD`, `ATTR_FAINT`, `ATTR_ITALIC`, `ATTR_UNDERLINE`, `ATTR_REVERSE`. `renderSplash(buf, playerID, ox, oy, w, h)` renders a custom splash screen (return true); if omitted, framework renders figlet game name. `renderGameOver(buf, playerID, ox, oy, w, h, results)` renders a custom game-over screen (return true); if omitted, framework renders figlet "GAME OVER" + results table. `renderNC` returns a declarative widget tree that the framework renders using real NC controls; if defined, `render()` is only called for `{type: "gameview"}` nodes within the tree. Interactive node types (`button`, `textinput`, `checkbox`) route actions back via `onInput(playerID, action)`. Tab cycles focus between interactive controls; Esc returns to raw `onInput` mode.
+**Game** — exports a global `Game` object with hooks `update`, `onPlayerLeave`, `onInput`, `render`, `renderCanvas`, `renderSplash`, `renderGameOver`, `renderNC`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `charmap`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport. `update(dt)` is called once per tick with elapsed seconds — all game logic belongs here. `render(buf, playerID, ox, oy, w, h)` receives an `ImageBuffer` and writes pixels directly via `buf.setChar(x, y, ch, fg, bg)`, `buf.writeString(x, y, text, fg, bg)`, `buf.fill(x, y, w, h, ch, fg, bg)`. Colors are `"#RRGGBB"` hex strings or `null`. Attribute constants: `ATTR_BOLD`, `ATTR_FAINT`, `ATTR_ITALIC`, `ATTR_UNDERLINE`, `ATTR_REVERSE`. `renderSplash(buf, playerID, ox, oy, w, h)` renders a custom splash screen (return true); if omitted, framework renders figlet game name. `renderGameOver(buf, playerID, ox, oy, w, h, results)` renders a custom game-over screen (return true); if omitted, framework renders figlet "GAME OVER" + results table. `renderNC` returns a declarative widget tree that the framework renders using real NC controls; if defined, `render()` is only called for `{type: "gameview"}` nodes within the tree. Interactive node types (`button`, `textinput`, `checkbox`) route actions back via `onInput(playerID, action)`. Tab cycles focus between interactive controls; Esc returns to raw `onInput` mode.
 
 **Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `teams()`, `now()`, `registerCommand()`, `gameOver(results, state)`, `figlet(text, font?)` (ASCII art via figlet4go; built-in fonts: `"standard"`, `"larry3d"`; extra fonts loaded from `dist/fonts/*.flf` at startup), `include(name)` (evaluate another `.js` file from the same directory — for multi-file games).
 
@@ -349,14 +351,50 @@ buf.setChar(x, y, "\uE000", "#ffff00", "#000000"); // renders as sprite in custo
 - `\x1b]ns;charmap;<base64 JSON>\x07` — charmap definition (sent once on game load)
 - `\x1b]ns;atlas;<base64 gzipped PNG>\x07` — sprite sheet (sent once on game load)
 - `\x1b]ns;viewport;<x>,<y>,<w>,<h>\x07` — game viewport bounds (sent every frame)
+- `\x1b]ns;frame;<base64 gzipped PNG>\x07` — canvas frame (sent every frame when canvas mode active)
 
 **Rendering rules:** Charmaps apply only to the game viewport. NC chrome (menus, dialogs, chat, status bars) always renders as text. Drop shadows on PUA cells clear the sprite and fill with shadow color.
+
+### Canvas Rendering (Server-Side 2D Graphics)
+
+Games can define an optional `renderCanvas(ctx, playerID, w, h)` hook for server-side 2D canvas rendering. The server rasterizes using `fogleman/gg` and sends PNG frames to enhanced clients. Regular SSH players still see the cell-based `render()` output.
+
+**Canvas API (subset of HTML5 Canvas2D):**
+- **State:** `save()`, `restore()`
+- **Transforms:** `translate(x,y)`, `rotate(angle)`, `scale(sx,sy)`
+- **Style:** `setFillStyle(color)`, `setStrokeStyle(color)`, `setLineWidth(w)`
+- **Rectangles:** `fillRect(x,y,w,h)`, `strokeRect(x,y,w,h)`, `clearRect(x,y,w,h)`
+- **Paths:** `beginPath()`, `closePath()`, `moveTo(x,y)`, `lineTo(x,y)`, `arc(x,y,r,start,end)`, `fill()`, `stroke()`
+- **Curves:** `quadraticCurveTo(cpx,cpy,x,y)`, `bezierCurveTo(cp1x,cp1y,cp2x,cp2y,x,y)`
+- **Circles:** `fillCircle(x,y,r)`, `strokeCircle(x,y,r)`, `fillEllipse(x,y,rx,ry)`, `strokeEllipse(x,y,rx,ry)`
+- **Text:** `fillText(text,x,y)`
+- **Pixels:** `setPixel(x,y,color)`
+- **Constants:** `PI`, `TAU`
+
+**JS game usage:**
+```js
+var Game = {
+    renderCanvas: function(ctx, playerID, w, h) {
+        ctx.setFillStyle("#000000");
+        ctx.fillRect(0, 0, w, h);
+        ctx.setFillStyle("#ffff00");
+        ctx.fillCircle(w/2, h/2, 20);
+    },
+    render: function(buf, playerID, ox, oy, w, h) {
+        // Optional: cell-based overlay (score, HUD) on top of canvas
+        buf.writeString(ox, oy, "Score: 42", "#fff", null);
+    }
+};
+```
+
+**Canvas scale:** Admin sets the scaling factor with `/canvas scale <n>` (pixels per cell). `/canvas info` shows current scale, pixel dimensions, and estimated bandwidth per user. `/canvas off` disables canvas rendering. Scale is stored in `CentralState.CanvasScale`. Canvas dimensions = viewport cells × scale. The `/canvas` command shows bandwidth estimates at the console's viewport size.
 
 | Package | Role |
 |---------|------|
 | `common/charmap.go` | CharMapDef/CharMapEntry types, PUA constants, JSON loader |
-| `common/osc.go` | OSC escape sequence encoding for charmap/atlas/viewport |
-| `internal/client/` | SSH connection, ANSI parser, Ebitengine sprite renderer |
+| `common/osc.go` | OSC escape sequence encoding for charmap/atlas/viewport/frame, bandwidth estimator |
+| `internal/engine/canvas.go` | Headless Canvas2D context (fogleman/gg) exposed to goja |
+| `internal/client/` | SSH connection, ANSI parser, Ebitengine sprite + canvas renderer |
 
 ### Init Files (`~/.null-space/`)
 

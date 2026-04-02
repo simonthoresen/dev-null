@@ -89,6 +89,11 @@ type Game interface {
 	Commands() []Command
 	Menus() []MenuDef
 	CharMap() *CharMapDef // returns nil if the game doesn't use a charmap
+	// RenderCanvas calls the game's renderCanvas(ctx, w, h) hook if defined.
+	// Returns the rendered image as PNG bytes, or nil if the game has no canvas hook.
+	// The canvas dimensions are viewport cells × canvasScale pixels per cell.
+	RenderCanvas(playerID string, width, height int) []byte
+	HasCanvasMode() bool // true if game defines renderCanvas hook
 	Unload()
 
 	// Suspend/resume support — optional for JS games.

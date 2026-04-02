@@ -51,6 +51,10 @@ type CentralState struct {
 	ChatHistory []common.Message
 
 	Net NetworkInfo
+
+	// CanvasScale is the pixels-per-cell scaling factor for canvas rendering.
+	// 0 = canvas rendering disabled. Typical values: 4, 8, 16.
+	CanvasScale int
 }
 
 // New creates a new CentralState with the given admin password.

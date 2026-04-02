@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1285,6 +1286,74 @@ func (a *Server) registerBuiltins() {
 				return
 			}
 			ctx.Broadcast(fmt.Sprintf("%s was kicked.", target.Name))
+		},
+	})
+
+	a.registry.Register(common.Command{
+		Name:        "canvas",
+		Description: "Canvas rendering. /canvas scale <n> | /canvas off | /canvas info",
+		AdminOnly:   true,
+		Complete: func(before []string) []string {
+			if len(before) == 0 {
+				return []string{"scale", "off", "info"}
+			}
+			return nil
+		},
+		Handler: func(ctx common.CommandContext, args []string) {
+			if len(args) == 0 {
+				args = []string{"info"}
+			}
+			switch args[0] {
+			case "scale":
+				if len(args) < 2 {
+					ctx.Reply("Usage: /canvas scale <pixels-per-cell> (e.g. 4, 8, 16)")
+					return
+				}
+				n, err := strconv.Atoi(args[1])
+				if err != nil || n < 1 || n > 32 {
+					ctx.Reply("Scale must be 1-32.")
+					return
+				}
+				a.state.Lock()
+				a.state.CanvasScale = n
+				a.state.Unlock()
+				// Estimate bandwidth for the console's dimensions.
+				viewW := 120 // typical console width
+				viewH := viewW * 9 / 16
+				bw := common.CanvasBandwidthMbps(viewW, viewH, n, 10)
+				ctx.Reply(fmt.Sprintf("Canvas scale set to %d (%dx%d px). ~%.1f Mbps/user at %dx%d viewport.",
+					n, viewW*n, viewH*n, bw, viewW, viewH))
+			case "off":
+				a.state.Lock()
+				a.state.CanvasScale = 0
+				a.state.Unlock()
+				ctx.Reply("Canvas rendering disabled.")
+			case "info":
+				a.state.RLock()
+				scale := a.state.CanvasScale
+				game := a.state.ActiveGame
+				a.state.RUnlock()
+				if scale == 0 {
+					ctx.Reply("Canvas rendering: off. Use /canvas scale <n> to enable.")
+					return
+				}
+				hasCanvas := game != nil && game.HasCanvasMode()
+				viewW := 120
+				viewH := viewW * 9 / 16
+				bw := common.CanvasBandwidthMbps(viewW, viewH, scale, 10)
+				status := "no game loaded"
+				if game != nil {
+					if hasCanvas {
+						status = "active (game has renderCanvas)"
+					} else {
+						status = "game has no renderCanvas hook"
+					}
+				}
+				ctx.Reply(fmt.Sprintf("Canvas scale: %d (%dx%d px). ~%.1f Mbps/user. %s",
+					scale, viewW*scale, viewH*scale, bw, status))
+			default:
+				ctx.Reply("Usage: /canvas scale <n> | /canvas off | /canvas info")
+			}
 		},
 	})
 

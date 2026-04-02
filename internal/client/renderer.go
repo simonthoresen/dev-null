@@ -36,6 +36,9 @@ type Game struct {
 	atlasImage  *ebiten.Image
 	spriteCache map[rune]*ebiten.Image // PUA codepoint → cropped sprite
 
+	// Canvas frame — rendered image from server-side renderCanvas.
+	canvasFrame *ebiten.Image // latest decoded canvas frame, or nil
+
 	// Read buffer for SSH data.
 	readBuf []byte
 	mu      sync.Mutex
@@ -89,6 +92,10 @@ func (g *Game) readLoop() {
 				g.loadAtlas(g.grid.AtlasData)
 				g.grid.AtlasData = nil
 			}
+			if g.grid.FrameData != nil {
+				g.loadCanvasFrame(g.grid.FrameData)
+				g.grid.FrameData = nil
+			}
 			g.mu.Unlock()
 		}
 		if err != nil {
@@ -125,6 +132,26 @@ func (g *Game) loadAtlas(gzipData []byte) {
 
 	g.atlasImage = ebiten.NewImageFromImage(img)
 	g.spriteCache = make(map[rune]*ebiten.Image)
+}
+
+func (g *Game) loadCanvasFrame(gzipData []byte) {
+	gz, err := gzip.NewReader(bytes.NewReader(gzipData))
+	if err != nil {
+		return
+	}
+	defer gz.Close()
+
+	raw, err := io.ReadAll(gz)
+	if err != nil {
+		return
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return
+	}
+
+	g.canvasFrame = ebiten.NewImageFromImage(img)
 }
 
 func (g *Game) getSprite(r rune) *ebiten.Image {
@@ -183,6 +210,21 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	vy := g.grid.ViewportY
 	vw := g.grid.ViewportW
 	vh := g.grid.ViewportH
+
+	// Draw canvas frame as the viewport background (if present).
+	if g.canvasFrame != nil && vw > 0 && vh > 0 {
+		vpPx := vx * cellW
+		vpPy := vy * cellH
+		vpPw := vw * cellW
+		vpPh := vh * cellH
+		fop := &ebiten.DrawImageOptions{}
+		// Scale canvas frame to fit the viewport pixel area.
+		fw := float64(vpPw) / float64(g.canvasFrame.Bounds().Dx())
+		fh := float64(vpPh) / float64(g.canvasFrame.Bounds().Dy())
+		fop.GeoM.Scale(fw, fh)
+		fop.GeoM.Translate(float64(vpPx), float64(vpPy))
+		screen.DrawImage(g.canvasFrame, fop)
+	}
 
 	for cy := 0; cy < g.grid.Height; cy++ {
 		for cx := 0; cx < g.grid.Width; cx++ {

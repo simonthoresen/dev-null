@@ -81,10 +81,11 @@ type JSRuntime struct {
 	updateFn        goja.Callable
 	onPlayerLeave   goja.Callable
 	onInput         goja.Callable
-	renderFn        goja.Callable
-	renderSplashFn  goja.Callable
+	renderFn         goja.Callable
+	renderCanvasFn   goja.Callable
+	renderSplashFn   goja.Callable
 	renderGameOverFn goja.Callable
-	renderNCFn      goja.Callable
+	renderNCFn       goja.Callable
 	statusBarFn     goja.Callable
 	commandBarFn    goja.Callable
 
@@ -498,6 +499,7 @@ func (r *JSRuntime) extractGameObject() error {
 	r.onPlayerLeave = extractCallable(gameObj, "onPlayerLeave")
 	r.onInput = extractCallable(gameObj, "onInput")
 	r.renderFn = extractCallable(gameObj, "render")
+	r.renderCanvasFn = extractCallable(gameObj, "renderCanvas")
 	r.renderSplashFn = extractCallable(gameObj, "renderSplash")
 	r.renderGameOverFn = extractCallable(gameObj, "renderGameOver")
 	r.renderNCFn = extractCallable(gameObj, "renderNC")
@@ -906,6 +908,37 @@ func (r *JSRuntime) TeamRange() common.TeamRange {
 
 func (r *JSRuntime) CharMap() *common.CharMapDef {
 	return r.charmapDef
+}
+
+func (r *JSRuntime) HasCanvasMode() bool {
+	return r.renderCanvasFn != nil
+}
+
+func (r *JSRuntime) RenderCanvas(playerID string, width, height int) []byte {
+	if r.renderCanvasFn == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	defer r.recoverJS("RenderCanvas")
+	defer TraceJS(r.vm, "RenderCanvas")()
+	cancel := WatchdogJS(r.vm, "RenderCanvas")
+	defer cancel()
+
+	canvas := newJSCanvas(width, height)
+	ctx := canvas.toJSObject(r.vm)
+	_, err := r.renderCanvasFn(goja.Undefined(), r.vm.ToValue(ctx), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
+	if err != nil {
+		slog.Error("JS RenderCanvas error", "error", err)
+		return nil
+	}
+
+	data, err := canvas.toPNG()
+	if err != nil {
+		slog.Error("Canvas PNG encoding error", "error", err)
+		return nil
+	}
+	return data
 }
 
 func (r *JSRuntime) RenderSplash(buf *common.ImageBuffer, playerID string, x, y, width, height int) bool {
