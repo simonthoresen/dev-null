@@ -69,7 +69,7 @@ var Game = {
         if (key === " ") p.score += 10;
     },
 
-    view: function(playerID, width, height) {
+    update: function(dt) {
         state.tick++;
 
         // Check if game is over.
@@ -92,7 +92,9 @@ var Game = {
             });
             gameOver(results, { highScore: state.highScore });
         }
+    },
 
+    render: function(playerID, width, height) {
         var me = state.players[playerID];
         var lines = [];
         for (var y = 0; y < height; y++) {

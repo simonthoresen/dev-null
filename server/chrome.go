@@ -1050,16 +1050,16 @@ func (m chromeModel) viewPlaying(menus []common.MenuDef, game common.Game, gameN
 	}
 
 	var gameView string
-	if ncTree := game.ViewNC(m.playerID, m.width, gameH); ncTree != nil {
+	if ncTree := game.RenderNC(m.playerID, m.width, gameH); ncTree != nil {
 		// Game provides a declarative NC widget tree — build/reconcile real NC controls.
 		m.gameWindow = ReconcileGameWindow(m.gameWindow, ncTree,
-			func(w, h int) string { return game.View(m.playerID, w, h) },
+			func(w, h int) string { return game.Render(m.playerID, w, h) },
 			func(action string) { game.OnInput(m.playerID, action) })
 		// y=3: ncBar(1) + menuBar(1) + gameStatusBar(1) above the game viewport.
 		gameView = m.gameWindow.Window.Render(0, 3, m.width, gameH, m.theme.LayerAt(0))
 	} else {
 		m.gameWindow = nil
-		gameView = fitBlock(game.View(m.playerID, m.width, gameH), m.width, gameH)
+		gameView = fitBlock(game.Render(m.playerID, m.width, gameH), m.width, gameH)
 	}
 	chatView := renderChatLines(m.chatLines, m.width, chatH, m.chatScrollOffset, chStyle, chatBg)
 
@@ -1535,7 +1535,7 @@ func (m *chromeModel) handlePluginCommand(input string) {
 				return
 			}
 		}
-		pl, err := LoadPlugin(path)
+		pl, err := LoadPlugin(path, m.app.clock)
 		if err != nil {
 			m.pluginReply(fmt.Sprintf("Failed to load plugin: %v", err))
 			return

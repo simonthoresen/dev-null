@@ -565,14 +565,15 @@ var Game = {
         }
     },
 
-    view: function(playerID, width, height) {
-        // Fallback for raw view — not normally called when viewNC is defined.
+    update: function(dt) {
         tick();
+    },
+
+    render: function(playerID, width, height) {
         return '';
     },
 
-    viewNC: function(playerID, width, height) {
-        tick();
+    renderNC: function(playerID, width, height) {
         var seatID = playerSeat(playerID);
         if (!seatID) {
             if (state.seatOrder.length > 0) seatID = state.seatOrder[0];

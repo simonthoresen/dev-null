@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/dop251/goja"
+
+	"null-space/common"
 )
 
 // jsPlugin wraps a goja JS runtime for a per-player or per-console plugin.
@@ -22,7 +24,7 @@ type jsPlugin struct {
 }
 
 // LoadPlugin reads and executes a JS plugin file, extracting the Plugin.onMessage hook.
-func LoadPlugin(path string) (*jsPlugin, error) {
+func LoadPlugin(path string, clock common.Clock) (*jsPlugin, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read plugin file: %w", err)
@@ -36,6 +38,11 @@ func LoadPlugin(path string) (*jsPlugin, error) {
 	// Register a minimal log() global so plugins can debug-print.
 	p.vm.Set("log", func(msg string) {
 		slog.Info("plugin log", "plugin", p.name, "msg", msg)
+	})
+
+	// now() — returns server time in epoch milliseconds (same clock as games).
+	p.vm.Set("now", func() int64 {
+		return clock.Now().UnixMilli()
 	})
 
 	if _, err := p.vm.RunScript(path, string(src)); err != nil {

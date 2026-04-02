@@ -144,10 +144,10 @@ var Game = {
         }
     },
 
-    view: function(playerID, width, height) {
+    update: function(dt) {
         state.tick++;
 
-        // Update monsters (only once per tick, keyed to first player view call)
+        // Update monsters
         if (state.tick % 3 === 0) { // monsters move every 3 ticks (300ms)
             for (var d in state.levels) {
                 updateMonsters(state.levels[d], state.players, state.tick);
@@ -174,18 +174,9 @@ var Game = {
                 }
             }
         }
+    },
 
-        // Check for total party kill
-        var allDead = true;
-        var anyPlayer = false;
-        for (var pid in state.players) {
-            anyPlayer = true;
-            if (!state.players[pid].dead) {
-                allDead = false;
-                break;
-            }
-        }
-
+    render: function(playerID, width, height) {
         var player = state.players[playerID];
         if (!player) {
             // Late joiner — spectate or create

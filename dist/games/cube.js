@@ -309,12 +309,11 @@ var Game = {
         // No input needed — it's a screensaver!
     },
 
-    view: function(playerID, width, height) {
+    update: function(dt) {
         state.tick++;
 
         if (state.tick >= state.maxTicks) {
             gameOver();
-            // Return final frame
         }
 
         // Smooth rotation speeds (different per axis for interesting tumble)
@@ -322,7 +321,9 @@ var Game = {
         state.angleX = t * 1.0;
         state.angleY = t * 1.3;
         state.angleZ = t * 0.7;
+    },
 
+    render: function(playerID, width, height) {
         return renderCube(width, height);
     },
 

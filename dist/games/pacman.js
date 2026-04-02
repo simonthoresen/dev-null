@@ -95,7 +95,6 @@ var maze = [], dots = 0, wallMask = [];
 var pls = {}, plOrder = [];
 var ghosts = [];
 var frame = 0, round = 1;
-var lastTick = 0;
 
 // ============================================================
 // Helpers
@@ -326,9 +325,6 @@ function movePac(p) {
 // Update
 // ============================================================
 function tick() {
-    var now = Date.now();
-    if (now - lastTick < 90) return;
-    lastTick = now;
     frame++;
 
     // Save previous positions for head-on collision detection
@@ -559,7 +555,6 @@ function render(pid, width, height) {
 // ============================================================
 parseMaze();
 resetGhosts();
-lastTick = Date.now();
 
 registerCommand({
     name: "score",
@@ -624,8 +619,11 @@ var Game = {
         else if (key === "right") p.nextDir = RIGHT;
     },
 
-    view: function(playerID, width, height) {
+    update: function(dt) {
         tick();
+    },
+
+    render: function(playerID, width, height) {
         return render(playerID, width, height);
     },
 

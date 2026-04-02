@@ -98,7 +98,6 @@ var powerups = [];
 var ufo = null;
 var ufoTimer = 0;
 var frame = 0;
-var lastTick = 0;
 var wave = 1;
 var waveAlienCount = 0;
 var wavePause = 0;
@@ -215,10 +214,6 @@ function newPlayer(id, name) {
 // Tick — all coordinates in fixed world space
 // ============================================================
 function tick() {
-    var now = Date.now();
-    if (now - lastTick < 90) return;
-    lastTick = now;
-
     if (gameOver) return;
 
     frame++;
@@ -530,8 +525,6 @@ function render(pid, width, height) {
     var viewCols = Math.floor(width / cw);
     var viewRows = height;
 
-    tick();
-
     var emptyCell = rep(" ", cw);
 
     // Camera: center on player, clamp to world
@@ -777,7 +770,6 @@ function render(pid, width, height) {
 // ============================================================
 // Init
 // ============================================================
-lastTick = Date.now();
 
 registerCommand({
     name: "score",
@@ -868,7 +860,11 @@ var Game = {
         }
     },
 
-    view: function(playerID, width, height) {
+    update: function(dt) {
+        tick();
+    },
+
+    render: function(playerID, width, height) {
         return render(playerID, width, height);
     },
 

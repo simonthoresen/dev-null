@@ -609,7 +609,7 @@ func (m *consoleModel) handlePluginCommand(input string) {
 				return
 			}
 		}
-		pl, err := LoadPlugin(path)
+		pl, err := LoadPlugin(path, m.app.clock)
 		if err != nil {
 			m.appendLog(fmt.Sprintf("Failed to load plugin: %v", err))
 			return

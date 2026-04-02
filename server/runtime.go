@@ -67,7 +67,8 @@ func watchdogJS(vm *goja.Runtime, method string) func() {
 type jsRuntime struct {
 	mu      sync.Mutex
 	vm      *goja.Runtime
-	baseDir string // directory containing the game file (for include() resolution)
+	baseDir string       // directory containing the game file (for include() resolution)
+	clock   common.Clock // server clock exposed to JS as now()
 
 	commands    []common.Command
 	cachedTeams []map[string]any   // snapshot set by server; read by JS teams()
@@ -75,10 +76,11 @@ type jsRuntime struct {
 	chatCh      chan common.Message // drained by server goroutine; closed on unload
 
 	// game object methods (nil if not defined)
+	updateFn      goja.Callable
 	onPlayerLeave goja.Callable
 	onInput       goja.Callable
-	viewFn        goja.Callable
-	viewNCFn      goja.Callable
+	renderFn      goja.Callable
+	renderNCFn    goja.Callable
 	statusBarFn   goja.Callable
 	commandBarFn  goja.Callable
 
@@ -101,7 +103,7 @@ type jsRuntime struct {
 // LoadGame loads and executes a JS file from games/, extracts the Game object
 // methods, and returns a common.Game. Init() is NOT called here — the server
 // calls it at the splash→playing transition when GamePlayerIDs are set.
-func LoadGame(path string, logFn func(string), chatCh chan common.Message) (common.Game, error) {
+func LoadGame(path string, logFn func(string), chatCh chan common.Message, clock common.Clock) (common.Game, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read game file: %w", err)
@@ -112,6 +114,7 @@ func LoadGame(path string, logFn func(string), chatCh chan common.Message) (comm
 		baseDir: filepath.Dir(path),
 		logFn:   logFn,
 		chatCh:  chatCh,
+		clock:   clock,
 	}
 
 	rt.registerGlobals()
@@ -421,6 +424,11 @@ func (r *jsRuntime) registerGlobals() {
 		return goja.Undefined()
 	})
 
+	// now() — returns server time in epoch milliseconds (mockable via Clock).
+	r.vm.Set("now", func() int64 {
+		return r.clock.Now().UnixMilli()
+	})
+
 	// include("file.js") — evaluate another JS file relative to the game's directory.
 	// This enables multi-file games stored in games/<name>/ folders.
 	included := map[string]bool{} // track already-included files to prevent cycles
@@ -460,10 +468,11 @@ func (r *jsRuntime) extractGameObject() error {
 	}
 
 	// Core game methods
+	r.updateFn = extractCallable(gameObj, "update")
 	r.onPlayerLeave = extractCallable(gameObj, "onPlayerLeave")
 	r.onInput = extractCallable(gameObj, "onInput")
-	r.viewFn = extractCallable(gameObj, "view")
-	r.viewNCFn = extractCallable(gameObj, "viewNC")
+	r.renderFn = extractCallable(gameObj, "render")
+	r.renderNCFn = extractCallable(gameObj, "renderNC")
 	r.statusBarFn = extractCallable(gameObj, "statusBar")
 	r.commandBarFn = extractCallable(gameObj, "commandBar")
 
@@ -540,37 +549,50 @@ func (r *jsRuntime) OnInput(playerID, key string) {
 	_, _ = r.onInput(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(key))
 }
 
-func (r *jsRuntime) View(playerID string, width, height int) string {
-	if r.viewFn == nil {
+func (r *jsRuntime) Update(dt float64) {
+	if r.updateFn == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	defer r.recoverJS("Update")
+	defer traceJS(r.vm, "Update")()
+	cancel := watchdogJS(r.vm, "Update")
+	defer cancel()
+	_, _ = r.updateFn(goja.Undefined(), r.vm.ToValue(dt))
+}
+
+func (r *jsRuntime) Render(playerID string, width, height int) string {
+	if r.renderFn == nil {
 		return ""
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	defer r.recoverJS("View")
-	defer traceJS(r.vm, "View")()
-	cancel := watchdogJS(r.vm, "View")
+	defer r.recoverJS("Render")
+	defer traceJS(r.vm, "Render")()
+	cancel := watchdogJS(r.vm, "Render")
 	defer cancel()
-	val, err := r.viewFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
+	val, err := r.renderFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
 	if err != nil {
-		slog.Error("JS View error", "error", err)
+		slog.Error("JS Render error", "error", err)
 		return ""
 	}
 	return val.String()
 }
 
-func (r *jsRuntime) ViewNC(playerID string, width, height int) *common.WidgetNode {
-	if r.viewNCFn == nil {
-		return nil // framework will fall back to wrapping View() in a gameview node
+func (r *jsRuntime) RenderNC(playerID string, width, height int) *common.WidgetNode {
+	if r.renderNCFn == nil {
+		return nil // framework will fall back to wrapping Render() in a gameview node
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	defer r.recoverJS("ViewNC")
-	defer traceJS(r.vm, "ViewNC")()
-	cancel := watchdogJS(r.vm, "ViewNC")
+	defer r.recoverJS("RenderNC")
+	defer traceJS(r.vm, "RenderNC")()
+	cancel := watchdogJS(r.vm, "RenderNC")
 	defer cancel()
-	val, err := r.viewNCFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
+	val, err := r.renderNCFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
 	if err != nil {
-		slog.Error("JS ViewNC error", "error", err)
+		slog.Error("JS RenderNC error", "error", err)
 		return nil
 	}
 	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {

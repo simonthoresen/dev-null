@@ -30,9 +30,10 @@ dist/logs/*
 !dist/logs/.gitkeep
 
 
-# Wish-generated SSH host keys
+# SSH keys (host keys and any private keys)
 null-space_ed25519
 null-space_ed25519.pub
+id_*
 
 # Go workspace files
 go.work

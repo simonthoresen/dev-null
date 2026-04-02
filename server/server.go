@@ -32,6 +32,7 @@ type Server struct {
 	registry *commandRegistry
 	dataDir  string // root of games/, logs/
 	port     string // SSH listen port, e.g. "23234"
+	clock    common.Clock // central server clock (mockable in tests)
 
 	programs   map[string]*tea.Program // key = playerID
 	programsMu sync.Mutex
@@ -55,8 +56,9 @@ type Server struct {
 
 	upnpMapping *upnpMapping
 
-	splashDone    chan struct{} // closed to end splash phase early
-	gameOverTimer chan struct{} // closed to end game-over phase early
+	lastUpdate    time.Time      // last time Update() was called on the active game
+	splashDone    chan struct{}   // closed to end splash phase early
+	gameOverTimer chan struct{}   // closed to end game-over phase early
 }
 
 func New(address, password, dataDir string) (*Server, error) {
@@ -64,6 +66,7 @@ func New(address, password, dataDir string) (*Server, error) {
 		state:    newState(password),
 		registry: newCommandRegistry(),
 		dataDir:  dataDir,
+		clock:    common.RealClock{},
 		programs: make(map[string]*tea.Program),
 		sessions: make(map[string]ssh.Session),
 		logCh:    make(chan string, 256),
@@ -474,7 +477,19 @@ func (a *Server) runTicker(ctx context.Context) {
 			a.state.mu.Lock()
 			a.state.TickN++
 			n := a.state.TickN
+			game := a.state.ActiveGame
+			phase := a.state.GamePhase
 			a.state.mu.Unlock()
+
+			// Call Update(dt) once per tick — before broadcast so game
+			// state is fresh when players render.
+			if game != nil && phase == common.PhasePlaying {
+				now := a.clock.Now()
+				dt := now.Sub(a.lastUpdate).Seconds()
+				a.lastUpdate = now
+				game.Update(dt)
+			}
+
 			a.broadcastMsg(common.TickMsg{N: n})
 
 			// Check if JS called gameOver().
@@ -706,7 +721,7 @@ func (a *Server) loadGame(path string) error {
 	// Create a buffered channel for JS→server chat; drained by a goroutine below.
 	gameChatCh := make(chan common.Message, 64)
 
-	rt, err := LoadGame(path, a.serverLog, gameChatCh)
+	rt, err := LoadGame(path, a.serverLog, gameChatCh, a.clock)
 	if err != nil {
 		close(gameChatCh)
 		return err
@@ -789,6 +804,7 @@ func (a *Server) splashTimer() {
 	game := a.state.ActiveGame
 	a.state.mu.Unlock()
 
+	a.lastUpdate = a.clock.Now()
 	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhasePlaying})
 	a.serverLog("game started (playing)")
 

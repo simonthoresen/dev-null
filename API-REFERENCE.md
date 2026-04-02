@@ -65,12 +65,18 @@ The zip is extracted to `dist/games/mygame/` and then loaded normally.
 
 ## Writing a game
 
-A game file must define a global `Game` object. `init` and `view` are required; all other hooks are optional.
+A game file must define a global `Game` object. `init` and `render` are required; all other hooks are optional.
 
 ```js
 var Game = {
 
     // --- Core hooks ---
+
+    // Called once per server tick (~100ms) with the time elapsed since the last
+    // update in seconds (typically ~0.1). Put all game logic here — movement,
+    // timers, collision detection, gameOver() calls. This is called exactly once
+    // per tick regardless of how many players are connected.
+    update: function(dt) {},
 
     // Called when a player disconnects mid-game.
     onPlayerLeave: function(playerID) {},
@@ -82,21 +88,22 @@ var Game = {
 
     // Returns the game viewport as a plain string (newline-separated rows).
     // width and height are the exact dimensions available — fill them exactly
-    // or the framework will pad/clip. Called on every render tick (~10 fps).
-    view: function(playerID, width, height) {
+    // or the framework will pad/clip. Called per player on every render tick (~10 fps).
+    // Must be pure rendering — no game state mutation.
+    render: function(playerID, width, height) {
         return "";
     },
 
     // Returns a declarative NC widget tree for the game viewport.
     // If defined, the framework renders real themed NC panels/labels instead of
-    // using the raw view() string. Games can embed {type: "gameview"} nodes to
-    // include the raw view() output within an NC layout. If viewNC returns null
-    // or is not defined, the framework falls back to view(). See "NC Widget Tree" below.
-    viewNC: function(playerID, width, height) {
+    // using the raw render() string. Games can embed {type: "gameview"} nodes to
+    // include the raw render() output within an NC layout. If renderNC returns null
+    // or is not defined, the framework falls back to render(). See "NC Widget Tree" below.
+    renderNC: function(playerID, width, height) {
         return {
             type: 'hsplit',
             children: [
-                { type: 'gameview', weight: 1 },           // raw view() here
+                { type: 'gameview', weight: 1 },           // raw render() here
                 { type: 'panel', title: 'Info', width: 20, // NC panel on the right
                   children: [{ type: 'label', text: 'Score: 42' }] }
             ]
@@ -170,7 +177,7 @@ var Game = {
         if (key === "right") p.x++;
     },
 
-    view: function(playerID, width, height) {
+    render: function(playerID, width, height) {
         var lines = [];
         for (var y = 0; y < height; y++) {
             var row = "";
@@ -239,6 +246,7 @@ These are available in games.
 | `gameOver()` | Signals that the game has ended. Transitions to the game-over screen. |
 | `gameOver(results)` | Same as above, with ranked results displayed on the game-over screen. `results` is an array of `{ name, result }` in ranked order. `name` is the display name (player or team). `result` is a freeform string (e.g. `"4200 pts"`, `"1st"`, `"DNF"`). |
 | `gameOver(results, state)` | Same as above, plus persists `state` to `dist/state/<gamename>.json` for the next run. Received via `config.savedState` in `init()`. |
+| `now()` | Returns the server time as epoch milliseconds (same as `Date.now()` but uses the framework's central clock, which is mockable in tests). Available in both games and plugins. |
 | `include(name)` | Evaluates another `.js` file from the same directory as the game file. Used for multi-file games in `games/<name>/` folders. The `.js` extension is added automatically if omitted. Each file is only included once (idempotent). Path traversal (`..`) is rejected. |
 
 ### `registerCommand(spec)`
@@ -366,7 +374,7 @@ LOBBY (game unloaded, back to teams + chat)
 - **Load**: Framework snapshots teams for the game (lobby stays independent), loads saved state, calls `init(savedState)`. `teams()` returns game teams. Game can set `Game.splashScreen` dynamically.
 - **Splash screen**: If `splashScreen` is set, that content is rendered. Otherwise, the game name is displayed in a centered box. The admin can press Enter to skip, or it auto-starts after 10s.
 - **Splash→Playing**: Framework calls `start()`. Game sets up its playing state.
-- **Playing**: Normal game mode — `view()`, `onInput()`, `statusBar()`, `commandBar()` are called each tick.
+- **Playing**: Normal game mode — `update(dt)` is called once per tick, then `render()`/`renderNC()`, `onInput()`, `statusBar()`, `commandBar()` are called per player.
 - **Game over**: Triggered when JS calls `gameOver(results, state)`. The framework renders a "GAME OVER" screen with the ranked results list. Players press Enter to acknowledge; after 15 seconds the game unloads automatically.
 - **Late joiners**: Players connecting during a game see the lobby and can chat. Lobby teams are independent — players can organize for the next round.
 - **Reconnect**: If a player disconnects mid-game and reconnects with the same name, they rejoin the game automatically. Game teams persist through disconnects.
@@ -423,7 +431,7 @@ Games can persist data between runs. Saved state is stored as JSON in `dist/stat
 │ status bar (1 row)                 │  ← Game.statusBar(playerID)
 ├────────────────────────────────────┤
 │                                    │
-│ game viewport (width × height)     │  ← Game.view(playerID, width, height)
+│ game viewport (width × height)     │  ← Game.render(playerID, width, height)
 │                                    │
 ├────────────────────────────────────┤
 │ chat (remaining rows, min 5)       │
@@ -436,7 +444,7 @@ Games can persist data between runs. Saved state is stored as JSON in `dist/stat
 
 - `width` = full terminal width
 - `height` = `width * 9 / 16` (clamped down if terminal is too short to leave 5 rows for chat)
-- Return exactly `height` newline-separated rows from `view()`. Fewer rows are padded; more are clipped.
+- Return exactly `height` newline-separated rows from `render()`. Fewer rows are padded; more are clipped.
 - The menu bar is full width — `gameName` can use it entirely.
 
 ---
@@ -445,14 +453,16 @@ Games can persist data between runs. Saved state is stored as JSON in `dist/stat
 
 **State is global and shared.** All players see the result of the same `Game` object — there is no per-player instance. Design your state with this in mind (`var players = {}`).
 
-**`view()` is called frequently.** Keep it fast. Do not make network calls or heavy computations inside `view`.
+**`render()` is called per player per tick.** Keep it fast and side-effect-free — no game state mutation. Put all game logic in `update(dt)` instead.
+
+**`update(dt)` is called once per tick.** The `dt` argument is seconds since the last update (typically ~0.1). All game logic — movement, timers, collision, gameOver() calls — belongs here.
 
 **Rendering is character-based.** Each character is one cell wide. For box-drawing or emoji that span multiple columns, count display width carefully — the framework does not reflow.
 
-**ANSI escape codes work.** You can use ANSI color codes in `view()`, `statusBar()`, and `commandBar()` output (but not in `gameName`, which is rendered by lipgloss). Example:
+**ANSI escape codes work.** You can use ANSI color codes in `render()`, `statusBar()`, and `commandBar()` output (but not in `gameName`, which is rendered by lipgloss). Example:
 
 ```js
-view: function(playerID, width, height) {
+render: function(playerID, width, height) {
     return "\x1b[32mHello, \x1b[33m" + playerID + "\x1b[0m";
 }
 ```
@@ -471,15 +481,15 @@ GitHub blob URLs are automatically converted to raw download URLs. The file is c
 
 ---
 
-## NC Widget Tree (`viewNC`)
+## NC Widget Tree (`renderNC`)
 
-If your game defines `viewNC(playerID, width, height)`, it should return a tree of widget nodes. The framework renders these as real themed NC-style panels with proper borders, respecting the player's current theme. This is optional — games that only define `view()` work unchanged.
+If your game defines `renderNC(playerID, width, height)`, it should return a tree of widget nodes. The framework renders these as real themed NC-style panels with proper borders, respecting the player's current theme. This is optional — games that only define `render()` work unchanged.
 
 ### Node types
 
 | Type | Description | Key properties |
 |------|-------------|----------------|
-| `gameview` | Renders the raw `view()` output in this region | (none — calls `view(playerID, w, h)` with the computed sub-area size) |
+| `gameview` | Renders the raw `render()` output in this region | (none — calls `render(playerID, w, h)` with the computed sub-area size) |
 | `panel` | Bordered NC panel with optional title | `title`, `children` |
 | `label` | Single line of text | `text`, `align` (`"left"`, `"center"`, `"right"`) |
 | `hsplit` | Horizontal split — children placed side by side | `children` |
@@ -497,14 +507,14 @@ Every node can have:
 ### Example: hybrid layout
 
 ```js
-viewNC: function(playerID, width, height) {
+renderNC: function(playerID, width, height) {
     return {
         type: 'hsplit',
         children: [
             {
                 type: 'vsplit', weight: 1,
                 children: [
-                    { type: 'gameview', weight: 1 },              // raw view() in the main area
+                    { type: 'gameview', weight: 1 },              // raw render() in the main area
                     { type: 'panel', title: 'Stats', height: 5,   // NC panel at bottom
                       children: [
                           { type: 'label', text: 'HP: ' + hp + '/' + maxHp },
@@ -524,4 +534,4 @@ viewNC: function(playerID, width, height) {
 }
 ```
 
-This renders the raw game view in the top-left, a stats panel below it, and a players panel on the right — all using the framework's themed NC borders. Existing games that don't define `viewNC` are unaffected.
+This renders the raw game view in the top-left, a stats panel below it, and a players panel on the right — all using the framework's themed NC borders. Existing games that don't define `renderNC` are unaffected.

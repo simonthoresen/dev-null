@@ -114,7 +114,7 @@ Games persist state by passing it as the second argument to `gameOver(results, s
 │ Status bar (1 row) — game-owned     │  Game.StatusBar(playerID) → "HP: 100  Score: 4200"
 ├─────────────────────────────────────┤
 │                                     │
-│ Game viewport (W × W*9/16 rows)     │  Game.View(playerID, W, H)
+│ Game viewport (W × W*9/16 rows)     │  Game.Render(playerID, W, H)
 │                                     │
 ├─────────────────────────────────────┤
 │                                     │
@@ -169,10 +169,11 @@ type Game interface {
     SplashScreen() string                  // splash screen content (empty = use default)
     Init(savedState any)                   // called before splash with persisted state
     Start()                                // called at splash→playing transition
+    Update(dt float64)                     // called once per tick with seconds since last update
     OnPlayerLeave(playerID string)
     OnInput(playerID, key string)
-    View(playerID string, width, height int) string
-    ViewNC(playerID string, width, height int) *WidgetNode // declarative NC layout (nil = use View)
+    Render(playerID string, width, height int) string
+    RenderNC(playerID string, width, height int) *WidgetNode // declarative NC layout (nil = use Render)
     StatusBar(playerID string) string      // game status bar (2nd row, below menu bar)
     CommandBar(playerID string) string     // command bar (above framework status bar)
     Commands() []Command
@@ -180,6 +181,9 @@ type Game interface {
 }
 ```
 `jsRuntime` implements `Game`. `init()` is mandatory; all other JS hooks are optional. `teams()` global returns game team snapshot during init/start/playing.
+
+### Central Clock (`common/clock.go`)
+The framework provides a central `Clock` interface (`Now() time.Time`) used for all time-related operations. Games access it via the `now()` JS global (epoch milliseconds). In tests, inject a `MockClock` to control time. `Update(dt)` receives the real elapsed seconds between ticks.
 
 ### Game Over
 
@@ -219,9 +223,9 @@ type Message struct {
 
 Games live in `dist/games/` as either single `.js` files or folders containing `main.js` (for multi-file games using `include()`). Loaded at runtime via `/game load <name>`. A HTTPS URL can be given instead of a name — `.js` files are cached in `dist/games/.cache/`, `.zip` files are extracted to `dist/games/<name>/`. GitHub blob URLs are converted to raw automatically.
 
-**Game** — exports a global `Game` object with hooks `onPlayerJoin`, `onPlayerLeave`, `onInput`, `view`, `viewNC`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `splashScreen`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport. `viewNC` returns a declarative widget tree that the framework renders using real NC controls; if defined, `view()` is only called for `{type: "gameview"}` nodes within the tree. Interactive node types (`button`, `textinput`, `checkbox`) route actions back via `onInput(playerID, action)`. Tab cycles focus between interactive controls; Esc returns to raw `onInput` mode.
+**Game** — exports a global `Game` object with hooks `update`, `onPlayerLeave`, `onInput`, `render`, `renderNC`, `statusBar`, `commandBar`. Optional properties: `gameName`, `teamRange`, `splashScreen`. Mandatory `init(savedState)` called on load. Loaded one at a time; owns the viewport. `update(dt)` is called once per tick with elapsed seconds — all game logic belongs here. `render(playerID, w, h)` is called per player for rendering only (no state mutation). `renderNC` returns a declarative widget tree that the framework renders using real NC controls; if defined, `render()` is only called for `{type: "gameview"}` nodes within the tree. Interactive node types (`button`, `textinput`, `checkbox`) route actions back via `onInput(playerID, action)`. Tab cycles focus between interactive controls; Esc returns to raw `onInput` mode.
 
-**Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `teams()`, `registerCommand()`, `gameOver(results, state)`, `figlet(text, font?)` (ASCII art via figlet4go; built-in fonts: `"standard"`, `"larry3d"`; extra fonts loaded from `dist/fonts/*.flf` at startup), `include(name)` (evaluate another `.js` file from the same directory — for multi-file games).
+**Global functions available to JS:** `log()`, `chat()`, `chatPlayer()`, `teams()`, `now()`, `registerCommand()`, `gameOver(results, state)`, `figlet(text, font?)` (ASCII art via figlet4go; built-in fonts: `"standard"`, `"larry3d"`; extra fonts loaded from `dist/fonts/*.flf` at startup), `include(name)` (evaluate another `.js` file from the same directory — for multi-file games).
 
 **Full developer documentation:** see `API-REFERENCE.md` at the repo root.
 
@@ -388,7 +392,7 @@ Two primary mutexes protect shared state:
 - **Teams:** Server builds a cache (`buildTeamsCache`) and pushes it via `SetTeamsCache()`. JS `teams()` reads the local cache.
 - **Chat:** JS `chat()`/`chatPlayer()` send on a buffered channel; a server goroutine drains it and calls `broadcastChat()`.
 
-**Callers** (server.go, chrome.go) must release `state.mu` **before** calling any `jsRuntime` Game method (`Init`, `Start`, `View`, `OnInput`, etc.). All existing call sites follow this pattern — verify any new ones do too.
+**Callers** (server.go, chrome.go) must release `state.mu` **before** calling any `jsRuntime` Game method (`Init`, `Start`, `Update`, `Render`, `OnInput`, etc.). All existing call sites follow this pattern — verify any new ones do too.
 
 Other mutexes (`programsMu`, `sessionsMu`, `consoleProgramMu`, `commandRegistry.mu`) are leaf locks — they don't call into JS or acquire `state.mu`.
 
