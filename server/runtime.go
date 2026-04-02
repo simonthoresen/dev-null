@@ -592,9 +592,6 @@ func (r *jsRuntime) Render(buf *common.ImageBuffer, playerID string, x, y, width
 // JS games call buf.setChar(x, y, ch, fg, bg), buf.writeString(x, y, text, fg, bg),
 // buf.fill(x, y, w, h, ch, fg, bg) to write directly into the buffer.
 func (r *jsRuntime) newJSImageBuffer(buf *common.ImageBuffer, ox, oy, w, h int) map[string]any {
-	// buf.paintANSI allows games with existing ANSI rendering to bridge
-	// their output into the buffer without returning a string from render().
-	// Games should migrate to setChar/writeString over time.
 	return map[string]any{
 		"width":  w,
 		"height": h,
@@ -635,17 +632,6 @@ func (r *jsRuntime) newJSImageBuffer(buf *common.ImageBuffer, ox, oy, w, h int) 
 				fillCh = []rune(ch)[0]
 			}
 			buf.Fill(ox+x, oy+y, fw, fh, fillCh, fg, bg, attr)
-			return goja.Undefined()
-		},
-		"paintANSI": func(call goja.FunctionCall) goja.Value {
-			px := int(call.Argument(0).ToInteger())
-			py := int(call.Argument(1).ToInteger())
-			pw := int(call.Argument(2).ToInteger())
-			ph := int(call.Argument(3).ToInteger())
-			s := call.Argument(4).String()
-			fg := parseJSColor(call.Argument(5))
-			bg := parseJSColor(call.Argument(6))
-			buf.PaintANSI(ox+px, oy+py, pw, ph, s, fg, bg)
 			return goja.Undefined()
 		},
 	}

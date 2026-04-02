@@ -4,16 +4,14 @@
 // ============================================================
 // Constants
 // ============================================================
-var RST   = "\x1b[0m";
-var CBOLD = "\x1b[1m";
-var CDIM  = "\x1b[2m";
-var CRED  = "\x1b[31m";
-var CGRN  = "\x1b[32m";
-var CYEL  = "\x1b[33m";
-var CBLU  = "\x1b[34m";
-var CMAG  = "\x1b[35m";
-var CCYN  = "\x1b[36m";
-var CWHT  = "\x1b[37m";
+var CRED  = "#AA0000";
+var CGRN  = "#00AA00";
+var CYEL  = "#AA5500";
+var CBLU  = "#0000AA";
+var CMAG  = "#AA00AA";
+var CCYN  = "#00AAAA";
+var CWHT  = "#AAAAAA";
+var CDIM  = "#666666";
 
 // Fixed world size in grid cells
 // Walls at x=0, x=MAP_W-1. Ceiling at y=0, ground at y=MAP_H-1.
@@ -24,12 +22,12 @@ var MAP_H = 35;
 // Player ship colors per slot (foreground for narrow, bg+fg for wide)
 var SHIP_COLORS = [CGRN, CCYN, CMAG, CYEL, CWHT, CRED];
 var SHIP_BG = [
-    "\x1b[48;5;22m",   // dark green
-    "\x1b[48;5;24m",   // dark cyan
-    "\x1b[48;5;53m",   // dark magenta
-    "\x1b[48;5;58m",   // dark yellow/olive
-    "\x1b[48;5;236m",  // dark gray
-    "\x1b[48;5;52m"    // dark red
+    "#005F00",   // dark green
+    "#005F87",   // dark cyan
+    "#5F005F",   // dark magenta
+    "#5F5F00",   // dark olive
+    "#303030",   // dark gray
+    "#5F0000"    // dark red
 ];
 // Ship glyphs: 2-char ASCII art (reliable bg coverage) + 1-char narrow
 var E_SHIP_WIDE = "/\\";    // two regular chars — bg fills both columns
@@ -44,6 +42,10 @@ var E_ALIEN = [
 ];
 var ALIEN_PTS = [10, 20, 30, 50];
 var ALIEN_COLORS_1CH = [CGRN, CCYN, CMAG, CRED];
+
+// Ground row alternating colors
+var GROUND_FG_A = "#444444";
+var GROUND_FG_B = "#666666";
 
 // Effect emojis
 var E_BOOM   = "\uD83D\uDCA5";  // 💥
@@ -520,12 +522,10 @@ function endGame() {
 // ============================================================
 // Rendering — viewport is a window into the fixed world
 // ============================================================
-function render(pid, width, height) {
+function render(buf, pid, width, height) {
     var cw = (width >= 60) ? 2 : 1;
     var viewCols = Math.floor(width / cw);
     var viewRows = height;
-
-    var emptyCell = rep(" ", cw);
 
     // Camera: center on player, clamp to world
     var me = pls[pid];
@@ -544,30 +544,68 @@ function render(pid, width, height) {
         camY = clamp(cy - Math.floor(viewRows / 2), 0, MAP_H - viewRows);
     }
 
+    // Game-over overlay (screen coords, no world rendering)
+    if (gameOver) {
+        var goText = "=== GAME OVER ===";
+        var oy = Math.floor(viewRows / 2) - 2;
+        var ox = Math.floor((width - goText.length) / 2);
+        if (oy >= 0 && oy < viewRows) {
+            buf.writeString(ox, oy, goText, CRED, null, ATTR_BOLD);
+        }
+        var sorted = plOrder.slice().sort(function(a, b) {
+            return (pls[b] ? pls[b].score : 0) - (pls[a] ? pls[a].score : 0);
+        });
+        for (var i = 0; i < sorted.length && oy + 2 + i < viewRows; i++) {
+            var p = pls[sorted[i]];
+            if (!p) continue;
+            var medal = i === 0 ? "#1" : i === 1 ? "#2" : i === 2 ? "#3" : "#" + (i + 1);
+            var entry = medal + " " + p.name + ": " + p.score + " pts";
+            var ex = Math.floor((width - entry.length) / 2);
+            var col = i === 0 ? CYEL : i === 1 ? CWHT : CDIM;
+            var attr = i === 0 ? ATTR_BOLD : 0;
+            buf.writeString(ex, oy + 2 + i, entry, col, null, attr);
+        }
+        var hint = "Admin: /reset to play again";
+        var hy = Math.min(oy + 2 + sorted.length + 2, viewRows - 1);
+        if (hy >= 0 && hy < viewRows) {
+            var hx = Math.floor((width - hint.length) / 2);
+            buf.writeString(hx, hy, hint, CDIM, null, 0);
+        }
+        return;
+    }
+
+    // Wave pause overlay (screen coords, no world rendering)
+    if (wavePause > 0) {
+        var waveText = "WAVE " + wave;
+        var oy = Math.floor(viewRows / 2);
+        var ox = Math.floor((width - waveText.length) / 2);
+        if (oy >= 0 && oy < viewRows) {
+            buf.writeString(ox, oy, waveText, CYEL, null, ATTR_BOLD);
+        }
+        return;
+    }
+
     // Build entity map in world coords
+    // Each entry: {ch: "X", fg: color, bg: color, attr: 0, ch2: "Y"} for 2-wide
+    // or {ch: "X", fg: color, bg: color, attr: 0} for 1-wide
+    // For emoji (cw===2): {emoji: "\uD83D\uDC7E"}
     var ents = {};
 
     // Bunkers
     for (var k in bunkers) {
         var hp = bunkers[k];
-        if (cw === 2) {
-            if (hp >= 3) ents[k] = CGRN + "\u2588\u2588" + RST;
-            else if (hp === 2) ents[k] = CYEL + "\u2593\u2593" + RST;
-            else ents[k] = CRED + "\u2591\u2591" + RST;
-        } else {
-            if (hp >= 3) ents[k] = CGRN + "\u2588" + RST;
-            else if (hp === 2) ents[k] = CYEL + "\u2593" + RST;
-            else ents[k] = CRED + "\u2591" + RST;
-        }
+        if (hp >= 3) ents[k] = {ch: "\u2588", ch2: "\u2588", fg: CGRN, bg: null, attr: 0};
+        else if (hp === 2) ents[k] = {ch: "\u2593", ch2: "\u2593", fg: CYEL, bg: null, attr: 0};
+        else ents[k] = {ch: "\u2591", ch2: "\u2591", fg: CRED, bg: null, attr: 0};
     }
 
     // Explosions
     for (var i = 0; i < booms.length; i++) {
         var b = booms[i];
         if (cw === 2) {
-            ents[b.x + "," + b.y] = b.ttl > 2 ? E_BOOM : E_FIRE;
+            ents[b.x + "," + b.y] = {emoji: b.ttl > 2 ? E_BOOM : E_FIRE};
         } else {
-            ents[b.x + "," + b.y] = CRED + CBOLD + "*" + RST;
+            ents[b.x + "," + b.y] = {ch: "*", fg: CRED, bg: null, attr: ATTR_BOLD};
         }
     }
 
@@ -576,13 +614,13 @@ function render(pid, width, height) {
         var pw = powerups[i];
         var k = pw.x + "," + pw.y;
         if (cw === 2) {
-            if (pw.type === "rapid") ents[k] = E_ZAP;
-            else if (pw.type === "shield") ents[k] = E_SHIELD;
-            else ents[k] = E_HEART;
+            if (pw.type === "rapid") ents[k] = {emoji: E_ZAP};
+            else if (pw.type === "shield") ents[k] = {emoji: E_SHIELD};
+            else ents[k] = {emoji: E_HEART};
         } else {
-            if (pw.type === "rapid") ents[k] = CYEL + "z" + RST;
-            else if (pw.type === "shield") ents[k] = CBLU + "s" + RST;
-            else ents[k] = CRED + "+" + RST;
+            if (pw.type === "rapid") ents[k] = {ch: "z", fg: CYEL, bg: null, attr: 0};
+            else if (pw.type === "shield") ents[k] = {ch: "s", fg: CBLU, bg: null, attr: 0};
+            else ents[k] = {ch: "+", fg: CRED, bg: null, attr: 0};
         }
     }
 
@@ -591,29 +629,25 @@ function render(pid, width, height) {
         var a = aliens[i];
         if (!a.alive) continue;
         if (cw === 2) {
-            ents[a.x + "," + a.y] = E_ALIEN[a.tier];
+            ents[a.x + "," + a.y] = {emoji: E_ALIEN[a.tier]};
         } else {
-            ents[a.x + "," + a.y] = ALIEN_COLORS_1CH[a.tier] + "W" + RST;
+            ents[a.x + "," + a.y] = {ch: "W", fg: ALIEN_COLORS_1CH[a.tier], bg: null, attr: 0};
         }
     }
 
     // UFO
     if (ufo) {
         if (cw === 2) {
-            ents[ufo.x + "," + ufo.y] = E_UFO;
+            ents[ufo.x + "," + ufo.y] = {emoji: E_UFO};
         } else {
-            ents[ufo.x + "," + ufo.y] = CRED + CBOLD + "U" + RST;
+            ents[ufo.x + "," + ufo.y] = {ch: "U", fg: CRED, bg: null, attr: ATTR_BOLD};
         }
     }
 
     // Alien bullets
     for (var i = 0; i < alienBullets.length; i++) {
         var b = alienBullets[i];
-        if (cw === 2) {
-            ents[b.x + "," + b.y] = CRED + "\u2593\u2593" + RST;
-        } else {
-            ents[b.x + "," + b.y] = CRED + "!" + RST;
-        }
+        ents[b.x + "," + b.y] = {ch: "\u2593", ch2: "\u2593", fg: CRED, bg: null, attr: 0};
     }
 
     // Player bullets
@@ -622,9 +656,9 @@ function render(pid, width, height) {
         var shooter = pls[b.owner];
         var col = shooter ? SHIP_COLORS[shooter.ci] : CWHT;
         if (cw === 2) {
-            ents[b.x + "," + b.y] = col + "\u2502\u2502" + RST;
+            ents[b.x + "," + b.y] = {ch: "\u2502", ch2: "\u2502", fg: col, bg: null, attr: 0};
         } else {
-            ents[b.x + "," + b.y] = col + "|" + RST;
+            ents[b.x + "," + b.y] = {ch: "|", fg: col, bg: null, attr: 0};
         }
     }
 
@@ -637,134 +671,77 @@ function render(pid, width, height) {
         var col = SHIP_COLORS[p.ci];
         if (cw === 2) {
             if (frame < p.invuln && frame % 4 < 2) {
-                ents[k] = emptyCell;
+                ents[k] = {ch: " ", ch2: " ", fg: null, bg: null, attr: 0};
             } else if (p.shield > 0) {
-                ents[k] = bg + CWHT + CBOLD + "{}" + RST;
+                ents[k] = {ch: "{", ch2: "}", fg: CWHT, bg: bg, attr: ATTR_BOLD};
             } else {
-                ents[k] = bg + CWHT + CBOLD + E_SHIP_WIDE + RST;
+                ents[k] = {ch: "/", ch2: "\\", fg: CWHT, bg: bg, attr: ATTR_BOLD};
             }
         } else {
             if (frame < p.invuln && frame % 4 < 2) {
-                ents[k] = " ";
+                ents[k] = {ch: " ", fg: null, bg: null, attr: 0};
             } else if (p.shield > 0) {
-                ents[k] = col + CBOLD + "O" + RST;
+                ents[k] = {ch: "O", fg: col, bg: null, attr: ATTR_BOLD};
             } else {
-                ents[k] = (plOrder[i] === pid ? CBOLD : "") + col + E_SHIP_NARROW + RST;
+                var attr = plOrder[i] === pid ? ATTR_BOLD : 0;
+                ents[k] = {ch: E_SHIP_NARROW, fg: col, bg: null, attr: attr};
             }
         }
     }
 
-    // Wall / ceiling / ground cell styles
-    var wallCell = cw === 2 ? CBLU + "\u2588\u2588" + RST : CBLU + "\u2588" + RST;
-
-    // Game-over overlay (screen coords)
-    if (gameOver) {
-        var lines = [];
-        for (var r = 0; r < viewRows; r++) lines.push(rep(" ", width));
-        var goText = "=== GAME OVER ===";
-        var oy = Math.floor(viewRows / 2) - 2;
-        var ox = Math.floor((width - goText.length) / 2);
-        if (oy >= 0 && oy < viewRows) {
-            lines[oy] = rep(" ", ox) + CRED + CBOLD + goText + RST + rep(" ", Math.max(0, width - ox - goText.length));
-        }
-        var sorted = plOrder.slice().sort(function(a, b) {
-            return (pls[b] ? pls[b].score : 0) - (pls[a] ? pls[a].score : 0);
-        });
-        for (var i = 0; i < sorted.length && oy + 2 + i < viewRows; i++) {
-            var p = pls[sorted[i]];
-            if (!p) continue;
-            var medal = i === 0 ? "#1" : i === 1 ? "#2" : i === 2 ? "#3" : "#" + (i + 1);
-            var entry = medal + " " + p.name + ": " + p.score + " pts";
-            var ex = Math.floor((width - entry.length) / 2);
-            var col = i === 0 ? CYEL + CBOLD : i === 1 ? CWHT : CDIM;
-            lines[oy + 2 + i] = rep(" ", Math.max(0, ex)) + col + entry + RST + rep(" ", Math.max(0, width - ex - entry.length));
-        }
-        var hint = "Admin: /reset to play again";
-        var hy = Math.min(oy + 2 + sorted.length + 2, viewRows - 1);
-        if (hy >= 0 && hy < viewRows) {
-            var hx = Math.floor((width - hint.length) / 2);
-            lines[hy] = rep(" ", Math.max(0, hx)) + CDIM + hint + RST + rep(" ", Math.max(0, width - hx - hint.length));
-        }
-        return lines.join("\n");
-    }
-
-    // Wave pause overlay
-    if (wavePause > 0) {
-        var lines = [];
-        for (var r = 0; r < viewRows; r++) lines.push(rep(" ", width));
-        var waveText = "WAVE " + wave;
-        var oy = Math.floor(viewRows / 2);
-        var ox = Math.floor((width - waveText.length) / 2);
-        if (oy >= 0 && oy < viewRows) {
-            lines[oy] = rep(" ", ox) + CYEL + CBOLD + waveText + RST + rep(" ", Math.max(0, width - ox - waveText.length));
-        }
-        return lines.join("\n");
-    }
-
-    // Build lines from camera viewport
-    var lines = [];
+    // Render viewport
     for (var row = 0; row < viewRows; row++) {
-        var parts = [];
-        var visW = 0;
         for (var col = 0; col < viewCols; col++) {
             var wx = camX + col;
             var wy = camY + row;
+            var sx = col * cw;   // screen x
 
             // Outside world = empty
             if (wx < 0 || wx >= MAP_W || wy < 0 || wy >= MAP_H) {
-                parts.push(emptyCell);
-                visW += cw;
                 continue;
             }
 
             // Ceiling row — full wall across
             if (wy === 0) {
-                parts.push(wallCell);
-                visW += cw;
+                buf.setChar(sx, row, "\u2588", CBLU, null, 0);
+                if (cw === 2) buf.setChar(sx + 1, row, "\u2588", CBLU, null, 0);
                 continue;
             }
 
-            // Ground row — including wall corners so the ground line is unbroken
+            // Ground row
             if (wy === GROUND_Y) {
-                if (cw === 2) {
-                    if (Math.floor(wx / 2) % 2 === 0) {
-                        parts.push("\x1b[38;5;238m\u2584\u2584" + RST);
-                    } else {
-                        parts.push("\x1b[38;5;242m\u2584\u2584" + RST);
-                    }
-                } else {
-                    if (wx % 2 === 0) {
-                        parts.push("\x1b[38;5;238m\u2584" + RST);
-                    } else {
-                        parts.push("\x1b[38;5;242m\u2584" + RST);
-                    }
-                }
-                visW += cw;
+                var gfg = (cw === 2)
+                    ? (Math.floor(wx / 2) % 2 === 0 ? GROUND_FG_A : GROUND_FG_B)
+                    : (wx % 2 === 0 ? GROUND_FG_A : GROUND_FG_B);
+                buf.setChar(sx, row, "\u2584", gfg, null, 0);
+                if (cw === 2) buf.setChar(sx + 1, row, "\u2584", gfg, null, 0);
                 continue;
             }
 
-            // Walls (left, right) — between ceiling and ground
+            // Walls (left, right)
             if (wx === 0 || wx === MAP_W - 1) {
-                parts.push(wallCell);
-                visW += cw;
+                buf.setChar(sx, row, "\u2588", CBLU, null, 0);
+                if (cw === 2) buf.setChar(sx + 1, row, "\u2588", CBLU, null, 0);
                 continue;
             }
 
             // Entity?
             var k = wx + "," + wy;
-            if (ents[k]) {
-                parts.push(ents[k]);
-            } else {
-                parts.push(emptyCell);
+            var e = ents[k];
+            if (e) {
+                if (e.emoji) {
+                    // Emoji: write using writeString (takes 2 columns)
+                    buf.writeString(sx, row, e.emoji, null, null, 0);
+                } else {
+                    buf.setChar(sx, row, e.ch, e.fg, e.bg, e.attr);
+                    if (cw === 2) {
+                        var c2 = e.ch2 ? e.ch2 : e.ch;
+                        buf.setChar(sx + 1, row, c2, e.fg, e.bg, e.attr);
+                    }
+                }
             }
-            visW += cw;
         }
-        var rpad = width - visW;
-        if (rpad > 0) parts.push(rep(" ", rpad));
-        lines.push(parts.join(""));
     }
-
-    return lines.join("\n");
 }
 
 // ============================================================
@@ -865,7 +842,7 @@ var Game = {
     },
 
     render: function(buf, playerID, ox, oy, width, height) {
-        buf.paintANSI(0, 0, width, height, render(playerID, width, height), null, null);
+        render(buf, playerID, width, height);
     },
 
     statusBar: function(playerID) {

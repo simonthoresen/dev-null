@@ -89,7 +89,6 @@ var Game = {
     // Renders the game viewport into buf at position (ox, oy) with dimensions width × height.
     // buf is an ImageBuffer — call buf.setChar(x, y, ch, fg, bg), buf.writeString(x, y, text, fg, bg),
     // buf.fill(x, y, w, h, ch, fg, bg) to write pixels directly. Colors are "#RRGGBB" strings or null.
-    // Optional: buf.paintANSI(x, y, w, h, str) for legacy ANSI-string rendering.
     // Coordinates are relative to the buffer region (0,0 = top-left of the game viewport).
     // Called per player on every render tick (~10 fps). Must be pure rendering — no game state mutation.
     render: function(buf, playerID, ox, oy, width, height) {
@@ -464,7 +463,6 @@ Games can persist data between runs. Saved state is stored as JSON in `dist/stat
 | `buf.setChar(x, y, ch, fg, bg)` | Set one character. `fg`/`bg` are `"#RRGGBB"` or `null` (default). |
 | `buf.writeString(x, y, text, fg, bg)` | Write plain text starting at (x, y). |
 | `buf.fill(x, y, w, h, ch, fg, bg)` | Fill a rectangle with a character. |
-| `buf.paintANSI(x, y, w, h, str)` | Paint an ANSI-escaped string (legacy bridge). |
 | `buf.width` / `buf.height` | Dimensions of the game viewport. |
 
 All methods accept an optional trailing `attr` parameter (bitmask): `ATTR_BOLD`, `ATTR_FAINT`, `ATTR_ITALIC`, `ATTR_UNDERLINE`, `ATTR_REVERSE`. Coordinates are relative to the viewport (0,0 = top-left).
