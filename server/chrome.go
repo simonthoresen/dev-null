@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/common"
+	"null-space/internal/engine"
 	"null-space/internal/theme"
 	"null-space/internal/widget"
 )
@@ -97,7 +98,7 @@ type chromeModel struct {
 	theme *theme.Theme
 
 	// Per-player plugins
-	plugins     []*jsPlugin
+	plugins     []*engine.JSPlugin
 	pluginNames []string // parallel to plugins; display names
 
 	// Per-player shaders (post-processing, run in order)
@@ -831,7 +832,7 @@ func (m chromeModel) View() tea.View {
 	}
 
 	// Post-processing shaders: run in sequence on the fully-rendered buffer.
-	applyShaders(m.shaders, buf)
+	engine.ApplyShaders(m.shaders, buf)
 
 	// Overlay layers: render to sub-buffers, blit, then shadow via RecolorRect.
 	shadowFg := m.theme.ShadowFgC()
@@ -1169,7 +1170,7 @@ func (m chromeModel) defaultGameOverScreen(results []common.GameResult, width, h
 	var lines []string
 
 	lines = append(lines, "")
-	figletTitle := strings.TrimRight(Figlet("GAME OVER", "slant"), "\n")
+	figletTitle := strings.TrimRight(engine.Figlet("GAME OVER", "slant"), "\n")
 	figletLines := strings.Split(figletTitle, "\n")
 	maxW := 0
 	for _, l := range figletLines {
@@ -1335,7 +1336,7 @@ func (m *chromeModel) cachedMenus() []common.MenuDef {
 			{Label: "&About...", Handler: func(_ string) {
 				m.overlay.PushDialog(common.DialogRequest{
 					Title:   "About",
-					Body:    aboutLogo(),
+					Body:    engine.AboutLogo(),
 					Buttons: []string{"OK"},
 				})
 			}},
@@ -1348,7 +1349,7 @@ func (m *chromeModel) cachedMenus() []common.MenuDef {
 
 func (m *chromeModel) showPlayerListDialog(title, subdir, ext string) {
 	dir := filepath.Join(m.app.dataDir, subdir)
-	items := listDir(dir, ext)
+	items := engine.ListDir(dir, ext)
 	body := "(empty)"
 	if len(items) > 0 {
 		var lines []string
@@ -1365,7 +1366,7 @@ func (m *chromeModel) showPlayerListDialog(title, subdir, ext string) {
 }
 
 func (m *chromeModel) showShaderDialog() {
-	available := listDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+	available := engine.ListDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
 	loadedSet := make(map[string]bool)
 	for _, n := range m.shaderNames {
 		loadedSet[n] = true
@@ -1503,7 +1504,7 @@ func (m *chromeModel) handlePluginCommand(input string) {
 	parts := strings.Fields(input)
 	// /plugin with no args → list
 	if len(parts) <= 1 {
-		available := listDir(filepath.Join(m.app.dataDir, "plugins"), ".js")
+		available := engine.ListDir(filepath.Join(m.app.dataDir, "plugins"), ".js")
 		loadedSet := make(map[string]bool)
 		for _, n := range m.pluginNames {
 			loadedSet[n] = true
@@ -1530,7 +1531,7 @@ func (m *chromeModel) handlePluginCommand(input string) {
 			return
 		}
 		nameOrURL := parts[2]
-		name, path, err := resolvePluginPath(nameOrURL, m.app.dataDir)
+		name, path, err := engine.ResolvePluginPath(nameOrURL, m.app.dataDir)
 		if err != nil {
 			m.pluginReply(fmt.Sprintf("Failed: %v", err))
 			return
@@ -1541,7 +1542,7 @@ func (m *chromeModel) handlePluginCommand(input string) {
 				return
 			}
 		}
-		pl, err := LoadPlugin(path, m.app.clock)
+		pl, err := engine.LoadPlugin(path, m.app.clock)
 		if err != nil {
 			m.pluginReply(fmt.Sprintf("Failed to load plugin: %v", err))
 			return
@@ -1619,7 +1620,7 @@ func (m *chromeModel) handleShaderCommand(input string) {
 	parts := strings.Fields(input)
 	// /shader with no args → list
 	if len(parts) <= 1 {
-		available := listDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+		available := engine.ListDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
 		loadedSet := make(map[string]bool)
 		for _, n := range m.shaderNames {
 			loadedSet[n] = true
@@ -1646,7 +1647,7 @@ func (m *chromeModel) handleShaderCommand(input string) {
 			return
 		}
 		nameOrURL := parts[2]
-		name, path, err := resolveShaderPath(nameOrURL, m.app.dataDir)
+		name, path, err := engine.ResolveShaderPath(nameOrURL, m.app.dataDir)
 		if err != nil {
 			m.pluginReply(fmt.Sprintf("Failed: %v", err))
 			return
@@ -1657,7 +1658,7 @@ func (m *chromeModel) handleShaderCommand(input string) {
 				return
 			}
 		}
-		sh, err := LoadShader(path, m.app.clock)
+		sh, err := engine.LoadShader(path, m.app.clock)
 		if err != nil {
 			m.pluginReply(fmt.Sprintf("Failed to load shader: %v", err))
 			return

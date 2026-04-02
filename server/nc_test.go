@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/common"
+	"null-space/internal/engine"
 	"null-space/internal/theme"
 	"null-space/internal/widget"
 )
@@ -888,7 +889,7 @@ func (h *discardHandler) WithGroup(_ string) slog.Handler               { return
 // agree on the dialog position and button row, so clicking OK actually works.
 func TestAboutDialogClickDetection(t *testing.T) {
 	o := widget.OverlayState{OpenMenu: -1}
-	body := aboutLogo()
+	body := engine.AboutLogo()
 	o.PushDialog(common.DialogRequest{
 		Title:   "About",
 		Body:    body,
@@ -994,7 +995,7 @@ func TestDialogClickMultiButton(t *testing.T) {
 // TestAboutDialogKeyDismiss verifies that pressing Enter closes the About dialog.
 func TestAboutDialogKeyDismiss(t *testing.T) {
 	o := widget.OverlayState{OpenMenu: -1}
-	body := aboutLogo()
+	body := engine.AboutLogo()
 	o.PushDialog(common.DialogRequest{
 		Title:   "About",
 		Body:    body,

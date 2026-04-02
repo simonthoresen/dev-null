@@ -22,9 +22,8 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/ssh"
 
-	"github.com/dop251/goja"
-
 	"null-space/common"
+	"null-space/internal/engine"
 	"null-space/internal/network"
 	"null-space/internal/state"
 	"null-space/internal/widget"
@@ -78,7 +77,7 @@ func New(address, password, dataDir string) (*Server, error) {
 	}
 
 	app.registerBuiltins()
-	loadFigletFonts(dataDir)
+	engine.LoadFigletFonts(dataDir)
 
 	server, err := wish.NewServer(
 		ssh.EmulatePty(),
@@ -321,7 +320,7 @@ func (a *Server) LogInviteCommand() {
 // LogGameList broadcasts the available game list to chat.
 func (a *Server) LogGameList() {
 	gamesDir := filepath.Join(a.dataDir, "games")
-	available := listGames(gamesDir)
+	available := engine.ListGames(gamesDir)
 	if len(available) == 0 {
 		a.broadcastChat(common.Message{Text: "No games found in games/"})
 		return
@@ -427,7 +426,7 @@ func (a *Server) registerSession(sess ssh.Session) *common.Player {
 		a.state.Unlock()
 		a.serverLog(fmt.Sprintf("player %s rejoined game (was %s, now %s)", player.Name, oldID, player.ID))
 		// Refresh the teams cache so JS sees the updated player ID.
-		if jrt, ok := game.(*jsRuntime); ok {
+		if jrt, ok := game.(*engine.JSRuntime); ok {
 			jrt.SetTeamsCache(a.buildTeamsCache())
 		}
 	} else {
@@ -515,7 +514,7 @@ func (a *Server) checkGameOver() {
 	if game == nil || phase != common.PhasePlaying {
 		return
 	}
-	rt, ok := game.(*jsRuntime)
+	rt, ok := game.(*engine.JSRuntime)
 	if !ok || !rt.IsGameOverPending() {
 		return
 	}
@@ -728,13 +727,13 @@ func (a *Server) loadGame(path string) error {
 	// Create a buffered channel for JS→server chat; drained by a goroutine below.
 	gameChatCh := make(chan common.Message, 64)
 
-	rt, err := LoadGame(path, a.serverLog, gameChatCh, a.clock)
+	rt, err := engine.LoadGame(path, a.serverLog, gameChatCh, a.clock)
 	if err != nil {
 		close(gameChatCh)
 		return err
 	}
-	if jrt, ok := rt.(*jsRuntime); ok {
-		jrt.showDialogFn = a.ShowDialog
+	if jrt, ok := rt.(*engine.JSRuntime); ok {
+		jrt.ShowDialogFn = a.ShowDialog
 	}
 
 	// Validate team count against game's declared range.
@@ -760,7 +759,7 @@ func (a *Server) loadGame(path string) error {
 	a.state.Unlock()
 
 	// Populate the teams cache so JS teams() returns correct data.
-	if jrt, ok := rt.(*jsRuntime); ok {
+	if jrt, ok := rt.(*engine.JSRuntime); ok {
 		jrt.SetTeamsCache(a.buildTeamsCache())
 	}
 
@@ -865,8 +864,8 @@ func (a *Server) unloadGame() {
 	game.Unload()
 
 	// Close the JS chat channel so the drainer goroutine exits.
-	if jrt, ok := game.(*jsRuntime); ok && jrt.chatCh != nil {
-		close(jrt.chatCh)
+	if jrt, ok := game.(*engine.JSRuntime); ok && jrt.ChatCh != nil {
+		close(jrt.ChatCh)
 	}
 
 	a.broadcastMsg(common.GameUnloadedMsg{})
@@ -876,7 +875,7 @@ func (a *Server) unloadGame() {
 }
 
 // buildTeamsCache builds a pre-resolved teams snapshot for JS teams().
-// Resolves player IDs to names so jsRuntime doesn't need CentralState access.
+// Resolves player IDs to names so JSRuntime doesn't need CentralState access.
 func (a *Server) buildTeamsCache() []map[string]any {
 	teams := a.state.GetGameTeams()
 	result := make([]map[string]any, 0, len(teams))
@@ -1067,7 +1066,7 @@ func (a *Server) registerBuiltins() {
 			case 1:
 				switch before[0] {
 				case "load":
-					return listGames(filepath.Join(a.dataDir, "games"))
+					return engine.ListGames(filepath.Join(a.dataDir, "games"))
 				case "unload":
 					a.state.RLock()
 					name := a.state.GameName
@@ -1082,7 +1081,7 @@ func (a *Server) registerBuiltins() {
 		Handler: func(ctx common.CommandContext, args []string) {
 			gamesDir := filepath.Join(a.dataDir, "games")
 			if len(args) == 0 {
-				available := listGames(gamesDir)
+				available := engine.ListGames(gamesDir)
 				if len(available) == 0 {
 					ctx.Reply("No games found in games/")
 					return
@@ -1092,7 +1091,7 @@ func (a *Server) registerBuiltins() {
 			}
 			switch args[0] {
 			case "list":
-				available := listGames(gamesDir)
+				available := engine.ListGames(gamesDir)
 				if len(available) == 0 {
 					ctx.Reply("No games found in games/")
 					return
@@ -1111,7 +1110,7 @@ func (a *Server) registerBuiltins() {
 				if network.IsURL(args[1]) {
 					path = args[1]
 				} else {
-					path = resolveGamePath(filepath.Join(a.dataDir, "games"), args[1])
+					path = engine.ResolveGamePath(filepath.Join(a.dataDir, "games"), args[1])
 				}
 				if err := a.loadGame(path); err != nil {
 					ctx.Reply(fmt.Sprintf("Failed to load game: %v", err))
@@ -1150,7 +1149,7 @@ func (a *Server) registerBuiltins() {
 		AdminOnly:   true,
 		Complete: func(before []string) []string {
 			if len(before) == 0 {
-				return listGames(filepath.Join(a.dataDir, "games"))
+				return engine.ListGames(filepath.Join(a.dataDir, "games"))
 			}
 			return nil
 		},
@@ -1203,69 +1202,6 @@ func (a *Server) registerBuiltins() {
 
 }
 
-// probeGameTeamRange reads a game JS file and extracts the Game.teamRange property
-// without fully initializing the runtime. Returns zero TeamRange if not defined.
-func probeGameTeamRange(path string) common.TeamRange {
-	src, err := os.ReadFile(path)
-	if err != nil {
-		return common.TeamRange{}
-	}
-	vm := goja.New()
-	// Register stub globals so scripts using include/log/etc. don't crash.
-	baseDir := filepath.Dir(path)
-	included := map[string]bool{}
-	vm.Set("include", func(name string) {
-		if strings.Contains(name, "..") || strings.ContainsAny(name, "/\\") {
-			return // reject path traversal
-		}
-		if !strings.HasSuffix(name, ".js") {
-			name += ".js"
-		}
-		absPath := filepath.Join(baseDir, name)
-		if included[absPath] {
-			return
-		}
-		included[absPath] = true
-		inc, err := os.ReadFile(absPath)
-		if err != nil {
-			return // silently skip in probe mode
-		}
-		_, _ = vm.RunScript(name, string(inc))
-	})
-	noop := func(goja.FunctionCall) goja.Value { return goja.Undefined() }
-	for _, name := range []string{"log", "chat", "chatPlayer", "teams", "gameOver", "figlet", "addMenu", "messageBox", "registerCommand"} {
-		vm.Set(name, noop)
-	}
-	_, err = vm.RunScript(path, string(src))
-	if err != nil {
-		return common.TeamRange{}
-	}
-	gameVal := vm.Get("Game")
-	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
-		return common.TeamRange{}
-	}
-	gameObj := gameVal.ToObject(vm)
-	if gameObj == nil {
-		return common.TeamRange{}
-	}
-	v := gameObj.Get("teamRange")
-	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
-		return common.TeamRange{}
-	}
-	obj := v.ToObject(vm)
-	if obj == nil {
-		return common.TeamRange{}
-	}
-	var tr common.TeamRange
-	if mv := obj.Get("min"); mv != nil && !goja.IsUndefined(mv) {
-		tr.Min = int(mv.ToInteger())
-	}
-	if mv := obj.Get("max"); mv != nil && !goja.IsUndefined(mv) {
-		tr.Max = int(mv.ToInteger())
-	}
-	return tr
-}
-
 // formatGameList builds the game list output with team range info and compatibility markers.
 func (a *Server) formatGameList(gamesDir string, available []string) string {
 	a.state.RLock()
@@ -1274,114 +1210,8 @@ func (a *Server) formatGameList(gamesDir string, available []string) string {
 
 	teamCount := a.state.TeamCount()
 
-	var lines []string
-	for _, name := range available {
-		path := resolveGamePath(gamesDir, name)
-		tr := probeGameTeamRange(path)
-
-		// Compatibility check.
-		compatible := true
-		if tr.Min > 0 && teamCount < tr.Min {
-			compatible = false
-		}
-		if tr.Max > 0 && teamCount > tr.Max {
-			compatible = false
-		}
-
-		// Build the line.
-		marker := "  "
-		if tr.Min > 0 || tr.Max > 0 {
-			if compatible {
-				marker = "+ "
-			} else {
-				marker = "- "
-			}
-		}
-
-		line := marker + name
-
-		// Team range label.
-		if tr.Min > 0 && tr.Max > 0 {
-			if tr.Min == tr.Max {
-				line += fmt.Sprintf("  [%d teams]", tr.Min)
-			} else {
-				line += fmt.Sprintf("  [%d-%d teams]", tr.Min, tr.Max)
-			}
-		} else if tr.Min > 0 {
-			line += fmt.Sprintf("  [%d+ teams]", tr.Min)
-		} else if tr.Max > 0 {
-			line += fmt.Sprintf("  [up to %d teams]", tr.Max)
-		}
-
-		if name == active {
-			line += "  [active]"
-		}
-
-		lines = append(lines, line)
-	}
-
-	header := fmt.Sprintf("Available games (%d teams configured):", teamCount)
-	return header + "\n" + strings.Join(lines, "\n")
+	return engine.FormatGameList(gamesDir, available, active, teamCount)
 }
-
-// resolveGamePath resolves a game name to a file path. It checks for:
-// 1. gamesDir/<name>.js  (flat single-file game)
-// 2. gamesDir/<name>/main.js  (folder-based multi-file game)
-func resolveGamePath(gamesDir, name string) string {
-	flat := filepath.Join(gamesDir, name+".js")
-	if _, err := os.Stat(flat); err == nil {
-		return flat
-	}
-	folder := filepath.Join(gamesDir, name, "main.js")
-	if _, err := os.Stat(folder); err == nil {
-		return folder
-	}
-	return flat // return the flat path so the error message makes sense
-}
-
-// listGames returns the names of all available games in dir: both flat .js files
-// and subdirectories containing a main.js, sorted alphabetically.
-func listGames(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var names []string
-	for _, e := range entries {
-		if e.Name() == ".cache" {
-			continue
-		}
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".js") {
-			names = append(names, strings.TrimSuffix(e.Name(), ".js"))
-		} else if e.IsDir() {
-			// Check for main.js inside the directory.
-			mainJS := filepath.Join(dir, e.Name(), "main.js")
-			if _, err := os.Stat(mainJS); err == nil {
-				names = append(names, e.Name())
-			}
-		}
-	}
-	sort.Strings(names)
-	return names
-}
-
-// listDir returns the name (without extension) of every file in dir that ends
-// with ext, sorted alphabetically.
-func listDir(dir, ext string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var names []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ext) {
-			names = append(names, strings.TrimSuffix(e.Name(), ext))
-		}
-	}
-	sort.Strings(names)
-	return names
-}
-
 
 // noDelayListener wraps a net.Listener and ensures TCP_NODELAY is set on
 // every accepted connection, disabling Nagle's algorithm so that single

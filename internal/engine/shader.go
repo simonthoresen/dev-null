@@ -1,4 +1,4 @@
-package server
+package engine
 
 import (
 	"fmt"
@@ -15,10 +15,10 @@ import (
 	"null-space/internal/network"
 )
 
-// jsShader wraps a goja JS runtime for a per-player post-processing shader.
+// JSShader wraps a goja JS runtime for a per-player post-processing shader.
 // The shader exports a Shader object with a process(buf) method that receives
 // the full rendered ImageBuffer and may read/write any pixel.
-type jsShader struct {
+type JSShader struct {
 	mu        sync.Mutex
 	vm        *goja.Runtime
 	name      string
@@ -27,13 +27,13 @@ type jsShader struct {
 }
 
 // LoadShader reads and executes a JS shader file, extracting the Shader.process hook.
-func LoadShader(path string, clock common.Clock) (*jsShader, error) {
+func LoadShader(path string, clock common.Clock) (*JSShader, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read shader file: %w", err)
 	}
 
-	s := &jsShader{
+	s := &JSShader{
 		vm:   goja.New(),
 		name: strings.TrimSuffix(filepath.Base(path), ".js"),
 	}
@@ -79,7 +79,7 @@ func LoadShader(path string, clock common.Clock) (*jsShader, error) {
 
 	// Call init() if present.
 	if fn, ok := goja.AssertFunction(obj.Get("init")); ok {
-		cancel := watchdogJS(s.vm, "Shader.init")
+		cancel := WatchdogJS(s.vm, "Shader.init")
 		defer cancel()
 		if _, err := fn(goja.Undefined()); err != nil {
 			slog.Warn("shader init error", "shader", s.name, "error", err)
@@ -90,10 +90,10 @@ func LoadShader(path string, clock common.Clock) (*jsShader, error) {
 }
 
 // Name returns the shader's display name (filename stem).
-func (s *jsShader) Name() string { return s.name }
+func (s *JSShader) Name() string { return s.name }
 
 // Process calls the JS process(buf) hook with a buffer wrapper.
-func (s *jsShader) Process(buf *common.ImageBuffer) {
+func (s *JSShader) Process(buf *common.ImageBuffer) {
 	if s.processFn == nil {
 		return
 	}
@@ -106,7 +106,7 @@ func (s *jsShader) Process(buf *common.ImageBuffer) {
 		}
 	}()
 
-	cancel := watchdogJS(s.vm, "Shader.process")
+	cancel := WatchdogJS(s.vm, "Shader.process")
 	defer cancel()
 
 	jsBuf := newJSShaderBuffer(s.vm, buf)
@@ -117,10 +117,10 @@ func (s *jsShader) Process(buf *common.ImageBuffer) {
 }
 
 // Unload interrupts the JS runtime, calling Shader.unload() first if defined.
-func (s *jsShader) Unload() {
+func (s *JSShader) Unload() {
 	if s.unloadFn != nil {
 		s.mu.Lock()
-		cancel := watchdogJS(s.vm, "Shader.unload")
+		cancel := WatchdogJS(s.vm, "Shader.unload")
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -173,9 +173,9 @@ func newJSShaderBuffer(vm *goja.Runtime, buf *common.ImageBuffer) map[string]any
 			x := int(call.Argument(0).ToInteger())
 			y := int(call.Argument(1).ToInteger())
 			ch := call.Argument(2).String()
-			fg := parseJSColor(call.Argument(3))
-			bg := parseJSColor(call.Argument(4))
-			attr := parseJSAttr(call.Argument(5))
+			fg := ParseJSColor(call.Argument(3))
+			bg := ParseJSColor(call.Argument(4))
+			attr := ParseJSAttr(call.Argument(5))
 			if len(ch) > 0 {
 				buf.SetChar(x, y, []rune(ch)[0], fg, bg, attr)
 			}
@@ -186,9 +186,9 @@ func newJSShaderBuffer(vm *goja.Runtime, buf *common.ImageBuffer) map[string]any
 			x := int(call.Argument(0).ToInteger())
 			y := int(call.Argument(1).ToInteger())
 			text := call.Argument(2).String()
-			fg := parseJSColor(call.Argument(3))
-			bg := parseJSColor(call.Argument(4))
-			attr := parseJSAttr(call.Argument(5))
+			fg := ParseJSColor(call.Argument(3))
+			bg := ParseJSColor(call.Argument(4))
+			attr := ParseJSAttr(call.Argument(5))
 			buf.WriteString(x, y, text, fg, bg, attr)
 			return goja.Undefined()
 		},
@@ -199,9 +199,9 @@ func newJSShaderBuffer(vm *goja.Runtime, buf *common.ImageBuffer) map[string]any
 			fw := int(call.Argument(2).ToInteger())
 			fh := int(call.Argument(3).ToInteger())
 			ch := call.Argument(4).String()
-			fg := parseJSColor(call.Argument(5))
-			bg := parseJSColor(call.Argument(6))
-			attr := parseJSAttr(call.Argument(7))
+			fg := ParseJSColor(call.Argument(5))
+			bg := ParseJSColor(call.Argument(6))
+			attr := ParseJSAttr(call.Argument(7))
 			fillCh := ' '
 			if len(ch) > 0 {
 				fillCh = []rune(ch)[0]
@@ -215,18 +215,18 @@ func newJSShaderBuffer(vm *goja.Runtime, buf *common.ImageBuffer) map[string]any
 			y := int(call.Argument(1).ToInteger())
 			w := int(call.Argument(2).ToInteger())
 			h := int(call.Argument(3).ToInteger())
-			fg := parseJSColor(call.Argument(4))
-			bg := parseJSColor(call.Argument(5))
-			attr := parseJSAttr(call.Argument(6))
+			fg := ParseJSColor(call.Argument(4))
+			bg := ParseJSColor(call.Argument(5))
+			attr := ParseJSAttr(call.Argument(6))
 			buf.RecolorRect(x, y, w, h, fg, bg, attr)
 			return goja.Undefined()
 		},
 	}
 }
 
-// resolveShaderPath resolves a shader name or URL to a local file path,
+// ResolveShaderPath resolves a shader name or URL to a local file path,
 // downloading and caching if it's a URL.
-func resolveShaderPath(nameOrURL, dataDir string) (name, path string, err error) {
+func ResolveShaderPath(nameOrURL, dataDir string) (name, path string, err error) {
 	if network.IsURL(nameOrURL) {
 		cacheDir := filepath.Join(dataDir, "shaders", ".cache")
 		local, err := network.DownloadToCache(nameOrURL, cacheDir)
@@ -238,15 +238,15 @@ func resolveShaderPath(nameOrURL, dataDir string) (name, path string, err error)
 	return nameOrURL, filepath.Join(dataDir, "shaders", nameOrURL+".js"), nil
 }
 
-// applyShaders runs all shaders in sequence on the given buffer.
-func applyShaders(shaders []common.Shader, buf *common.ImageBuffer) {
+// ApplyShaders runs all shaders in sequence on the given buffer.
+func ApplyShaders(shaders []common.Shader, buf *common.ImageBuffer) {
 	for _, s := range shaders {
 		s.Process(buf)
 	}
 }
 
-// colorToHex converts a color.Color to a "#rrggbb" string, or "" if nil.
-func colorToHex(c color.Color) string {
+// ColorToHex converts a color.Color to a "#rrggbb" string, or "" if nil.
+func ColorToHex(c color.Color) string {
 	if c == nil {
 		return ""
 	}

@@ -1,4 +1,4 @@
-package server
+package engine
 
 import (
 	"os"
@@ -24,7 +24,7 @@ func TestListGamesIncludesFolderGames(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, ".cache"), 0o755)
 	os.WriteFile(filepath.Join(dir, ".cache", "cached.js"), []byte("var Game = {};"), 0o644)
 
-	games := listGames(dir)
+	games := ListGames(dir)
 	if len(games) != 2 {
 		t.Fatalf("expected 2 games, got %d: %v", len(games), games)
 	}
@@ -45,14 +45,14 @@ func TestResolveGamePath(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "folder", "main.js"), []byte(""), 0o644)
 
 	// Flat game
-	got := resolveGamePath(dir, "flat")
+	got := ResolveGamePath(dir, "flat")
 	want := filepath.Join(dir, "flat.js")
 	if got != want {
 		t.Errorf("flat: got %q, want %q", got, want)
 	}
 
 	// Folder game
-	got = resolveGamePath(dir, "folder")
+	got = ResolveGamePath(dir, "folder")
 	want = filepath.Join(dir, "folder", "main.js")
 	if got != want {
 		t.Errorf("folder: got %q, want %q", got, want)

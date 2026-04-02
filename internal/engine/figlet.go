@@ -1,4 +1,4 @@
-package server
+package engine
 
 import (
 	"log/slog"
@@ -12,8 +12,8 @@ import (
 // figletRenderer is a shared AsciiRender instance (thread-safe: read-only after init).
 var figletRenderer = figlet4go.NewAsciiRender()
 
-// loadFigletFonts loads all .flf files from <dataDir>/fonts/ into the shared renderer.
-func loadFigletFonts(dataDir string) {
+// LoadFigletFonts loads all .flf files from <dataDir>/fonts/ into the shared renderer.
+func LoadFigletFonts(dataDir string) {
 	dir := filepath.Join(dataDir, "fonts")
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return
@@ -25,9 +25,9 @@ func loadFigletFonts(dataDir string) {
 	slog.Info("Loaded figlet fonts", "dir", dir)
 }
 
-// aboutLogo returns the null-space ASCII art logo for the About dialog.
+// AboutLogo returns the null-space ASCII art logo for the About dialog.
 // Uses figlet if available, otherwise falls back to a hardcoded logo.
-func aboutLogo() string {
+func AboutLogo() string {
 	logo := Figlet("null-space", "")
 	if logo != "" {
 		// Strip ANSI codes and trim trailing whitespace.

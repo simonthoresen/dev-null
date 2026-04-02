@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"null-space/common"
+	"null-space/internal/engine"
 	"null-space/internal/theme"
 	"null-space/internal/widget"
 )
@@ -63,7 +64,7 @@ type consoleModel struct {
 	initCommands []string
 
 	// Per-console plugins
-	plugins     []*jsPlugin
+	plugins     []*engine.JSPlugin
 	pluginNames []string
 
 	// Per-console shaders (post-processing, run in order)
@@ -290,7 +291,7 @@ func (m *consoleModel) consoleMenus() []common.MenuDef {
 				{Label: "&About...", Handler: func(_ string) {
 					m.overlay.PushDialog(common.DialogRequest{
 						Title:   "About",
-						Body:    aboutLogo(),
+						Body:    engine.AboutLogo(),
 						Buttons: []string{"OK"},
 					})
 				}},
@@ -301,7 +302,7 @@ func (m *consoleModel) consoleMenus() []common.MenuDef {
 
 // showListDialog opens a dialog listing available items from a dist/ subdirectory.
 func (m *consoleModel) showShaderDialog() {
-	available := listDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+	available := engine.ListDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
 	loadedSet := make(map[string]bool)
 	for _, n := range m.shaderNames {
 		loadedSet[n] = true
@@ -339,7 +340,7 @@ func (m *consoleModel) showShaderDialog() {
 
 func (m *consoleModel) showListDialog(title, subdir, ext string) {
 	dir := filepath.Join(m.app.dataDir, subdir)
-	items := listDir(dir, ext)
+	items := engine.ListDir(dir, ext)
 	body := "(empty)"
 	if len(items) > 0 {
 		var lines []string
@@ -461,7 +462,7 @@ func (m *consoleModel) View() tea.View {
 	buf.WriteString(startX, statusRow, statusText, sbFg, sbBg, common.AttrNone)
 
 	// Post-processing shaders: run in sequence on the fully-rendered buffer.
-	applyShaders(m.shaders, buf)
+	engine.ApplyShaders(m.shaders, buf)
 
 	// Overlay layers: render to sub-buffers, blit, then recolor for shadow.
 	shadowFg := t.ShadowFgC()
@@ -623,7 +624,7 @@ func (m *consoleModel) handleThemeCommand(input string) {
 func (m *consoleModel) handlePluginCommand(input string) {
 	parts := strings.Fields(input)
 	if len(parts) <= 1 {
-		available := listDir(filepath.Join(m.app.dataDir, "plugins"), ".js")
+		available := engine.ListDir(filepath.Join(m.app.dataDir, "plugins"), ".js")
 		loadedSet := make(map[string]bool)
 		for _, n := range m.pluginNames {
 			loadedSet[n] = true
@@ -649,7 +650,7 @@ func (m *consoleModel) handlePluginCommand(input string) {
 			m.appendLog("Usage: /plugin load <name|url>")
 			return
 		}
-		name, path, err := resolvePluginPath(parts[2], m.app.dataDir)
+		name, path, err := engine.ResolvePluginPath(parts[2], m.app.dataDir)
 		if err != nil {
 			m.appendLog(fmt.Sprintf("Failed: %v", err))
 			return
@@ -660,7 +661,7 @@ func (m *consoleModel) handlePluginCommand(input string) {
 				return
 			}
 		}
-		pl, err := LoadPlugin(path, m.app.clock)
+		pl, err := engine.LoadPlugin(path, m.app.clock)
 		if err != nil {
 			m.appendLog(fmt.Sprintf("Failed to load plugin: %v", err))
 			return
@@ -733,7 +734,7 @@ func (m *consoleModel) handleShaderCommand(input string) {
 	parts := strings.Fields(input)
 	// /shader with no args → list
 	if len(parts) <= 1 {
-		available := listDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+		available := engine.ListDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
 		loadedSet := make(map[string]bool)
 		for _, n := range m.shaderNames {
 			loadedSet[n] = true
@@ -760,7 +761,7 @@ func (m *consoleModel) handleShaderCommand(input string) {
 			return
 		}
 		nameOrURL := parts[2]
-		name, path, err := resolveShaderPath(nameOrURL, m.app.dataDir)
+		name, path, err := engine.ResolveShaderPath(nameOrURL, m.app.dataDir)
 		if err != nil {
 			m.appendLog(fmt.Sprintf("Failed: %v", err))
 			return
@@ -771,7 +772,7 @@ func (m *consoleModel) handleShaderCommand(input string) {
 				return
 			}
 		}
-		sh, err := LoadShader(path, m.app.clock)
+		sh, err := engine.LoadShader(path, m.app.clock)
 		if err != nil {
 			m.appendLog(fmt.Sprintf("Failed to load shader: %v", err))
 			return

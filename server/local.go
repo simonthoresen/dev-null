@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 
 	"null-space/common"
+	"null-space/internal/engine"
 	"null-space/internal/network"
 	"null-space/internal/state"
 )
@@ -30,7 +31,7 @@ func NewLocal(dataDir string) *Server {
 		chatCh: make(chan common.Message, 256),
 	}
 	app.registerBuiltins()
-	loadFigletFonts(dataDir)
+	engine.LoadFigletFonts(dataDir)
 	return app
 }
 

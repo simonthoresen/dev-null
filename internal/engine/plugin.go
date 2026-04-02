@@ -1,4 +1,4 @@
-package server
+package engine
 
 import (
 	"fmt"
@@ -14,10 +14,10 @@ import (
 	"null-space/internal/network"
 )
 
-// jsPlugin wraps a goja JS runtime for a per-player or per-console plugin.
+// JSPlugin wraps a goja JS runtime for a per-player or per-console plugin.
 // The plugin exports a Plugin object with an onMessage(author, text, isSystem) hook.
 // If onMessage returns a non-empty string, it is treated as if the owner typed it.
-type jsPlugin struct {
+type JSPlugin struct {
 	mu          sync.Mutex
 	vm          *goja.Runtime
 	name        string
@@ -25,13 +25,13 @@ type jsPlugin struct {
 }
 
 // LoadPlugin reads and executes a JS plugin file, extracting the Plugin.onMessage hook.
-func LoadPlugin(path string, clock common.Clock) (*jsPlugin, error) {
+func LoadPlugin(path string, clock common.Clock) (*JSPlugin, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read plugin file: %w", err)
 	}
 
-	p := &jsPlugin{
+	p := &JSPlugin{
 		vm:   goja.New(),
 		name: strings.TrimSuffix(filepath.Base(path), ".js"),
 	}
@@ -70,7 +70,7 @@ func LoadPlugin(path string, clock common.Clock) (*jsPlugin, error) {
 
 // OnMessage calls the JS onMessage hook with the given message fields.
 // Returns a non-empty string if the plugin wants to inject input, empty string otherwise.
-func (p *jsPlugin) OnMessage(author, text string, isSystem bool) string {
+func (p *JSPlugin) OnMessage(author, text string, isSystem bool) string {
 	if p.onMessageFn == nil {
 		return ""
 	}
@@ -84,7 +84,7 @@ func (p *jsPlugin) OnMessage(author, text string, isSystem bool) string {
 		}
 	}()
 
-	cancel := watchdogJS(p.vm, "Plugin.onMessage")
+	cancel := WatchdogJS(p.vm, "Plugin.onMessage")
 	defer cancel()
 
 	val, err := p.onMessageFn(goja.Undefined(),
@@ -107,16 +107,16 @@ func (p *jsPlugin) OnMessage(author, text string, isSystem bool) string {
 }
 
 // Name returns the plugin's display name (filename stem).
-func (p *jsPlugin) Name() string { return p.name }
+func (p *JSPlugin) Name() string { return p.name }
 
 // Unload interrupts the JS runtime.
-func (p *jsPlugin) Unload() {
+func (p *JSPlugin) Unload() {
 	p.vm.Interrupt("unloaded")
 }
 
-// resolvePluginPath resolves a plugin name or URL to a local file path,
+// ResolvePluginPath resolves a plugin name or URL to a local file path,
 // downloading and caching if it's a URL.
-func resolvePluginPath(nameOrURL, dataDir string) (name, path string, err error) {
+func ResolvePluginPath(nameOrURL, dataDir string) (name, path string, err error) {
 	if network.IsURL(nameOrURL) {
 		cacheDir := filepath.Join(dataDir, "plugins", ".cache")
 		local, err := network.DownloadToCache(nameOrURL, cacheDir)

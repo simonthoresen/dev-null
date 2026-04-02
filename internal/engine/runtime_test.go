@@ -1,4 +1,4 @@
-package server
+package engine
 
 import (
 	"os"
@@ -78,7 +78,7 @@ func TestIncludeRejectsPathTraversal(t *testing.T) {
 }
 
 func TestNethackGameLoads(t *testing.T) {
-	mainJS := filepath.Join("../dist/games/nethack", "main.js")
+	mainJS := filepath.Join("../../dist/games/nethack", "main.js")
 	if _, err := os.Stat(mainJS); err != nil {
 		t.Skip("nethack game not found at", mainJS)
 	}
@@ -94,7 +94,7 @@ func TestNethackGameLoads(t *testing.T) {
 }
 
 func TestHoldemGameLoads(t *testing.T) {
-	mainJS := filepath.Join("../dist/games/holdem", "main.js")
+	mainJS := filepath.Join("../../dist/games/holdem", "main.js")
 	if _, err := os.Stat(mainJS); err != nil {
 		t.Skip("holdem game not found at", mainJS)
 	}

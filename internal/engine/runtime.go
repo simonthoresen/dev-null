@@ -1,4 +1,4 @@
-package server
+package engine
 
 import (
 	"fmt"
@@ -15,11 +15,11 @@ import (
 	"null-space/common"
 )
 
-// jsCallTimeout is how long a JS method can run before being interrupted.
-const jsCallTimeout = 2 * time.Second
+// JSCallTimeout is how long a JS method can run before being interrupted.
+const JSCallTimeout = 2 * time.Second
 
-// traceJS logs entry/exit of a JS method. Returns a function to call on exit.
-func traceJS(_ *goja.Runtime, method string) func() {
+// TraceJS logs entry/exit of a JS method. Returns a function to call on exit.
+func TraceJS(_ *goja.Runtime, method string) func() {
 	start := time.Now()
 	slog.Debug("JS enter", "method", method)
 	return func() {
@@ -32,16 +32,16 @@ func traceJS(_ *goja.Runtime, method string) func() {
 	}
 }
 
-// watchdogJS starts a goroutine that interrupts the VM after timeout.
+// WatchdogJS starts a goroutine that interrupts the VM after timeout.
 // Call the returned cancel func when the JS call completes.
-func watchdogJS(vm *goja.Runtime, method string) func() {
+func WatchdogJS(vm *goja.Runtime, method string) func() {
 	done := make(chan struct{})
 	go func() {
 		select {
 		case <-done:
 			return
-		case <-time.After(jsCallTimeout):
-			slog.Error("JS call timed out, interrupting VM", "method", method, "timeout", jsCallTimeout)
+		case <-time.After(JSCallTimeout):
+			slog.Error("JS call timed out, interrupting VM", "method", method, "timeout", JSCallTimeout)
 			vm.Interrupt("timeout: " + method)
 		}
 	}()
@@ -52,20 +52,20 @@ func watchdogJS(vm *goja.Runtime, method string) func() {
 //
 // The system has two primary mutexes:
 //   1. CentralState.mu   — protects shared game state (state.go)
-//   2. jsRuntime.mu       — protects the goja JS VM (this file)
+//   2. JSRuntime.mu       — protects the goja JS VM (this file)
 //
-// Permitted lock order: jsRuntime.mu → (nothing external)
+// Permitted lock order: JSRuntime.mu → (nothing external)
 //
-// jsRuntime must NEVER hold or acquire CentralState.mu. To enforce this
-// structurally, jsRuntime has no reference to CentralState. All data flows:
+// JSRuntime must NEVER hold or acquire CentralState.mu. To enforce this
+// structurally, JSRuntime has no reference to CentralState. All data flows:
 //   - Teams data: cached snapshot set by server via SetTeamsCache()
 //   - Chat output: buffered channel drained by a server goroutine
 //
 // Callers (server.go, chrome.go) must release state.mu BEFORE calling
-// any jsRuntime Game method (Init, Start, View, OnInput, etc.).
+// any JSRuntime Game method (Init, Start, View, OnInput, etc.).
 
-// jsRuntime wraps a goja JS runtime and implements common.Game.
-type jsRuntime struct {
+// JSRuntime wraps a goja JS runtime and implements common.Game.
+type JSRuntime struct {
 	mu      sync.Mutex
 	vm      *goja.Runtime
 	baseDir string       // directory containing the game file (for include() resolution)
@@ -74,7 +74,7 @@ type jsRuntime struct {
 	commands    []common.Command
 	cachedTeams []map[string]any   // snapshot set by server; read by JS teams()
 	logFn       func(string)
-	chatCh      chan common.Message // drained by server goroutine; closed on unload
+	ChatCh      chan common.Message // drained by server goroutine; closed on unload
 
 	// game object methods (nil if not defined)
 	updateFn      goja.Callable
@@ -98,7 +98,7 @@ type jsRuntime struct {
 	gameOverState   goja.Value          // state argument passed as second arg to gameOver()
 
 	menus        []common.MenuDef
-	showDialogFn func(playerID string, d common.DialogRequest) // injected by server
+	ShowDialogFn func(playerID string, d common.DialogRequest) // injected by server
 }
 
 // LoadGame loads and executes a JS file from games/, extracts the Game object
@@ -110,11 +110,11 @@ func LoadGame(path string, logFn func(string), chatCh chan common.Message, clock
 		return nil, fmt.Errorf("read game file: %w", err)
 	}
 
-	rt := &jsRuntime{
+	rt := &JSRuntime{
 		vm:      goja.New(),
 		baseDir: filepath.Dir(path),
 		logFn:   logFn,
-		chatCh:  chatCh,
+		ChatCh:  chatCh,
 		clock:   clock,
 	}
 
@@ -132,12 +132,12 @@ func LoadGame(path string, logFn func(string), chatCh chan common.Message, clock
 	return rt, nil
 }
 
-func (r *jsRuntime) Init(savedState any) {
+func (r *JSRuntime) Init(savedState any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("Init")
-	defer traceJS(r.vm, "Init")()
-	cancel := watchdogJS(r.vm, "Init")
+	defer TraceJS(r.vm, "Init")()
+	cancel := WatchdogJS(r.vm, "Init")
 	defer cancel()
 	_, _ = r.initFn(goja.Undefined(), r.vm.ToValue(savedState))
 
@@ -152,20 +152,20 @@ func (r *jsRuntime) Init(savedState any) {
 	}
 }
 
-func (r *jsRuntime) Start() {
+func (r *JSRuntime) Start() {
 	if r.startFn == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("Start")
-	defer traceJS(r.vm, "Start")()
-	cancel := watchdogJS(r.vm, "Start")
+	defer TraceJS(r.vm, "Start")()
+	cancel := WatchdogJS(r.vm, "Start")
 	defer cancel()
 	_, _ = r.startFn(goja.Undefined())
 }
 
-func (r *jsRuntime) registerGlobals() {
+func (r *JSRuntime) registerGlobals() {
 	// Pixel attribute constants for buf.setChar/writeString/fill.
 	r.vm.Set("ATTR_NONE", int(common.AttrNone))
 	r.vm.Set("ATTR_BOLD", int(common.AttrBold))
@@ -181,9 +181,9 @@ func (r *jsRuntime) registerGlobals() {
 	})
 
 	r.vm.Set("chat", func(msg string) {
-		if r.chatCh != nil {
+		if r.ChatCh != nil {
 			select {
-			case r.chatCh <- common.Message{Text: msg}:
+			case r.ChatCh <- common.Message{Text: msg}:
 			default:
 				slog.Warn("JS chat channel full, dropping message", "text", msg)
 			}
@@ -191,9 +191,9 @@ func (r *jsRuntime) registerGlobals() {
 	})
 
 	r.vm.Set("chatPlayer", func(playerID, msg string) {
-		if r.chatCh != nil {
+		if r.ChatCh != nil {
 			select {
-			case r.chatCh <- common.Message{Text: msg, IsPrivate: true, ToID: playerID}:
+			case r.ChatCh <- common.Message{Text: msg, IsPrivate: true, ToID: playerID}:
 			default:
 				slog.Warn("JS chatPlayer channel full, dropping message")
 			}
@@ -370,8 +370,8 @@ func (r *jsRuntime) registerGlobals() {
 			Buttons: buttons,
 			OnClose: onClose,
 		}
-		if r.showDialogFn != nil {
-			go r.showDialogFn(playerID, d)
+		if r.ShowDialogFn != nil {
+			go r.ShowDialogFn(playerID, d)
 		}
 		return goja.Undefined()
 	})
@@ -465,7 +465,7 @@ func (r *jsRuntime) registerGlobals() {
 	})
 }
 
-func (r *jsRuntime) extractGameObject() error {
+func (r *JSRuntime) extractGameObject() error {
 	gameVal := r.vm.Get("Game")
 	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
 		return fmt.Errorf("script must define a global 'Game' object")
@@ -532,54 +532,54 @@ func extractCallable(obj *goja.Object, name string) goja.Callable {
 
 // Implement common.Game
 
-func (r *jsRuntime) OnPlayerLeave(playerID string) {
+func (r *JSRuntime) OnPlayerLeave(playerID string) {
 	if r.onPlayerLeave == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("OnPlayerLeave")
-	defer traceJS(r.vm, "OnPlayerLeave")()
-	cancel := watchdogJS(r.vm, "OnPlayerLeave")
+	defer TraceJS(r.vm, "OnPlayerLeave")()
+	cancel := WatchdogJS(r.vm, "OnPlayerLeave")
 	defer cancel()
 	_, _ = r.onPlayerLeave(goja.Undefined(), r.vm.ToValue(playerID))
 }
 
-func (r *jsRuntime) OnInput(playerID, key string) {
+func (r *JSRuntime) OnInput(playerID, key string) {
 	if r.onInput == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("OnInput")
-	defer traceJS(r.vm, "OnInput")()
-	cancel := watchdogJS(r.vm, "OnInput")
+	defer TraceJS(r.vm, "OnInput")()
+	cancel := WatchdogJS(r.vm, "OnInput")
 	defer cancel()
 	_, _ = r.onInput(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(key))
 }
 
-func (r *jsRuntime) Update(dt float64) {
+func (r *JSRuntime) Update(dt float64) {
 	if r.updateFn == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("Update")
-	defer traceJS(r.vm, "Update")()
-	cancel := watchdogJS(r.vm, "Update")
+	defer TraceJS(r.vm, "Update")()
+	cancel := WatchdogJS(r.vm, "Update")
 	defer cancel()
 	_, _ = r.updateFn(goja.Undefined(), r.vm.ToValue(dt))
 }
 
-func (r *jsRuntime) Render(buf *common.ImageBuffer, playerID string, x, y, width, height int) {
+func (r *JSRuntime) Render(buf *common.ImageBuffer, playerID string, x, y, width, height int) {
 	if r.renderFn == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("Render")
-	defer traceJS(r.vm, "Render")()
-	cancel := watchdogJS(r.vm, "Render")
+	defer TraceJS(r.vm, "Render")()
+	cancel := WatchdogJS(r.vm, "Render")
 	defer cancel()
 	jsBuf := r.newJSImageBuffer(buf, x, y, width, height)
 	_, err := r.renderFn(goja.Undefined(), r.vm.ToValue(jsBuf), r.vm.ToValue(playerID), r.vm.ToValue(x), r.vm.ToValue(y), r.vm.ToValue(width), r.vm.ToValue(height))
@@ -591,7 +591,7 @@ func (r *jsRuntime) Render(buf *common.ImageBuffer, playerID string, x, y, width
 // newJSImageBuffer creates a JS-friendly wrapper around an ImageBuffer region.
 // JS games call buf.setChar(x, y, ch, fg, bg), buf.writeString(x, y, text, fg, bg),
 // buf.fill(x, y, w, h, ch, fg, bg) to write directly into the buffer.
-func (r *jsRuntime) newJSImageBuffer(buf *common.ImageBuffer, ox, oy, w, h int) map[string]any {
+func (r *JSRuntime) newJSImageBuffer(buf *common.ImageBuffer, ox, oy, w, h int) map[string]any {
 	return map[string]any{
 		"width":  w,
 		"height": h,
@@ -599,9 +599,9 @@ func (r *jsRuntime) newJSImageBuffer(buf *common.ImageBuffer, ox, oy, w, h int) 
 			x := int(call.Argument(0).ToInteger())
 			y := int(call.Argument(1).ToInteger())
 			ch := call.Argument(2).String()
-			fg := parseJSColor(call.Argument(3))
-			bg := parseJSColor(call.Argument(4))
-			attr := parseJSAttr(call.Argument(5))
+			fg := ParseJSColor(call.Argument(3))
+			bg := ParseJSColor(call.Argument(4))
+			attr := ParseJSAttr(call.Argument(5))
 			if len(ch) > 0 {
 				r := []rune(ch)[0]
 				buf.SetChar(ox+x, oy+y, r, fg, bg, attr)
@@ -612,9 +612,9 @@ func (r *jsRuntime) newJSImageBuffer(buf *common.ImageBuffer, ox, oy, w, h int) 
 			x := int(call.Argument(0).ToInteger())
 			y := int(call.Argument(1).ToInteger())
 			text := call.Argument(2).String()
-			fg := parseJSColor(call.Argument(3))
-			bg := parseJSColor(call.Argument(4))
-			attr := parseJSAttr(call.Argument(5))
+			fg := ParseJSColor(call.Argument(3))
+			bg := ParseJSColor(call.Argument(4))
+			attr := ParseJSAttr(call.Argument(5))
 			buf.WriteString(ox+x, oy+y, text, fg, bg, attr)
 			return goja.Undefined()
 		},
@@ -624,9 +624,9 @@ func (r *jsRuntime) newJSImageBuffer(buf *common.ImageBuffer, ox, oy, w, h int) 
 			fw := int(call.Argument(2).ToInteger())
 			fh := int(call.Argument(3).ToInteger())
 			ch := call.Argument(4).String()
-			fg := parseJSColor(call.Argument(5))
-			bg := parseJSColor(call.Argument(6))
-			attr := parseJSAttr(call.Argument(7))
+			fg := ParseJSColor(call.Argument(5))
+			bg := ParseJSColor(call.Argument(6))
+			attr := ParseJSAttr(call.Argument(7))
 			fillCh := ' '
 			if len(ch) > 0 {
 				fillCh = []rune(ch)[0]
@@ -637,9 +637,9 @@ func (r *jsRuntime) newJSImageBuffer(buf *common.ImageBuffer, ox, oy, w, h int) 
 	}
 }
 
-// parseJSColor converts a JS value to a color.Color.
+// ParseJSColor converts a JS value to a color.Color.
 // Accepts: null/undefined → nil, "#RRGGBB" hex string → color.RGBA.
-func parseJSColor(v goja.Value) color.Color {
+func ParseJSColor(v goja.Value) color.Color {
 	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
 		return nil
 	}
@@ -669,24 +669,24 @@ func hexNibble(c byte) uint8 {
 	return 0
 }
 
-// parseJSAttr converts a JS value to a PixelAttr.
+// ParseJSAttr converts a JS value to a PixelAttr.
 // Accepts: null/undefined → AttrNone, number → PixelAttr bitmask.
-func parseJSAttr(v goja.Value) common.PixelAttr {
+func ParseJSAttr(v goja.Value) common.PixelAttr {
 	if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
 		return common.AttrNone
 	}
 	return common.PixelAttr(v.ToInteger())
 }
 
-func (r *jsRuntime) RenderNC(playerID string, width, height int) *common.WidgetNode {
+func (r *JSRuntime) RenderNC(playerID string, width, height int) *common.WidgetNode {
 	if r.renderNCFn == nil {
 		return nil // framework will fall back to wrapping Render() in a gameview node
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("RenderNC")
-	defer traceJS(r.vm, "RenderNC")()
-	cancel := watchdogJS(r.vm, "RenderNC")
+	defer TraceJS(r.vm, "RenderNC")()
+	cancel := WatchdogJS(r.vm, "RenderNC")
 	defer cancel()
 	val, err := r.renderNCFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
 	if err != nil {
@@ -793,15 +793,15 @@ func gojaToWidgetNode(vm *goja.Runtime, val goja.Value) *common.WidgetNode {
 	return node
 }
 
-func (r *jsRuntime) StatusBar(playerID string) string {
+func (r *JSRuntime) StatusBar(playerID string) string {
 	if r.statusBarFn == nil {
 		return ""
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("StatusBar")
-	defer traceJS(r.vm, "StatusBar")()
-	cancel := watchdogJS(r.vm, "StatusBar")
+	defer TraceJS(r.vm, "StatusBar")()
+	cancel := WatchdogJS(r.vm, "StatusBar")
 	defer cancel()
 	val, err := r.statusBarFn(goja.Undefined(), r.vm.ToValue(playerID))
 	if err != nil {
@@ -811,15 +811,15 @@ func (r *jsRuntime) StatusBar(playerID string) string {
 	return val.String()
 }
 
-func (r *jsRuntime) CommandBar(playerID string) string {
+func (r *JSRuntime) CommandBar(playerID string) string {
 	if r.commandBarFn == nil {
 		return ""
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("CommandBar")
-	defer traceJS(r.vm, "CommandBar")()
-	cancel := watchdogJS(r.vm, "CommandBar")
+	defer TraceJS(r.vm, "CommandBar")()
+	cancel := WatchdogJS(r.vm, "CommandBar")
 	defer cancel()
 	val, err := r.commandBarFn(goja.Undefined(), r.vm.ToValue(playerID))
 	if err != nil {
@@ -829,7 +829,7 @@ func (r *jsRuntime) CommandBar(playerID string) string {
 	return val.String()
 }
 
-func (r *jsRuntime) Commands() []common.Command {
+func (r *JSRuntime) Commands() []common.Command {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	result := make([]common.Command, len(r.commands))
@@ -837,13 +837,13 @@ func (r *jsRuntime) Commands() []common.Command {
 	return result
 }
 
-func (r *jsRuntime) Unload() {
+func (r *JSRuntime) Unload() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.vm.Interrupt("game unloaded")
 }
 
-func (r *jsRuntime) Menus() []common.MenuDef {
+func (r *JSRuntime) Menus() []common.MenuDef {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.menus
@@ -851,7 +851,7 @@ func (r *jsRuntime) Menus() []common.MenuDef {
 
 // SetTeamsCache replaces the cached teams snapshot that JS teams() returns.
 // Called by the server after loading teams or when a player reconnects.
-func (r *jsRuntime) SetTeamsCache(teams []map[string]any) {
+func (r *JSRuntime) SetTeamsCache(teams []map[string]any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.cachedTeams = teams
@@ -859,20 +859,20 @@ func (r *jsRuntime) SetTeamsCache(teams []map[string]any) {
 
 // --- Lifecycle methods (part of Game interface) ---
 
-func (r *jsRuntime) GameName() string {
+func (r *JSRuntime) GameName() string {
 	return r.gameNameProp
 }
 
-func (r *jsRuntime) TeamRange() common.TeamRange {
+func (r *JSRuntime) TeamRange() common.TeamRange {
 	return r.teamRangeProp
 }
 
-func (r *jsRuntime) SplashScreen() string {
+func (r *JSRuntime) SplashScreen() string {
 	return r.splashScreenProp
 }
 
 // IsGameOverPending returns true if JS called gameOver() and clears the flag.
-func (r *jsRuntime) IsGameOverPending() bool {
+func (r *JSRuntime) IsGameOverPending() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.gameOverPending {
@@ -883,14 +883,14 @@ func (r *jsRuntime) IsGameOverPending() bool {
 }
 
 // GameOverResults returns the results array passed to gameOver().
-func (r *jsRuntime) GameOverResults() []common.GameResult {
+func (r *JSRuntime) GameOverResults() []common.GameResult {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.gameOverResults
 }
 
 // GameOverStateExport returns the state object passed as the second arg to gameOver().
-func (r *jsRuntime) GameOverStateExport() any {
+func (r *JSRuntime) GameOverStateExport() any {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.gameOverState == nil || goja.IsUndefined(r.gameOverState) || goja.IsNull(r.gameOverState) {
@@ -899,7 +899,7 @@ func (r *jsRuntime) GameOverStateExport() any {
 	return r.gameOverState.Export()
 }
 
-func (r *jsRuntime) recoverJS(method string) {
+func (r *JSRuntime) recoverJS(method string) {
 	if rec := recover(); rec != nil {
 		slog.Error("JS panic in game method", "method", method, "panic", rec)
 	}
