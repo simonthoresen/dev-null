@@ -12,12 +12,12 @@ import (
 // ─── Menu bar render tests ───────────────────────────────────────────────────
 
 func TestRenderNCBarSingleMenu(t *testing.T) {
-	o := overlayState{openMenu: -1}
+	o := overlayState{OpenMenu: -1}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 	}
 	pal := testTheme().LayerAt(1)
-	output := o.renderNCBar(20, menus, pal)
+	output := o.RenderMenuBar(20, menus, pal)
 	s := newScreen(output)
 
 	// Bar should be exactly 1 line.
@@ -37,14 +37,14 @@ func TestRenderNCBarSingleMenu(t *testing.T) {
 }
 
 func TestRenderNCBarMultipleMenus(t *testing.T) {
-	o := overlayState{openMenu: -1}
+	o := overlayState{OpenMenu: -1}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
 		{Label: "&Help", Items: []common.MenuItemDef{{Label: "&About"}}},
 	}
 	pal := testTheme().LayerAt(1)
-	output := o.renderNCBar(40, menus, pal)
+	output := o.RenderMenuBar(40, menus, pal)
 
 	s := newScreen(output)
 	// All menu labels should appear, separated by │.
@@ -60,13 +60,13 @@ func TestRenderNCBarMultipleMenus(t *testing.T) {
 }
 
 func TestRenderNCBarFocusedMenu(t *testing.T) {
-	o := overlayState{menuFocused: true, menuCursor: 1, openMenu: -1}
+	o := overlayState{MenuFocused: true, MenuCursor: 1, OpenMenu: -1}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
 	}
 	pal := testTheme().LayerAt(1)
-	output := o.renderNCBar(30, menus, pal)
+	output := o.RenderMenuBar(30, menus, pal)
 	s := newScreen(output)
 
 	// Both labels should still be present.
@@ -81,7 +81,7 @@ func TestRenderNCBarFocusedMenu(t *testing.T) {
 // ─── Dropdown render tests ───────────────────────────────────────────────────
 
 func TestRenderDropdownBasic(t *testing.T) {
-	o := overlayState{menuFocused: true, menuCursor: 0, openMenu: 0, dropCursor: 0}
+	o := overlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{
 			{Label: "&New"},
@@ -90,8 +90,8 @@ func TestRenderDropdownBasic(t *testing.T) {
 		}},
 	}
 	pal := testTheme().LayerAt(1)
-	box := o.renderDropdown(menus, 0, pal)
-	dd, col, row := box.content, box.col, box.row
+	box := o.RenderDropdown(menus, 0, pal)
+	dd, col, row := box.Content, box.Col, box.Row
 
 	if col != 0 {
 		t.Errorf("expected col 0, got %d", col)
@@ -134,7 +134,7 @@ func TestRenderDropdownBasic(t *testing.T) {
 }
 
 func TestRenderDropdownWithSeparator(t *testing.T) {
-	o := overlayState{menuFocused: true, menuCursor: 0, openMenu: 0, dropCursor: 0}
+	o := overlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{
 			{Label: "&New"},
@@ -143,7 +143,7 @@ func TestRenderDropdownWithSeparator(t *testing.T) {
 		}},
 	}
 	pal := testTheme().LayerAt(1)
-	dd := o.renderDropdown(menus, 0, pal).content
+	dd := o.RenderDropdown(menus, 0, pal).Content
 	s := newScreen(dd)
 
 	// 5 lines: top + New + separator + Quit + bottom.
@@ -165,14 +165,14 @@ func TestRenderDropdownWithSeparator(t *testing.T) {
 }
 
 func TestRenderDropdownWithHotkey(t *testing.T) {
-	o := overlayState{menuFocused: true, menuCursor: 0, openMenu: 0, dropCursor: 0}
+	o := overlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{
 			{Label: "&Quit", Hotkey: "ctrl+q"},
 		}},
 	}
 	pal := testTheme().LayerAt(1)
-	dd := o.renderDropdown(menus, 0, pal).content
+	dd := o.RenderDropdown(menus, 0, pal).Content
 	s := newScreen(dd)
 
 	// Should show hotkey display.
@@ -182,7 +182,7 @@ func TestRenderDropdownWithHotkey(t *testing.T) {
 }
 
 func TestRenderDropdownWithToggles(t *testing.T) {
-	o := overlayState{menuFocused: true, menuCursor: 0, openMenu: 0, dropCursor: 0}
+	o := overlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
 	menus := []common.MenuDef{
 		{Label: "&View", Items: []common.MenuItemDef{
 			{Label: "&Sidebar", Toggle: true, Checked: func() bool { return true }},
@@ -190,7 +190,7 @@ func TestRenderDropdownWithToggles(t *testing.T) {
 		}},
 	}
 	pal := testTheme().LayerAt(1)
-	dd := o.renderDropdown(menus, 0, pal).content
+	dd := o.RenderDropdown(menus, 0, pal).Content
 	s := newScreen(dd)
 
 	// Checked item should have checkmark.
@@ -212,14 +212,14 @@ func TestRenderDropdownWithToggles(t *testing.T) {
 }
 
 func TestRenderDropdownSecondMenu(t *testing.T) {
-	o := overlayState{menuFocused: true, menuCursor: 1, openMenu: 1, dropCursor: 0}
+	o := overlayState{MenuFocused: true, MenuCursor: 1, OpenMenu: 1, DropCursor: 0}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}, {Label: "&Paste"}}},
 	}
 	pal := testTheme().LayerAt(1)
-	box := o.renderDropdown(menus, 0, pal)
-	dd, col, row := box.content, box.col, box.row
+	box := o.RenderDropdown(menus, 0, pal)
+	dd, col, row := box.Content, box.Col, box.Row
 	s := newScreen(dd)
 
 	// Column should be offset to Edit's position.
@@ -247,7 +247,7 @@ func TestRenderDropdownSecondMenu(t *testing.T) {
 // ─── Dropdown composited on bar ──────────────────────────────────────────────
 
 func TestDropdownOnBar(t *testing.T) {
-	o := overlayState{menuFocused: true, menuCursor: 0, openMenu: 0, dropCursor: 0}
+	o := overlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{
 			{Label: "&New"},
@@ -258,11 +258,11 @@ func TestDropdownOnBar(t *testing.T) {
 	pal := testTheme().LayerAt(1)
 
 	// Render bar.
-	bar := o.renderNCBar(40, menus, pal)
+	bar := o.RenderMenuBar(40, menus, pal)
 
 	// Render dropdown.
-	ddBox := o.renderDropdown(menus, 0, pal)
-	dd, ddCol, ddRow := ddBox.content, ddBox.col, ddBox.row
+	ddBox := o.RenderDropdown(menus, 0, pal)
+	dd, ddCol, ddRow := ddBox.Content, ddBox.Col, ddBox.Row
 
 	// Build a background: bar + empty rows to have space for the dropdown.
 	bgLines := []string{ansi.Strip(bar)}
@@ -309,13 +309,13 @@ func TestDropdownOnBar(t *testing.T) {
 // ─── Dialog render tests ─────────────────────────────────────────────────────
 
 func TestRenderDialogBasic(t *testing.T) {
-	o := overlayState{openMenu: -1}
-	o.pushDialog(common.DialogRequest{
+	o := overlayState{OpenMenu: -1}
+	o.PushDialog(common.DialogRequest{
 		Title: "Confirm",
 		Body:  "Are you sure?",
 	})
 	pal := testTheme().WarningLayer()
-	dlg := o.renderDialog(40, 20, pal).content
+	dlg := o.RenderDialog(40, 20, pal).Content
 	s := newScreen(dlg)
 
 	// Top border.
@@ -356,14 +356,14 @@ func TestRenderDialogBasic(t *testing.T) {
 }
 
 func TestRenderDialogMultipleButtons(t *testing.T) {
-	o := overlayState{openMenu: -1, dialogFocus: 1}
-	o.pushDialog(common.DialogRequest{
+	o := overlayState{OpenMenu: -1, DialogFocus: 1}
+	o.PushDialog(common.DialogRequest{
 		Title:   "Save?",
 		Body:    "Unsaved changes.",
 		Buttons: []string{"Yes", "No", "Cancel"},
 	})
 	pal := testTheme().WarningLayer()
-	dlg := o.renderDialog(60, 20, pal).content
+	dlg := o.RenderDialog(60, 20, pal).Content
 	s := newScreen(dlg)
 
 	// All buttons should be present.
@@ -390,13 +390,13 @@ func TestRenderDialogMultipleButtons(t *testing.T) {
 }
 
 func TestRenderDialogMultilineBody(t *testing.T) {
-	o := overlayState{openMenu: -1}
-	o.pushDialog(common.DialogRequest{
+	o := overlayState{OpenMenu: -1}
+	o.PushDialog(common.DialogRequest{
 		Title: "Info",
 		Body:  "Line one\nLine two\nLine three",
 	})
 	pal := testTheme().WarningLayer()
-	dlg := o.renderDialog(50, 20, pal).content
+	dlg := o.RenderDialog(50, 20, pal).Content
 	s := newScreen(dlg)
 
 	// Should have: top + title + sep + 3 body + sep + buttons + bottom = 9 lines.
@@ -416,14 +416,14 @@ func TestRenderDialogMultilineBody(t *testing.T) {
 }
 
 func TestRenderDialogCentered(t *testing.T) {
-	o := overlayState{openMenu: -1}
-	o.pushDialog(common.DialogRequest{
+	o := overlayState{OpenMenu: -1}
+	o.PushDialog(common.DialogRequest{
 		Title: "Test",
 		Body:  "Hi",
 	})
 	pal := testTheme().WarningLayer()
-	box := o.renderDialog(80, 24, pal)
-	col, row := box.col, box.row
+	box := o.RenderDialog(80, 24, pal)
+	col, row := box.Col, box.Row
 
 	// Dialog should be roughly centered.
 	if col < 20 || col > 40 {
@@ -437,14 +437,14 @@ func TestRenderDialogCentered(t *testing.T) {
 // ─── Dialog composited on background ─────────────────────────────────────────
 
 func TestDialogOnBackground(t *testing.T) {
-	o := overlayState{openMenu: -1}
-	o.pushDialog(common.DialogRequest{
+	o := overlayState{OpenMenu: -1}
+	o.PushDialog(common.DialogRequest{
 		Title: "OK?",
 		Body:  "Sure?",
 	})
 	pal := testTheme().WarningLayer()
-	dlgBox := o.renderDialog(40, 12, pal)
-	dlg, dlgCol, dlgRow := dlgBox.content, dlgBox.col, dlgBox.row
+	dlgBox := o.RenderDialog(40, 12, pal)
+	dlg, dlgCol, dlgRow := dlgBox.Content, dlgBox.Col, dlgBox.Row
 
 	// Build a dot-filled background.
 	var bgLines []string

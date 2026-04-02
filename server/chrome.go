@@ -174,7 +174,7 @@ func newChromeModel(app *Server, playerID string) chromeModel {
 		teamEditInput:  teamInput,
 		historyIdx:     -1,
 		theme:          theme.Default(),
-		overlay:        overlayState{openMenu: -1},
+		overlay:        overlayState{OpenMenu: -1},
 		lobbyWindow:    lobbyWindow,
 		lobbyChatView:  lobbyChatView,
 		lobbyTeamPanel: lobbyTeamPanel,
@@ -314,7 +314,7 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case showDialogMsg:
-		m.overlay.pushDialog(msg.dialog)
+		m.overlay.PushDialog(msg.Dialog)
 		return m, nil
 
 	case tea.MouseClickMsg:
@@ -324,7 +324,7 @@ func (m chromeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.inActiveGame {
 				ncBarRow = 1
 			}
-			if m.overlay.handleClick(msg.X, msg.Y, ncBarRow, m.width, m.height, m.cachedMenus(), m.playerID) {
+			if m.overlay.HandleClick(msg.X, msg.Y, ncBarRow, m.width, m.height, m.cachedMenus(), m.playerID) {
 				return m, nil
 			}
 		}
@@ -419,7 +419,7 @@ func (m chromeModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Overlay intercepts keys when active (F10, menu navigation, dialog buttons).
-	if m.overlay.handleKey(msg.String(), m.cachedMenus(), m.playerID) {
+	if m.overlay.HandleKey(msg.String(), m.cachedMenus(), m.playerID) {
 		return m, nil
 	}
 
@@ -835,22 +835,22 @@ func (m chromeModel) View() tea.View {
 	// Overlay layers: render to sub-buffers, blit, then shadow via RecolorRect.
 	shadowFg := m.theme.ShadowFgC()
 	shadowBg := m.theme.ShadowBgC()
-	if m.overlay.openMenu >= 0 {
+	if m.overlay.OpenMenu >= 0 {
 		menuLayer := m.theme.LayerAt(1)
-		if dd := m.overlay.renderDropdown(menus, 1, menuLayer); dd.content != "" {
-			sub := common.NewImageBuffer(dd.width, dd.height)
-			sub.PaintANSI(0, 0, dd.width, dd.height, dd.content, menuLayer.FgC(), menuLayer.BgC())
-			buf.Blit(dd.col, dd.row, sub)
-			common.BlitShadow(buf, dd.col, dd.row, dd.width, dd.height, shadowFg, shadowBg)
+		if dd := m.overlay.RenderDropdown(menus, 1, menuLayer); dd.Content != "" {
+			sub := common.NewImageBuffer(dd.Width, dd.Height)
+			sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, menuLayer.FgC(), menuLayer.BgC())
+			buf.Blit(dd.Col, dd.Row, sub)
+			common.BlitShadow(buf, dd.Col, dd.Row, dd.Width, dd.Height, shadowFg, shadowBg)
 		}
 	}
-	if m.overlay.hasDialog() {
+	if m.overlay.HasDialog() {
 		dlgLayer := m.theme.LayerAt(2)
-		if dlg := m.overlay.renderDialog(m.width, m.height, dlgLayer); dlg.content != "" {
-			sub := common.NewImageBuffer(dlg.width, dlg.height)
-			sub.PaintANSI(0, 0, dlg.width, dlg.height, dlg.content, dlgLayer.FgC(), dlgLayer.BgC())
-			buf.Blit(dlg.col, dlg.row, sub)
-			common.BlitShadow(buf, dlg.col, dlg.row, dlg.width, dlg.height, shadowFg, shadowBg)
+		if dlg := m.overlay.RenderDialog(m.width, m.height, dlgLayer); dlg.Content != "" {
+			sub := common.NewImageBuffer(dlg.Width, dlg.Height)
+			sub.PaintANSI(0, 0, dlg.Width, dlg.Height, dlg.Content, dlgLayer.FgC(), dlgLayer.BgC())
+			buf.Blit(dlg.Col, dlg.Row, sub)
+			common.BlitShadow(buf, dlg.Col, dlg.Row, dlg.Width, dlg.Height, shadowFg, shadowBg)
 		}
 	}
 
@@ -907,7 +907,7 @@ func (m chromeModel) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef
 	menuLayer := m.theme.LayerAt(1)
 
 	// Row 0: NC action bar.
-	ncBar := m.overlay.renderNCBar(m.width, menus, menuLayer)
+	ncBar := m.overlay.RenderMenuBar(m.width, menus, menuLayer)
 	buf.PaintANSI(0, 0, m.width, 1, ncBar, menuLayer.FgC(), menuLayer.BgC())
 
 	// Update chat view.
@@ -985,7 +985,7 @@ func (m chromeModel) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef
 }
 
 func (m chromeModel) viewSplash(menus []common.MenuDef, game common.Game, gameName string, mbStyle, ciStyle lipgloss.Style) string {
-	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.LayerAt(1))
+	ncBar := m.overlay.RenderMenuBar(m.width, menus, m.theme.LayerAt(1))
 	displayName := gameName
 	if gn := game.GameName(); gn != "" {
 		displayName = gn
@@ -1020,7 +1020,7 @@ func (m chromeModel) viewSplash(menus []common.MenuDef, game common.Game, gameNa
 }
 
 func (m chromeModel) viewGameOver(menus []common.MenuDef, game common.Game, gameName string, mbStyle, ciStyle lipgloss.Style) string {
-	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.LayerAt(1))
+	ncBar := m.overlay.RenderMenuBar(m.width, menus, m.theme.LayerAt(1))
 	displayName := gameName
 	if gn := game.GameName(); gn != "" {
 		displayName = gn
@@ -1075,7 +1075,7 @@ func (m chromeModel) renderPlaying(buf *common.ImageBuffer, menus []common.MenuD
 	row++
 
 	// Row 1: NC action bar.
-	ncBar := m.overlay.renderNCBar(m.width, menus, m.theme.LayerAt(1))
+	ncBar := m.overlay.RenderMenuBar(m.width, menus, m.theme.LayerAt(1))
 	buf.PaintANSI(0, row, m.width, 1, ncBar, nil, nil)
 	row++
 
@@ -1332,7 +1332,7 @@ func (m *chromeModel) cachedMenus() []common.MenuDef {
 		Label: "&Help",
 		Items: []common.MenuItemDef{
 			{Label: "&About...", Handler: func(_ string) {
-				m.overlay.pushDialog(common.DialogRequest{
+				m.overlay.PushDialog(common.DialogRequest{
 					Title:   "About",
 					Body:    aboutLogo(),
 					Buttons: []string{"OK"},
@@ -1356,7 +1356,7 @@ func (m *chromeModel) showPlayerListDialog(title, subdir, ext string) {
 		}
 		body = strings.Join(lines, "\n")
 	}
-	m.overlay.pushDialog(common.DialogRequest{
+	m.overlay.PushDialog(common.DialogRequest{
 		Title:   title,
 		Body:    body,
 		Buttons: []string{"Close"},
@@ -1393,7 +1393,7 @@ func (m *chromeModel) showShaderDialog() {
 	lines = append(lines, "")
 	lines = append(lines, "Use /shader load|unload|up|down <name>")
 
-	m.overlay.pushDialog(common.DialogRequest{
+	m.overlay.PushDialog(common.DialogRequest{
 		Title:   "Shaders",
 		Body:    strings.Join(lines, "\n"),
 		Buttons: []string{"Close"},

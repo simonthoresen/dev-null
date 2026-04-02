@@ -180,7 +180,7 @@ func TestNCTextInputOnSubmit(t *testing.T) {
 
 func TestNCCommandInputHistory(t *testing.T) {
 	model := newTestTextInput()
-	ci := &NCCommandInput{NCTextInput: NCTextInput{Model: model}}
+	ci := &NCCommandInput{TextInput: NCTextInput{Model: model}}
 	ci.OnSubmit = func(text string) {}
 
 	// Submit a few commands.
@@ -222,7 +222,7 @@ func TestNCCommandInputHistory(t *testing.T) {
 
 func TestNCCommandInputTabOnEmpty(t *testing.T) {
 	model := newTestTextInput()
-	ci := &NCCommandInput{NCTextInput: NCTextInput{Model: model}}
+	ci := &NCCommandInput{TextInput: NCTextInput{Model: model}}
 	ci.OnTab = func(s string) (string, bool) { return "/help", true }
 
 	// Tab on empty input should signal WantTab (cycle focus), not complete.
@@ -234,7 +234,7 @@ func TestNCCommandInputTabOnEmpty(t *testing.T) {
 
 func TestNCCommandInputTabOnNonEmpty(t *testing.T) {
 	model := newTestTextInput()
-	ci := &NCCommandInput{NCTextInput: NCTextInput{Model: model}}
+	ci := &NCCommandInput{TextInput: NCTextInput{Model: model}}
 	ci.OnTab = func(s string) (string, bool) { return "/help", true }
 
 	model.SetValue("/h")
@@ -249,7 +249,7 @@ func TestNCCommandInputTabOnNonEmpty(t *testing.T) {
 
 func TestNCCommandInputEscClears(t *testing.T) {
 	model := newTestTextInput()
-	ci := &NCCommandInput{NCTextInput: NCTextInput{Model: model}}
+	ci := &NCCommandInput{TextInput: NCTextInput{Model: model}}
 
 	model.SetValue("something")
 	ci.Update(tea.KeyPressMsg{Code: -1, Text: "esc"})
@@ -285,17 +285,17 @@ func TestNCTextViewScrollClamp(t *testing.T) {
 	tv := &NCTextView{
 		Lines:      []string{"a", "b", "c"},
 		Scrollable: true,
-		height:     2,
 	}
+	tv.SetHeight(2)
 
 	tv.ScrollOffset = 100
-	tv.clampScroll()
+	tv.ClampScroll()
 	if tv.ScrollOffset != 1 { // 3 lines - 2 visible = max 1
 		t.Errorf("expected clamped to 1, got %d", tv.ScrollOffset)
 	}
 
 	tv.ScrollOffset = -5
-	tv.clampScroll()
+	tv.ClampScroll()
 	if tv.ScrollOffset != 0 {
 		t.Errorf("expected clamped to 0, got %d", tv.ScrollOffset)
 	}
@@ -532,50 +532,50 @@ func TestHotkeyDisplay(t *testing.T) {
 }
 
 func TestOverlayMenuNavigation(t *testing.T) {
-	o := overlayState{openMenu: -1}
+	o := overlayState{OpenMenu: -1}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "&New"}, {Label: "&Open"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "&Copy"}}},
 	}
 
 	// F10 activates menu bar.
-	if !o.handleKey("f10", menus, "") {
+	if !o.HandleKey("f10", menus, "") {
 		t.Error("F10 should be consumed")
 	}
-	if !o.menuFocused {
+	if !o.MenuFocused {
 		t.Error("expected menuFocused after F10")
 	}
-	if o.menuCursor != 0 {
-		t.Errorf("expected cursor 0, got %d", o.menuCursor)
+	if o.MenuCursor != 0 {
+		t.Errorf("expected cursor 0, got %d", o.MenuCursor)
 	}
 
 	// Right arrow moves to Edit.
-	o.handleKey("right", menus, "")
-	if o.menuCursor != 1 {
-		t.Errorf("expected cursor 1, got %d", o.menuCursor)
+	o.HandleKey("right", menus, "")
+	if o.MenuCursor != 1 {
+		t.Errorf("expected cursor 1, got %d", o.MenuCursor)
 	}
 
 	// Down opens dropdown.
-	o.handleKey("down", menus, "")
-	if o.openMenu != 1 {
-		t.Errorf("expected openMenu 1, got %d", o.openMenu)
+	o.HandleKey("down", menus, "")
+	if o.OpenMenu != 1 {
+		t.Errorf("expected openMenu 1, got %d", o.OpenMenu)
 	}
 
 	// Esc closes dropdown.
-	o.handleKey("esc", menus, "")
-	if o.openMenu != -1 {
-		t.Errorf("expected openMenu -1, got %d", o.openMenu)
+	o.HandleKey("esc", menus, "")
+	if o.OpenMenu != -1 {
+		t.Errorf("expected openMenu -1, got %d", o.OpenMenu)
 	}
 
 	// Esc again deactivates bar.
-	o.handleKey("esc", menus, "")
-	if o.menuFocused {
+	o.HandleKey("esc", menus, "")
+	if o.MenuFocused {
 		t.Error("expected menuFocused=false after second Esc")
 	}
 }
 
 func TestOverlayHotkey(t *testing.T) {
-	o := overlayState{openMenu: -1}
+	o := overlayState{OpenMenu: -1}
 	triggered := false
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{
@@ -583,7 +583,7 @@ func TestOverlayHotkey(t *testing.T) {
 		}},
 	}
 
-	if !o.handleKey("ctrl+q", menus, "") {
+	if !o.HandleKey("ctrl+q", menus, "") {
 		t.Error("hotkey should be consumed")
 	}
 	if !triggered {
@@ -592,42 +592,42 @@ func TestOverlayHotkey(t *testing.T) {
 }
 
 func TestOverlayAltActivation(t *testing.T) {
-	o := overlayState{openMenu: -1}
+	o := overlayState{OpenMenu: -1}
 	menus := []common.MenuDef{
 		{Label: "&File", Items: []common.MenuItemDef{{Label: "Item"}}},
 		{Label: "&Edit", Items: []common.MenuItemDef{{Label: "Item"}}},
 	}
 
-	o.handleKey("alt+e", menus, "")
-	if o.openMenu != 1 {
-		t.Errorf("expected Alt+E to open Edit menu (index 1), got %d", o.openMenu)
+	o.HandleKey("alt+e", menus, "")
+	if o.OpenMenu != 1 {
+		t.Errorf("expected Alt+E to open Edit menu (index 1), got %d", o.OpenMenu)
 	}
 }
 
 func TestOverlayDialogStack(t *testing.T) {
-	o := overlayState{openMenu: -1}
+	o := overlayState{OpenMenu: -1}
 
-	if o.hasDialog() {
+	if o.HasDialog() {
 		t.Error("should have no dialog initially")
 	}
 
-	o.pushDialog(common.DialogRequest{Title: "First", Body: "A"})
-	o.pushDialog(common.DialogRequest{Title: "Second", Body: "B"})
+	o.PushDialog(common.DialogRequest{Title: "First", Body: "A"})
+	o.PushDialog(common.DialogRequest{Title: "Second", Body: "B"})
 
-	if !o.hasDialog() {
+	if !o.HasDialog() {
 		t.Error("should have dialogs")
 	}
-	if d := o.topDialog(); d.Title != "Second" {
+	if d := o.TopDialog(); d.Title != "Second" {
 		t.Errorf("expected top 'Second', got %q", d.Title)
 	}
 
-	o.popDialog()
-	if d := o.topDialog(); d.Title != "First" {
+	o.PopDialog()
+	if d := o.TopDialog(); d.Title != "First" {
 		t.Errorf("expected top 'First', got %q", d.Title)
 	}
 
-	o.popDialog()
-	if o.hasDialog() {
+	o.PopDialog()
+	if o.HasDialog() {
 		t.Error("should have no dialogs after popping both")
 	}
 }
@@ -724,7 +724,7 @@ func TestRenderScrollbarNoScroll(t *testing.T) {
 func TestNCWindowIntegration(t *testing.T) {
 	model := newTestTextInput()
 	tv := &NCTextView{Lines: []string{"log1", "log2"}, BottomAlign: true}
-	ci := &NCCommandInput{NCTextInput: NCTextInput{Model: model}}
+	ci := &NCCommandInput{TextInput: NCTextInput{Model: model}}
 	submitted := ""
 	ci.OnSubmit = func(text string) { submitted = text }
 
@@ -874,9 +874,9 @@ func (h *discardHandler) WithGroup(_ string) slog.Handler               { return
 // TestAboutDialogClickDetection verifies that renderDialog and handleDialogClick
 // agree on the dialog position and button row, so clicking OK actually works.
 func TestAboutDialogClickDetection(t *testing.T) {
-	o := overlayState{openMenu: -1}
+	o := overlayState{OpenMenu: -1}
 	body := aboutLogo()
-	o.pushDialog(common.DialogRequest{
+	o.PushDialog(common.DialogRequest{
 		Title:   "About",
 		Body:    body,
 		Buttons: []string{"OK"},
@@ -886,8 +886,8 @@ func TestAboutDialogClickDetection(t *testing.T) {
 	layer := testTheme().LayerAt(2)
 
 	// Get the rendered dialog position.
-	dlgBox := o.renderDialog(screenW, screenH, layer)
-	dlgStr, renderCol, renderRow := dlgBox.content, dlgBox.col, dlgBox.row
+	dlgBox := o.RenderDialog(screenW, screenH, layer)
+	dlgStr, renderCol, renderRow := dlgBox.Content, dlgBox.Col, dlgBox.Row
 	if dlgStr == "" {
 		t.Fatal("renderDialog returned empty string")
 	}
@@ -921,20 +921,20 @@ func TestAboutDialogClickDetection(t *testing.T) {
 	t.Logf("clicking at (%d, %d) to hit OK button", clickX, clickY)
 
 	// The click should dismiss the dialog.
-	consumed := o.handleDialogClick(clickX, clickY, screenW, screenH)
+	consumed := o.HandleDialogClick(clickX, clickY, screenW, screenH)
 	if !consumed {
 		t.Error("click on OK button was not consumed")
 	}
-	if o.hasDialog() {
+	if o.HasDialog() {
 		t.Error("dialog should have been dismissed after clicking OK, but it's still open")
 	}
 }
 
 // TestDialogClickMultiButton verifies click detection for multi-button dialogs.
 func TestDialogClickMultiButton(t *testing.T) {
-	o := overlayState{openMenu: -1}
+	o := overlayState{OpenMenu: -1}
 	var clicked string
-	o.pushDialog(common.DialogRequest{
+	o.PushDialog(common.DialogRequest{
 		Title:   "Confirm",
 		Body:    "Are you sure?",
 		Buttons: []string{"Yes", "No", "Cancel"},
@@ -945,8 +945,8 @@ func TestDialogClickMultiButton(t *testing.T) {
 	layer := testTheme().LayerAt(2)
 
 	// Render to find button positions.
-	dlgBox := o.renderDialog(screenW, screenH, layer)
-	dlgStr, renderCol, renderRow := dlgBox.content, dlgBox.col, dlgBox.row
+	dlgBox := o.RenderDialog(screenW, screenH, layer)
+	dlgStr, renderCol, renderRow := dlgBox.Content, dlgBox.Col, dlgBox.Row
 	dlgLines := strings.Split(dlgStr, "\n")
 
 	// Find button row.
@@ -969,8 +969,8 @@ func TestDialogClickMultiButton(t *testing.T) {
 	if noX < 0 {
 		t.Fatal("could not find [ No ] in button line")
 	}
-	o.handleDialogClick(renderCol+noX+1, clickY, screenW, screenH)
-	if o.hasDialog() {
+	o.HandleDialogClick(renderCol+noX+1, clickY, screenW, screenH)
+	if o.HasDialog() {
 		t.Error("dialog should be dismissed after clicking No")
 	}
 	if clicked != "No" {
@@ -980,24 +980,24 @@ func TestDialogClickMultiButton(t *testing.T) {
 
 // TestAboutDialogKeyDismiss verifies that pressing Enter closes the About dialog.
 func TestAboutDialogKeyDismiss(t *testing.T) {
-	o := overlayState{openMenu: -1}
+	o := overlayState{OpenMenu: -1}
 	body := aboutLogo()
-	o.pushDialog(common.DialogRequest{
+	o.PushDialog(common.DialogRequest{
 		Title:   "About",
 		Body:    body,
 		Buttons: []string{"OK"},
 	})
 
-	if !o.hasDialog() {
+	if !o.HasDialog() {
 		t.Fatal("dialog should be open")
 	}
 
 	// Press Enter to close.
-	consumed := o.handleDialogKey("enter")
+	consumed := o.HandleDialogKey("enter")
 	if !consumed {
 		t.Error("enter should be consumed by dialog")
 	}
-	if o.hasDialog() {
+	if o.HasDialog() {
 		t.Error("dialog should be dismissed after Enter")
 	}
 }

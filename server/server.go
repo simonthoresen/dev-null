@@ -646,7 +646,7 @@ func (a *Server) ShowDialog(playerID string, d common.DialogRequest) {
 	prog := a.programs[playerID]
 	a.programsMu.Unlock()
 	if prog != nil {
-		prog.Send(showDialogMsg{dialog: d})
+		prog.Send(showDialogMsg{Dialog: d})
 	}
 }
 

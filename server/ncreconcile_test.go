@@ -248,12 +248,12 @@ func TestReconcileCacheSkipsStaticSubtree(t *testing.T) {
 	}
 
 	// The cached panel control at "0.0" should be the exact same pointer.
-	cached1, ok1 := gw1.controls["0.0"]
-	cached2, ok2 := gw2.controls["0.0"]
+	cached1, ok1 := gw1.Controls["0.0"]
+	cached2, ok2 := gw2.Controls["0.0"]
 	if !ok1 || !ok2 {
 		t.Fatal("expected panel control at path 0.0 in both reconciles")
 	}
-	if cached1.control != cached2.control {
+	if cached1.Control != cached2.Control {
 		t.Error("static panel control should be reused (same pointer), but got different instances")
 	}
 }
@@ -280,14 +280,14 @@ func TestReconcileCacheInvalidatesOnChange(t *testing.T) {
 
 	gw2 := ReconcileGameWindow(gw1, tree2, func(buf *common.ImageBuffer, x, y, w, h int) {}, nil)
 
-	cached1 := gw1.controls["0.0"]
-	cached2 := gw2.controls["0.0"]
-	if cached1.control == cached2.control {
+	cached1 := gw1.Controls["0.0"]
+	cached2 := gw2.Controls["0.0"]
+	if cached1.Control == cached2.Control {
 		t.Error("label control should be rebuilt when text changes, but same pointer was reused")
 	}
 
 	// Verify the new label has the updated text.
-	if label, ok := cached2.control.(*NCLabel); ok {
+	if label, ok := cached2.Control.(*NCLabel); ok {
 		if label.Text != "v2" {
 			t.Errorf("expected label text 'v2', got %q", label.Text)
 		}

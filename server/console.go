@@ -78,7 +78,7 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 	input.CharLimit = 256
 	input.SetWidth(78)
 	logView := &NCTextView{BottomAlign: true, Scrollable: true}
-	inputCtrl := &NCCommandInput{NCTextInput: NCTextInput{Model: input}}
+	inputCtrl := &NCCommandInput{TextInput: NCTextInput{Model: input}}
 
 	window := &NCWindow{
 		Children: []GridChild{
@@ -104,7 +104,7 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 			// catDebug defaults to false
 		},
 		theme:     theme.Default(),
-		overlay:   overlayState{openMenu: -1},
+		overlay:   overlayState{OpenMenu: -1},
 	}
 
 	// Wire callbacks — the NCTextInput handles Enter/Esc/Up/Down/Tab internally.
@@ -196,12 +196,12 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case showDialogMsg:
-		m.overlay.pushDialog(msg.dialog)
+		m.overlay.PushDialog(msg.Dialog)
 		return m, nil
 
 	case tea.MouseClickMsg:
 		if msg.Button == tea.MouseLeft {
-			if m.overlay.handleClick(msg.X, msg.Y, 0, m.width, m.height, m.consoleMenus(), "") {
+			if m.overlay.HandleClick(msg.X, msg.Y, 0, m.width, m.height, m.consoleMenus(), "") {
 				return m, nil
 			}
 			m.window.HandleClick(msg.X, msg.Y)
@@ -217,7 +217,7 @@ func (m *consoleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		// Let the overlay handle F10/menu/dialog keys first.
-		if m.overlay.handleKey(msg.String(), m.consoleMenus(), "") {
+		if m.overlay.HandleKey(msg.String(), m.consoleMenus(), "") {
 			return m, nil
 		}
 		// Everything else goes to the focused window control.
@@ -246,7 +246,7 @@ func (m *consoleModel) consoleMenus() []common.MenuDef {
 				{Label: "&Games...", Handler: func(_ string) { m.showListDialog("Games", "games", ".js") }},
 				{Label: "---"},
 				{Label: "E&xit", Hotkey: "ctrl+q", Handler: func(_ string) {
-					m.overlay.pushDialog(common.DialogRequest{
+					m.overlay.PushDialog(common.DialogRequest{
 						Title:   "Exit",
 						Body:    "Are you sure you want to shut down the server?",
 						Buttons: []string{"Yes", "No"},
@@ -287,7 +287,7 @@ func (m *consoleModel) consoleMenus() []common.MenuDef {
 			Label: "&Help",
 			Items: []common.MenuItemDef{
 				{Label: "&About...", Handler: func(_ string) {
-					m.overlay.pushDialog(common.DialogRequest{
+					m.overlay.PushDialog(common.DialogRequest{
 						Title:   "About",
 						Body:    aboutLogo(),
 						Buttons: []string{"OK"},
@@ -329,7 +329,7 @@ func (m *consoleModel) showShaderDialog() {
 	lines = append(lines, "")
 	lines = append(lines, "Use /shader load|unload|up|down <name>")
 
-	m.overlay.pushDialog(common.DialogRequest{
+	m.overlay.PushDialog(common.DialogRequest{
 		Title:   "Shaders",
 		Body:    strings.Join(lines, "\n"),
 		Buttons: []string{"Close"},
@@ -347,7 +347,7 @@ func (m *consoleModel) showListDialog(title, subdir, ext string) {
 		}
 		body = strings.Join(lines, "\n")
 	}
-	m.overlay.pushDialog(common.DialogRequest{
+	m.overlay.PushDialog(common.DialogRequest{
 		Title:   title,
 		Body:    body,
 		Buttons: []string{"Add", "Remove", "Close"},
@@ -365,7 +365,7 @@ func (m *consoleModel) showListDialog(title, subdir, ext string) {
 // showAddDialog asks for a URL or filename to add.
 func (m *consoleModel) showAddDialog(title, subdir, ext string) {
 	// Use the command input to get user input — chain back via a command.
-	m.overlay.pushDialog(common.DialogRequest{
+	m.overlay.PushDialog(common.DialogRequest{
 		Title:   "Add " + title[:len(title)-1], // "Themes" → "Theme"
 		Body:    "Type a /command to add:\n\n  For games:   /game load <name or url>\n  For plugins: /plugin load <name or url>\n  For themes:  /theme <name>",
 		Buttons: []string{"OK"},
@@ -378,7 +378,7 @@ func (m *consoleModel) showAddDialog(title, subdir, ext string) {
 // showRemoveDialog asks which item to remove and confirms.
 func (m *consoleModel) showRemoveDialog(title, subdir, ext string, items []string) {
 	if len(items) == 0 {
-		m.overlay.pushDialog(common.DialogRequest{
+		m.overlay.PushDialog(common.DialogRequest{
 			Title:   "Remove",
 			Body:    "No items to remove.",
 			Buttons: []string{"OK"},
@@ -394,7 +394,7 @@ func (m *consoleModel) showRemoveDialog(title, subdir, ext string, items []strin
 	}
 	body += "\n\nType the number in the command bar, or press Close."
 
-	m.overlay.pushDialog(common.DialogRequest{
+	m.overlay.PushDialog(common.DialogRequest{
 		Title:   "Remove " + title[:len(title)-1],
 		Body:    body,
 		Buttons: []string{"Close"},
@@ -423,7 +423,7 @@ func (m *consoleModel) View() tea.View {
 
 	// NC action bar (row 0) — PaintANSI the string into the buffer.
 	menus := m.consoleMenus()
-	ncBar := m.overlay.renderNCBar(m.width, menus, secondary)
+	ncBar := m.overlay.RenderMenuBar(m.width, menus, secondary)
 	buf.PaintANSI(0, 0, m.width, 1, ncBar, secondary.FgC(), secondary.BgC())
 
 	// NC panel with log + input (rows 1 through height-2) — render directly.
@@ -465,21 +465,21 @@ func (m *consoleModel) View() tea.View {
 	// Overlay layers: render to sub-buffers, blit, then recolor for shadow.
 	shadowFg := t.ShadowFgC()
 	shadowBg := t.ShadowBgC()
-	if m.overlay.openMenu >= 0 {
-		if dd := m.overlay.renderDropdown(menus, 0, secondary); dd.content != "" {
-			sub := common.NewImageBuffer(dd.width, dd.height)
-			sub.PaintANSI(0, 0, dd.width, dd.height, dd.content, secondary.FgC(), secondary.BgC())
-			buf.Blit(dd.col, dd.row, sub)
-			common.BlitShadow(buf, dd.col, dd.row, dd.width, dd.height, shadowFg, shadowBg)
+	if m.overlay.OpenMenu >= 0 {
+		if dd := m.overlay.RenderDropdown(menus, 0, secondary); dd.Content != "" {
+			sub := common.NewImageBuffer(dd.Width, dd.Height)
+			sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, secondary.FgC(), secondary.BgC())
+			buf.Blit(dd.Col, dd.Row, sub)
+			common.BlitShadow(buf, dd.Col, dd.Row, dd.Width, dd.Height, shadowFg, shadowBg)
 		}
 	}
-	if m.overlay.hasDialog() {
-		if dlg := m.overlay.renderDialog(m.width, m.height, t.LayerAt(2)); dlg.content != "" {
-			sub := common.NewImageBuffer(dlg.width, dlg.height)
+	if m.overlay.HasDialog() {
+		if dlg := m.overlay.RenderDialog(m.width, m.height, t.LayerAt(2)); dlg.Content != "" {
+			sub := common.NewImageBuffer(dlg.Width, dlg.Height)
 			dlgLayer := t.LayerAt(2)
-			sub.PaintANSI(0, 0, dlg.width, dlg.height, dlg.content, dlgLayer.FgC(), dlgLayer.BgC())
-			buf.Blit(dlg.col, dlg.row, sub)
-			common.BlitShadow(buf, dlg.col, dlg.row, dlg.width, dlg.height, shadowFg, shadowBg)
+			sub.PaintANSI(0, 0, dlg.Width, dlg.Height, dlg.Content, dlgLayer.FgC(), dlgLayer.BgC())
+			buf.Blit(dlg.Col, dlg.Row, sub)
+			common.BlitShadow(buf, dlg.Col, dlg.Row, dlg.Width, dlg.Height, shadowFg, shadowBg)
 		}
 	}
 
@@ -488,7 +488,7 @@ func (m *consoleModel) View() tea.View {
 	view.MouseMode = tea.MouseModeCellMotion
 
 	// Hide cursor when overlay (menu/dialog) is active.
-	if !m.overlay.isActive() {
+	if !m.overlay.IsActive() {
 		if cx, cy, visible := m.window.CursorPosition(); visible {
 			if cursor := m.inputCtrl.Model.Cursor(); cursor != nil {
 				cursor.Position.X = cx
