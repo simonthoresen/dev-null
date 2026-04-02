@@ -22,7 +22,7 @@ type NCLabel struct {
 func (l *NCLabel) Update(_ tea.Msg)    {}
 func (l *NCLabel) Focusable() bool     { return false }
 func (l *NCLabel) MinSize() (int, int) { return ansi.StringWidth(l.Text), 1 }
-func (l *NCLabel) Render(buf *CellBuffer, x, y, w, h int, _ bool, layer *ThemeLayer) {
+func (l *NCLabel) Render(buf *ImageBuffer, x, y, w, h int, _ bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 	text := l.Text
@@ -199,7 +199,7 @@ func (ci *NCCommandInput) Update(msg tea.Msg) {
 	*ci.Model = updated
 }
 
-func (ti *NCTextInput) Render(buf *CellBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
+func (ti *NCTextInput) Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
 	inputBg := layer.InputBgC()
 	inputFg := layer.InputFgC()
 	ti.bg = inputBg
@@ -334,7 +334,7 @@ func (v *NCTextView) clampScroll() {
 	}
 }
 
-func (v *NCTextView) Render(buf *CellBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
+func (v *NCTextView) Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 	v.height = height
@@ -474,7 +474,7 @@ func (a *NCTextArea) Update(msg tea.Msg) {
 	}
 }
 
-func (a *NCTextArea) Render(buf *CellBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
+func (a *NCTextArea) Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
 	a.height = height
 	fieldW := max(1, width-2) // -2 for "[" and "]"
 	baseFg := layer.FgC()
@@ -560,10 +560,10 @@ func (b *NCButton) Update(msg tea.Msg) {
 		}
 	}
 }
-func (b *NCButton) Render(buf *CellBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
+func (b *NCButton) Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
-	attr := CellAttr(AttrNone)
+	attr := PixelAttr(AttrNone)
 	if focused {
 		fg = layer.HighlightFgC()
 		bg = layer.HighlightBgC()
@@ -612,10 +612,10 @@ func (cb *NCCheckbox) Update(msg tea.Msg) {
 		}
 	}
 }
-func (cb *NCCheckbox) Render(buf *CellBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
+func (cb *NCCheckbox) Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
-	attr := CellAttr(AttrNone)
+	attr := PixelAttr(AttrNone)
 	if focused {
 		fg = layer.HighlightFgC()
 		bg = layer.HighlightBgC()
@@ -648,7 +648,7 @@ type NCHDivider struct {
 func (d *NCHDivider) Update(_ tea.Msg)     {}
 func (d *NCHDivider) Focusable() bool      { return false }
 func (d *NCHDivider) MinSize() (int, int)  { return 1, 1 }
-func (d *NCHDivider) Render(buf *CellBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
+func (d *NCHDivider) Render(buf *ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 	ch := runeOf(layer.IH())
@@ -669,7 +669,7 @@ type NCVDivider struct {
 func (d *NCVDivider) Update(_ tea.Msg)     {}
 func (d *NCVDivider) Focusable() bool      { return false }
 func (d *NCVDivider) MinSize() (int, int)  { return 1, 1 }
-func (d *NCVDivider) Render(buf *CellBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
+func (d *NCVDivider) Render(buf *ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 	ch := runeOf(layer.IV())
@@ -696,7 +696,7 @@ func (p *NCPanel) Focusable() bool     { return false } // panels aren't directl
 func (p *NCPanel) MinSize() (int, int) { return 4, 3 }  // min border box
 func (p *NCPanel) Update(msg tea.Msg)  {}               // updates go to children directly
 
-func (p *NCPanel) Render(buf *CellBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
+func (p *NCPanel) Render(buf *ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
 	p.innerW = max(1, width-2)
 	p.innerH = max(1, height-2)
 	p.screenX = x
@@ -763,7 +763,7 @@ func (p *NCPanel) Render(buf *CellBuffer, x, y, width, height int, _ bool, layer
 // ─── Scrollbar helper ─────────────────────────────────────────────────────────
 
 // renderScrollbarBuf writes a scrollbar track directly into the buffer.
-func renderScrollbarBuf(buf *CellBuffer, x, y, total, visible, offset int, fg, bg color.Color) {
+func renderScrollbarBuf(buf *ImageBuffer, x, y, total, visible, offset int, fg, bg color.Color) {
 	if visible <= 0 {
 		return
 	}
@@ -865,7 +865,7 @@ func (g *NCGameView) Update(msg tea.Msg) {
 	}
 }
 
-func (g *NCGameView) Render(buf *CellBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
+func (g *NCGameView) Render(buf *ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 	if g.ViewFn == nil {
@@ -887,7 +887,7 @@ func (t *NCTable) Update(_ tea.Msg)           {}
 func (t *NCTable) Focusable() bool            { return false }
 func (t *NCTable) MinSize() (int, int)        { return 1, len(t.Rows) }
 
-func (t *NCTable) Render(buf *CellBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
+func (t *NCTable) Render(buf *ImageBuffer, x, y, width, height int, _ bool, layer *ThemeLayer) {
 	fg := layer.FgC()
 	bg := layer.BgC()
 
@@ -958,7 +958,7 @@ func (c *NCContainer) Update(_ tea.Msg)     {}
 func (c *NCContainer) Focusable() bool      { return false }
 func (c *NCContainer) MinSize() (int, int)  { return 1, 1 }
 
-func (c *NCContainer) Render(buf *CellBuffer, bx, by, width, height int, _ bool, layer *ThemeLayer) {
+func (c *NCContainer) Render(buf *ImageBuffer, bx, by, width, height int, _ bool, layer *ThemeLayer) {
 	if len(c.Children) == 0 {
 		return
 	}

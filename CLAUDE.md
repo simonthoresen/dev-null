@@ -146,9 +146,9 @@ Games persist state by passing it as the second argument to `gameOver(results, s
 | `server/console.go` | Local server management terminal (not for playing) |
 | `server/runtime.go` | JS game runtime (goja): loads `dist/games/*.js`, implements `common.Game` |
 | `server/plugin.go` | Per-player JS plugin runtime: loads `dist/plugins/*.js`, calls `onMessage` hook |
-| `server/cellbuf.go` | `CellBuffer`: 2D grid of styled cells. All rendering writes chars+colors into the buffer; `ToString()` serializes with RLE escape codes. `PaintANSI()` parses ANSI strings into cells. `Blit()` composites overlays. `blitShadow()` renders drop shadows. |
-| `server/ncwidget.go` | NC widget core: `NCWindow` (grid bag layout, border/title), `NCControl` interface (`Render` writes to `*CellBuffer`), focus/cursor/click management |
-| `server/nccontrols.go` | NC controls: `NCLabel`, `NCTextInput`, `NCTextArea`, `NCTextView`, `NCButton`, `NCCheckbox`, `NCHDivider`, `NCVDivider`, `NCPanel` (bordered sub-container). All `Render` methods write directly to `CellBuffer`. |
+| `server/cellbuf.go` | `ImageBuffer`: 2D grid of styled cells. All rendering writes chars+colors into the buffer; `ToString()` serializes with RLE escape codes. `PaintANSI()` parses ANSI strings into cells. `Blit()` composites overlays. `blitShadow()` renders drop shadows. |
+| `server/ncwidget.go` | NC widget core: `NCWindow` (grid bag layout, border/title), `NCControl` interface (`Render` writes to `*ImageBuffer`), focus/cursor/click management |
+| `server/nccontrols.go` | NC controls: `NCLabel`, `NCTextInput`, `NCTextArea`, `NCTextView`, `NCButton`, `NCCheckbox`, `NCHDivider`, `NCVDivider`, `NCPanel` (bordered sub-container). All `Render` methods write directly to `ImageBuffer`. |
 | `server/theme.go` | Theme system: loads JSON color palettes from `dist/themes/`, applies to NC chrome |
 | `server/local.go` | Local (non-SSH) mode: single-player / render test-bed |
 | `server/upnp.go` | Auto UPnP port mapping on start, cleanup on shutdown |
@@ -276,7 +276,7 @@ Themes use a 4-layer depth model matching the original Norton Commander. Each la
 
 **Color fields** (per layer): `bg/fg`, `accent`, `highlightBg/Fg`, `activeBg/Fg`, `inputBg/Fg`, `disabledFg`. **Border fields** (per layer): outer frame (`outerTL/TR/BL/BR/H/V`), inner dividers (`innerH/V`), intersections (`crossL/R/T/B/X`), bar separator (`barSep`). Defaults: double-line outer (`╔═╗║╚╝`), single-line inner (`─│`), intersections (`╟╢╤╧`). Any omitted field falls back to hardcoded defaults. Different layers can use different border styles (e.g., double-line for desktop, single-line for menus).
 
-**Render signatures:** `NCControl.Render(buf, x, y, w, h, focused, layer)` writes directly into a `*CellBuffer`. `NCWindow.Render(x, y, w, h, layer) string` creates a buffer internally and returns `ToString()`. `NCWindow.RenderToBuf(buf, x, y, w, h, layer)` writes into a caller-provided buffer. Menu/dialog renderers (`renderNCBar`, `renderDropdown`, `renderDialog`) still return strings — their output is painted into the buffer via `PaintANSI` + `Blit`.
+**Render signatures:** `NCControl.Render(buf, x, y, w, h, focused, layer)` writes directly into a `*ImageBuffer`. `NCWindow.Render(x, y, w, h, layer) string` creates a buffer internally and returns `ToString()`. `NCWindow.RenderToBuf(buf, x, y, w, h, layer)` writes into a caller-provided buffer. Menu/dialog renderers (`renderNCBar`, `renderDropdown`, `renderDialog`) still return strings — their output is painted into the buffer via `PaintANSI` + `Blit`.
 
 **Widget tree reconciler** (`server/ncreconcile.go`): `ReconcileGameWindow()` builds real `NCControl` instances from a `WidgetNode` tree, reusing controls by tree path to preserve state (focus, cursor, scroll) across frames. Supports interactive nodes: `button` (action via OnInput), `textinput` (submit via OnInput), `checkbox` (toggle via OnInput), `textview` (scrollable), `gameview` (optionally focusable). NC framework owns focus — Tab cycles controls, Esc blurs all, unfocused keys fall through to `game.OnInput()`.
 

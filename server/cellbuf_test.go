@@ -11,15 +11,15 @@ var green = color.RGBA{G: 255, A: 255}
 var blue = color.RGBA{B: 255, A: 255}
 var white = color.RGBA{R: 255, G: 255, B: 255, A: 255}
 
-func TestNewCellBuffer(t *testing.T) {
-	buf := NewCellBuffer(3, 2)
+func TestNewImageBuffer(t *testing.T) {
+	buf := NewImageBuffer(3, 2)
 	if buf.Width != 3 || buf.Height != 2 {
 		t.Fatalf("expected 3x2, got %dx%d", buf.Width, buf.Height)
 	}
-	if len(buf.Cells) != 6 {
-		t.Fatalf("expected 6 cells, got %d", len(buf.Cells))
+	if len(buf.Pixels) != 6 {
+		t.Fatalf("expected 6 cells, got %d", len(buf.Pixels))
 	}
-	for i, c := range buf.Cells {
+	for i, c := range buf.Pixels {
 		if c.Char != ' ' {
 			t.Errorf("cell %d: expected space, got %q", i, c.Char)
 		}
@@ -29,8 +29,8 @@ func TestNewCellBuffer(t *testing.T) {
 	}
 }
 
-func TestNewCellBufferZero(t *testing.T) {
-	buf := NewCellBuffer(0, 0)
+func TestNewImageBufferZero(t *testing.T) {
+	buf := NewImageBuffer(0, 0)
 	if buf.Width != 0 || buf.Height != 0 {
 		t.Fatalf("expected 0x0")
 	}
@@ -40,9 +40,9 @@ func TestNewCellBufferZero(t *testing.T) {
 }
 
 func TestSetChar(t *testing.T) {
-	buf := NewCellBuffer(3, 1)
+	buf := NewImageBuffer(3, 1)
 	buf.SetChar(1, 0, 'X', red, blue, AttrBold)
-	c := buf.Cells[1]
+	c := buf.Pixels[1]
 	if c.Char != 'X' || !colorEq(c.Fg, red) || !colorEq(c.Bg, blue) || c.Attr != AttrBold {
 		t.Errorf("SetChar did not write correctly: %+v", c)
 	}
@@ -52,7 +52,7 @@ func TestSetChar(t *testing.T) {
 }
 
 func TestFill(t *testing.T) {
-	buf := NewCellBuffer(4, 3)
+	buf := NewImageBuffer(4, 3)
 	buf.Fill(1, 1, 2, 2, '#', red, nil, AttrNone)
 	// Check filled cells.
 	for _, pos := range [][2]int{{1, 1}, {2, 1}, {1, 2}, {2, 2}} {
@@ -68,7 +68,7 @@ func TestFill(t *testing.T) {
 }
 
 func TestWriteString(t *testing.T) {
-	buf := NewCellBuffer(5, 1)
+	buf := NewImageBuffer(5, 1)
 	n := buf.WriteString(1, 0, "Hi!", green, nil, AttrNone)
 	if n != 3 {
 		t.Errorf("expected 3 cols, got %d", n)
@@ -85,7 +85,7 @@ func TestWriteString(t *testing.T) {
 }
 
 func TestWriteStringClipping(t *testing.T) {
-	buf := NewCellBuffer(3, 1)
+	buf := NewImageBuffer(3, 1)
 	n := buf.WriteString(1, 0, "Hello", nil, nil, AttrNone)
 	// Only 2 chars fit (cols 1 and 2).
 	if n != 2 {
@@ -97,8 +97,8 @@ func TestWriteStringClipping(t *testing.T) {
 }
 
 func TestBlit(t *testing.T) {
-	dst := NewCellBuffer(5, 3)
-	src := NewCellBuffer(2, 2)
+	dst := NewImageBuffer(5, 3)
+	src := NewImageBuffer(2, 2)
 	src.Fill(0, 0, 2, 2, 'X', red, blue, AttrNone)
 
 	dst.Blit(1, 1, src)
@@ -117,8 +117,8 @@ func TestBlit(t *testing.T) {
 }
 
 func TestBlitClipping(t *testing.T) {
-	dst := NewCellBuffer(3, 3)
-	src := NewCellBuffer(2, 2)
+	dst := NewImageBuffer(3, 3)
+	src := NewImageBuffer(2, 2)
 	src.Fill(0, 0, 2, 2, 'Y', nil, nil, AttrNone)
 
 	// Blit at (2,2) — only top-left cell of src fits.
@@ -129,7 +129,7 @@ func TestBlitClipping(t *testing.T) {
 }
 
 func TestRecolorRect(t *testing.T) {
-	buf := NewCellBuffer(3, 1)
+	buf := NewImageBuffer(3, 1)
 	buf.WriteString(0, 0, "ABC", red, blue, AttrBold)
 	buf.RecolorRect(1, 0, 1, 1, green, white, AttrFaint)
 
@@ -146,7 +146,7 @@ func TestRecolorRect(t *testing.T) {
 }
 
 func TestPaintANSIPlainText(t *testing.T) {
-	buf := NewCellBuffer(5, 1)
+	buf := NewImageBuffer(5, 1)
 	buf.PaintANSI(0, 0, 5, 1, "Hello", nil, nil)
 	for i, ch := range "Hello" {
 		if buf.at(i, 0).Char != ch {
@@ -156,7 +156,7 @@ func TestPaintANSIPlainText(t *testing.T) {
 }
 
 func TestPaintANSIMultiLine(t *testing.T) {
-	buf := NewCellBuffer(3, 2)
+	buf := NewImageBuffer(3, 2)
 	buf.PaintANSI(0, 0, 3, 2, "AB\nCD", nil, nil)
 	if buf.at(0, 0).Char != 'A' || buf.at(1, 0).Char != 'B' {
 		t.Error("row 0 wrong")
@@ -171,7 +171,7 @@ func TestPaintANSIMultiLine(t *testing.T) {
 }
 
 func TestPaintANSIColors(t *testing.T) {
-	buf := NewCellBuffer(5, 1)
+	buf := NewImageBuffer(5, 1)
 	// Red foreground, then text.
 	buf.PaintANSI(0, 0, 5, 1, "\x1b[31mHi", nil, nil)
 	c := buf.at(0, 0)
@@ -189,7 +189,7 @@ func TestPaintANSIColors(t *testing.T) {
 }
 
 func TestPaintANSITrueColor(t *testing.T) {
-	buf := NewCellBuffer(3, 1)
+	buf := NewImageBuffer(3, 1)
 	// 24-bit foreground: \x1b[38;2;100;200;50m
 	buf.PaintANSI(0, 0, 3, 1, "\x1b[38;2;100;200;50mX", nil, nil)
 	c := buf.at(0, 0)
@@ -203,7 +203,7 @@ func TestPaintANSITrueColor(t *testing.T) {
 }
 
 func TestPaintANSIBold(t *testing.T) {
-	buf := NewCellBuffer(3, 1)
+	buf := NewImageBuffer(3, 1)
 	buf.PaintANSI(0, 0, 3, 1, "\x1b[1mB", nil, nil)
 	if buf.at(0, 0).Attr&AttrBold == 0 {
 		t.Error("expected bold attribute")
@@ -211,7 +211,7 @@ func TestPaintANSIBold(t *testing.T) {
 }
 
 func TestPaintANSIReset(t *testing.T) {
-	buf := NewCellBuffer(3, 1)
+	buf := NewImageBuffer(3, 1)
 	buf.PaintANSI(0, 0, 3, 1, "\x1b[31mR\x1b[0mN", red, blue)
 	// 'R' should have ANSI red fg.
 	if buf.at(0, 0).Fg == nil {
@@ -224,19 +224,19 @@ func TestPaintANSIReset(t *testing.T) {
 }
 
 func TestPaintANSIClipping(t *testing.T) {
-	buf := NewCellBuffer(3, 1)
+	buf := NewImageBuffer(3, 1)
 	buf.PaintANSI(0, 0, 2, 1, "ABCDEF", nil, nil)
 	if buf.at(0, 0).Char != 'A' || buf.at(1, 0).Char != 'B' {
 		t.Error("first two chars wrong")
 	}
-	// Col 2 should be untouched (space from NewCellBuffer).
+	// Col 2 should be untouched (space from NewImageBuffer).
 	if buf.at(2, 0).Char != ' ' {
 		t.Errorf("col 2 should be untouched space, got %q", buf.at(2, 0).Char)
 	}
 }
 
 func TestPaintANSIRowClipping(t *testing.T) {
-	buf := NewCellBuffer(3, 1)
+	buf := NewImageBuffer(3, 1)
 	buf.PaintANSI(0, 0, 3, 1, "AB\nCD\nEF", nil, nil)
 	// Only the first row should be painted.
 	if buf.at(0, 0).Char != 'A' || buf.at(1, 0).Char != 'B' {
@@ -245,7 +245,7 @@ func TestPaintANSIRowClipping(t *testing.T) {
 }
 
 func TestToStringPlain(t *testing.T) {
-	buf := NewCellBuffer(3, 2)
+	buf := NewImageBuffer(3, 2)
 	buf.WriteString(0, 0, "ABC", nil, nil, AttrNone)
 	buf.WriteString(0, 1, "DEF", nil, nil, AttrNone)
 	s := buf.ToString()
@@ -264,7 +264,7 @@ func TestToStringPlain(t *testing.T) {
 }
 
 func TestToStringRLE(t *testing.T) {
-	buf := NewCellBuffer(4, 1)
+	buf := NewImageBuffer(4, 1)
 	buf.SetChar(0, 0, 'A', red, nil, AttrNone)
 	buf.SetChar(1, 0, 'B', red, nil, AttrNone)
 	buf.SetChar(2, 0, 'C', green, nil, AttrNone)

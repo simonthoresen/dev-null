@@ -7,69 +7,69 @@ import (
 	"unicode/utf8"
 )
 
-// ─── Cell attributes ─────────────────────────────────────────────────────────
+// ─── Pixel attributes ─────────────────────────────────────────────────────────
 
-// CellAttr is a bitmask for text attributes (bold, faint, underline, etc.).
-type CellAttr uint8
+// PixelAttr is a bitmask for text attributes (bold, faint, underline, etc.).
+type PixelAttr uint8
 
 const (
-	AttrNone      CellAttr = 0
-	AttrBold      CellAttr = 1 << 0
-	AttrFaint     CellAttr = 1 << 1
-	AttrItalic    CellAttr = 1 << 2
-	AttrUnderline CellAttr = 1 << 3
-	AttrReverse   CellAttr = 1 << 4
+	AttrNone      PixelAttr = 0
+	AttrBold      PixelAttr = 1 << 0
+	AttrFaint     PixelAttr = 1 << 1
+	AttrItalic    PixelAttr = 1 << 2
+	AttrUnderline PixelAttr = 1 << 3
+	AttrReverse   PixelAttr = 1 << 4
 )
 
-// ─── Cell ────────────────────────────────────────────────────────────────────
+// ─── Pixel ───────────────────────────────────────────────────────────────────
 
-// Cell represents a single character cell with its styling.
-type Cell struct {
+// Pixel represents a single character cell with its styling.
+type Pixel struct {
 	Char rune        // visible character (' ' = empty, 0 = wide-char continuation)
 	Fg   color.Color // nil = default terminal foreground
 	Bg   color.Color // nil = default terminal background
-	Attr CellAttr
+	Attr PixelAttr
 }
 
-// ─── CellBuffer ──────────────────────────────────────────────────────────────
+// ─── ImageBuffer ──────────────────────────────────────────────────────────────
 
-// CellBuffer is a 2D grid of styled character cells. Components write into it
+// ImageBuffer is a 2D grid of styled character cells. Components write into it
 // directly, and ToString() serializes it to an ANSI string at the end.
-type CellBuffer struct {
+type ImageBuffer struct {
 	Width, Height int
-	Cells         []Cell // row-major: Cells[y*Width + x]
+	Pixels         []Pixel // row-major: Pixels[y*Width + x]
 }
 
-// NewCellBuffer creates a buffer filled with spaces and nil colors.
-func NewCellBuffer(w, h int) *CellBuffer {
+// NewImageBuffer creates a buffer filled with spaces and nil colors.
+func NewImageBuffer(w, h int) *ImageBuffer {
 	if w < 0 {
 		w = 0
 	}
 	if h < 0 {
 		h = 0
 	}
-	cells := make([]Cell, w*h)
+	cells := make([]Pixel, w*h)
 	for i := range cells {
 		cells[i].Char = ' '
 	}
-	return &CellBuffer{Width: w, Height: h, Cells: cells}
+	return &ImageBuffer{Width: w, Height: h, Pixels: cells}
 }
 
 // inBounds returns true if (x, y) is within the buffer.
-func (b *CellBuffer) inBounds(x, y int) bool {
+func (b *ImageBuffer) inBounds(x, y int) bool {
 	return x >= 0 && x < b.Width && y >= 0 && y < b.Height
 }
 
 // at returns a pointer to the cell at (x, y), or nil if out of bounds.
-func (b *CellBuffer) at(x, y int) *Cell {
+func (b *ImageBuffer) at(x, y int) *Pixel {
 	if !b.inBounds(x, y) {
 		return nil
 	}
-	return &b.Cells[y*b.Width+x]
+	return &b.Pixels[y*b.Width+x]
 }
 
 // SetChar sets a single cell at (x, y). Out-of-bounds writes are silently ignored.
-func (b *CellBuffer) SetChar(x, y int, ch rune, fg, bg color.Color, attr CellAttr) {
+func (b *ImageBuffer) SetChar(x, y int, ch rune, fg, bg color.Color, attr PixelAttr) {
 	if c := b.at(x, y); c != nil {
 		c.Char = ch
 		c.Fg = fg
@@ -79,7 +79,7 @@ func (b *CellBuffer) SetChar(x, y int, ch rune, fg, bg color.Color, attr CellAtt
 }
 
 // Fill fills a rectangle with the given character and style.
-func (b *CellBuffer) Fill(x, y, w, h int, ch rune, fg, bg color.Color, attr CellAttr) {
+func (b *ImageBuffer) Fill(x, y, w, h int, ch rune, fg, bg color.Color, attr PixelAttr) {
 	for row := y; row < y+h; row++ {
 		for col := x; col < x+w; col++ {
 			if c := b.at(col, row); c != nil {
@@ -94,7 +94,7 @@ func (b *CellBuffer) Fill(x, y, w, h int, ch rune, fg, bg color.Color, attr Cell
 
 // WriteString writes plain text (no ANSI codes) at (x, y) with the given style.
 // Stops at the right edge of the buffer or end of string. Returns columns consumed.
-func (b *CellBuffer) WriteString(x, y int, s string, fg, bg color.Color, attr CellAttr) int {
+func (b *ImageBuffer) WriteString(x, y int, s string, fg, bg color.Color, attr PixelAttr) int {
 	col := x
 	for _, r := range s {
 		if !b.inBounds(col, y) {
@@ -108,7 +108,7 @@ func (b *CellBuffer) WriteString(x, y int, s string, fg, bg color.Color, attr Ce
 
 // Blit copies all cells from src onto b at position (x, y).
 // Only copies cells that fall within b's bounds.
-func (b *CellBuffer) Blit(x, y int, src *CellBuffer) {
+func (b *ImageBuffer) Blit(x, y int, src *ImageBuffer) {
 	for sy := 0; sy < src.Height; sy++ {
 		dy := y + sy
 		if dy < 0 || dy >= b.Height {
@@ -119,14 +119,14 @@ func (b *CellBuffer) Blit(x, y int, src *CellBuffer) {
 			if dx < 0 || dx >= b.Width {
 				continue
 			}
-			b.Cells[dy*b.Width+dx] = src.Cells[sy*src.Width+sx]
+			b.Pixels[dy*b.Width+dx] = src.Pixels[sy*src.Width+sx]
 		}
 	}
 }
 
 // RecolorRect changes the fg, bg, and attr of cells in the given rectangle
 // without changing the character. Useful for drop shadows.
-func (b *CellBuffer) RecolorRect(x, y, w, h int, fg, bg color.Color, attr CellAttr) {
+func (b *ImageBuffer) RecolorRect(x, y, w, h int, fg, bg color.Color, attr PixelAttr) {
 	for row := y; row < y+h; row++ {
 		for col := x; col < x+w; col++ {
 			if c := b.at(col, row); c != nil {
@@ -140,7 +140,7 @@ func (b *CellBuffer) RecolorRect(x, y, w, h int, fg, bg color.Color, attr CellAt
 
 // blitShadow renders an L-shaped drop shadow around a box in the buffer.
 // Right strip: 1 cell wide. Bottom strip: boxW cells wide, offset by 1.
-func blitShadow(buf *CellBuffer, boxCol, boxRow, boxW, boxH int, shadowFg, shadowBg color.Color) {
+func blitShadow(buf *ImageBuffer, boxCol, boxRow, boxW, boxH int, shadowFg, shadowBg color.Color) {
 	// Right strip (skip first row to offset).
 	for dy := 1; dy < boxH; dy++ {
 		r := boxRow + dy
@@ -168,10 +168,10 @@ func blitShadow(buf *CellBuffer, boxCol, boxRow, boxW, boxH int, shadowFg, shado
 // PaintANSI parses a string containing ANSI escape codes and paints the
 // characters into the buffer at (x, y), clipped to (w, h). This is used for
 // game output and textinput.Model.View() output.
-func (b *CellBuffer) PaintANSI(x, y, w, h int, s string, defaultFg, defaultBg color.Color) {
+func (b *ImageBuffer) PaintANSI(x, y, w, h int, s string, defaultFg, defaultBg color.Color) {
 	fg := defaultFg
 	bg := defaultBg
-	var attr CellAttr
+	var attr PixelAttr
 
 	col := 0 // column offset within the w×h region
 	row := 0 // row offset within the w×h region
@@ -231,7 +231,7 @@ func isCSIFinal(b byte) bool {
 
 // parseSGR parses an SGR escape sequence ("\x1b[...m") and updates the
 // running fg, bg, and attr state.
-func parseSGR(seq string, fg, bg *color.Color, attr *CellAttr, defaultFg, defaultBg color.Color) {
+func parseSGR(seq string, fg, bg *color.Color, attr *PixelAttr, defaultFg, defaultBg color.Color) {
 	// Strip "\x1b[" prefix and "m" suffix.
 	inner := seq[2 : len(seq)-1]
 	if inner == "" {
@@ -403,7 +403,7 @@ func cubeVal(i int) int {
 // ToString serializes the buffer to a string with ANSI escape codes.
 // Uses RLE-style optimization: only emits SGR codes when the style changes
 // from the previous cell (or at the start of each row).
-func (b *CellBuffer) ToString() string {
+func (b *ImageBuffer) ToString() string {
 	if b.Width == 0 || b.Height == 0 {
 		return ""
 	}
@@ -413,7 +413,7 @@ func (b *CellBuffer) ToString() string {
 	sb.Grow(b.Width * b.Height * 3) // rough estimate
 
 	var curFg, curBg color.Color
-	var curAttr CellAttr
+	var curAttr PixelAttr
 	first := true
 
 	for y := 0; y < b.Height; y++ {
@@ -428,7 +428,7 @@ func (b *CellBuffer) ToString() string {
 		first = true
 
 		for x := 0; x < b.Width; x++ {
-			c := &b.Cells[y*b.Width+x]
+			c := &b.Pixels[y*b.Width+x]
 			if c.Char == 0 {
 				continue // wide-char continuation
 			}
@@ -470,7 +470,7 @@ func colorEq(a, b color.Color) bool {
 
 // buildSGR builds an SGR escape sequence for the given style.
 // Returns "" if all values are default (nil colors, no attrs).
-func buildSGR(fg, bg color.Color, attr CellAttr) string {
+func buildSGR(fg, bg color.Color, attr PixelAttr) string {
 	var parts []string
 
 	// Always start with reset to avoid inheriting previous state,

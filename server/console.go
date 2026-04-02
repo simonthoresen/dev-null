@@ -376,7 +376,7 @@ func (m *consoleModel) View() tea.View {
 	primary := t.LayerAt(0)   // desktop
 	secondary := t.LayerAt(1) // menus, status bar
 
-	buf := NewCellBuffer(m.width, m.height)
+	buf := NewImageBuffer(m.width, m.height)
 
 	// NC action bar (row 0) — PaintANSI the string into the buffer.
 	menus := m.consoleMenus()
@@ -421,7 +421,7 @@ func (m *consoleModel) View() tea.View {
 	shadowBg := t.ShadowBgC()
 	if m.overlay.openMenu >= 0 {
 		if dd := m.overlay.renderDropdown(menus, 0, secondary); dd.content != "" {
-			sub := NewCellBuffer(dd.width, dd.height)
+			sub := NewImageBuffer(dd.width, dd.height)
 			sub.PaintANSI(0, 0, dd.width, dd.height, dd.content, secondary.FgC(), secondary.BgC())
 			buf.Blit(dd.col, dd.row, sub)
 			blitShadow(buf, dd.col, dd.row, dd.width, dd.height, shadowFg, shadowBg)
@@ -429,7 +429,7 @@ func (m *consoleModel) View() tea.View {
 	}
 	if m.overlay.hasDialog() {
 		if dlg := m.overlay.renderDialog(m.width, m.height, t.LayerAt(2)); dlg.content != "" {
-			sub := NewCellBuffer(dlg.width, dlg.height)
+			sub := NewImageBuffer(dlg.width, dlg.height)
 			dlgLayer := t.LayerAt(2)
 			sub.PaintANSI(0, 0, dlg.width, dlg.height, dlg.content, dlgLayer.FgC(), dlgLayer.BgC())
 			buf.Blit(dlg.col, dlg.row, sub)

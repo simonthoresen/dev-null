@@ -14,7 +14,7 @@ type NCControl interface {
 	// Render writes the control's content into buf at position (x, y)
 	// within the given (width × height) region. focused is true when this
 	// control currently has keyboard focus.
-	Render(buf *CellBuffer, x, y, width, height int, focused bool, layer *ThemeLayer)
+	Render(buf *ImageBuffer, x, y, width, height int, focused bool, layer *ThemeLayer)
 	// Update handles a tea.Msg. Only called when this control has focus.
 	Update(msg tea.Msg)
 	// MinSize returns the minimum (width, height) this control needs.
@@ -84,15 +84,15 @@ type NCWindow struct {
 
 // Render draws the window at (x, y) with the given dimensions into buf.
 // Returns the string representation for backward compatibility with callers
-// that have not yet been migrated to use CellBuffer directly.
+// that have not yet been migrated to use ImageBuffer directly.
 func (w *NCWindow) Render(x, y, width, height int, layer *ThemeLayer) string {
-	buf := NewCellBuffer(width, height)
+	buf := NewImageBuffer(width, height)
 	w.RenderToBuf(buf, x, y, width, height, layer)
 	return buf.ToString()
 }
 
 // RenderToBuf draws the window into the given buffer at absolute position (x, y).
-func (w *NCWindow) RenderToBuf(buf *CellBuffer, x, y, width, height int, layer *ThemeLayer) {
+func (w *NCWindow) RenderToBuf(buf *ImageBuffer, x, y, width, height int, layer *ThemeLayer) {
 	w.screenX = x
 	w.screenY = y
 	w.width = width

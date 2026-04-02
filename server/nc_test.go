@@ -47,9 +47,9 @@ func stripANSI(s string) string {
 	return ansi.Strip(s)
 }
 
-// renderControl is a test helper that renders a control into a CellBuffer and returns the string.
+// renderControl is a test helper that renders a control into a ImageBuffer and returns the string.
 func renderControl(ctrl NCControl, w, h int, focused bool, layer *ThemeLayer) string {
-	buf := NewCellBuffer(w, h)
+	buf := NewImageBuffer(w, h)
 	ctrl.Render(buf, 0, 0, w, h, focused, layer)
 	return buf.ToString()
 }

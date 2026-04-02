@@ -798,7 +798,7 @@ func (m chromeModel) View() tea.View {
 	// Build menus once per frame — passed to sub-views and overlay rendering.
 	menus := m.cachedMenus()
 
-	buf := NewCellBuffer(m.width, m.height)
+	buf := NewImageBuffer(m.width, m.height)
 
 	var content string
 	if !m.inActiveGame || phase == common.PhaseNone {
@@ -820,7 +820,7 @@ func (m chromeModel) View() tea.View {
 	if m.overlay.openMenu >= 0 {
 		menuLayer := m.theme.LayerAt(1)
 		if dd := m.overlay.renderDropdown(menus, 1, menuLayer); dd.content != "" {
-			sub := NewCellBuffer(dd.width, dd.height)
+			sub := NewImageBuffer(dd.width, dd.height)
 			sub.PaintANSI(0, 0, dd.width, dd.height, dd.content, menuLayer.FgC(), menuLayer.BgC())
 			buf.Blit(dd.col, dd.row, sub)
 			blitShadow(buf, dd.col, dd.row, dd.width, dd.height, shadowFg, shadowBg)
@@ -829,7 +829,7 @@ func (m chromeModel) View() tea.View {
 	if m.overlay.hasDialog() {
 		dlgLayer := m.theme.LayerAt(2)
 		if dlg := m.overlay.renderDialog(m.width, m.height, dlgLayer); dlg.content != "" {
-			sub := NewCellBuffer(dlg.width, dlg.height)
+			sub := NewImageBuffer(dlg.width, dlg.height)
 			sub.PaintANSI(0, 0, dlg.width, dlg.height, dlg.content, dlgLayer.FgC(), dlgLayer.BgC())
 			buf.Blit(dlg.col, dlg.row, sub)
 			blitShadow(buf, dlg.col, dlg.row, dlg.width, dlg.height, shadowFg, shadowBg)
