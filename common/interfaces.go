@@ -49,6 +49,16 @@ type DialogRequest struct {
 	OnClose func(button string)
 }
 
+// Shader is a post-processing pass that runs on the rendered ImageBuffer
+// before it is serialized to the final ANSI string. Shaders can be implemented
+// in Go (compiled into the binary) or in JavaScript (loaded at runtime from
+// dist/shaders/). Multiple shaders run in sequence per player.
+type Shader interface {
+	Name() string
+	Process(buf *ImageBuffer)
+	Unload()
+}
+
 // Game is the interface every loaded game must satisfy.
 // One game is active at a time and owns the viewport, status bar, and command bar.
 // All methods are implemented by jsRuntime; optional JS hooks return zero values

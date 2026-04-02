@@ -146,6 +146,7 @@ Games persist state by passing it as the second argument to `gameOver(results, s
 | `server/console.go` | Local server management terminal (not for playing) |
 | `server/runtime.go` | JS game runtime (goja): loads `dist/games/*.js`, implements `common.Game` |
 | `server/plugin.go` | Per-player JS plugin runtime: loads `dist/plugins/*.js`, calls `onMessage` hook |
+| `server/shader.go` | Per-player JS shader runtime: loads `dist/shaders/*.js`, post-processes ImageBuffer before ToString() |
 | `common/cellbuf.go` | `ImageBuffer`: 2D grid of styled `Pixel` cells. All rendering writes chars+colors into the buffer; `ToString()` serializes with RLE escape codes. `PaintANSI()` parses ANSI strings into cells. `Blit()` composites overlays. `BlitShadow()` renders drop shadows. Lives in `common` so `Game.Render` can reference it. |
 | `server/ncwidget.go` | NC widget core: `NCWindow` (grid bag layout, border/title), `NCControl` interface (`Render` writes to `*ImageBuffer`), focus/cursor/click management |
 | `server/nccontrols.go` | NC controls: `NCLabel`, `NCTextInput`, `NCTextArea`, `NCTextView`, `NCButton`, `NCCheckbox`, `NCHDivider`, `NCVDivider`, `NCPanel` (bordered sub-container). All `Render` methods write directly to `ImageBuffer`. |
@@ -240,6 +241,32 @@ A plugin exports a `Plugin` object with an `onMessage(author, text, isSystem)` h
 **Global JS:** `log()` only (for debug output).
 
 **Bundled plugins:** `greeter` (welcomes new players), `echo` (echoes `!echo` messages).
+
+### Shaders (JS / Go)
+
+Per-player (or per-console) post-processing scripts in `dist/shaders/`. Loaded with `/shader load <name|url>`. Each player/console maintains their own ordered shader list. Shaders run in sequence on the fully-rendered `ImageBuffer` **after** the screen is composed but **before** overlays (menus, dialogs) and `ToString()`.
+
+A JS shader exports a `Shader` object with a required `process(buf)` method. `buf` exposes:
+- `width`, `height` — buffer dimensions
+- `getPixel(x, y)` → `{char, fg, bg, attr}` or `null` — read a cell
+- `setChar(x, y, ch, fg, bg, attr)` — write a cell
+- `writeString(x, y, text, fg, bg, attr)` — write text
+- `fill(x, y, w, h, ch, fg, bg, attr)` — fill rectangle
+- `recolor(x, y, w, h, fg, bg, attr)` — change colors without changing characters
+
+Optional hooks: `init()` (called once on load), `unload()` (called on removal).
+
+**Go shaders** implement `common.Shader` interface: `Name() string`, `Process(buf *ImageBuffer)`, `Unload()`. Compiled into the binary.
+
+**Commands:** `/shader` (list), `/shader load <name>`, `/shader unload <name>`, `/shader list`, `/shader up <name>`, `/shader down <name>`.
+
+**Menu:** File → Shaders... shows active shaders with order and available shaders.
+
+**Bundled shaders:** `invert` (swap fg/bg), `scanlines` (dim alternating rows), `crt` (green-on-black retro terminal).
+
+| Package | Role |
+|---------|------|
+| `server/shader.go` | JS shader runtime: `jsShader`, `LoadShader()`, `applyShaders()`, JS buffer wrapper with `getPixel`/`setChar`/`recolor` |
 
 ### Init Files (`~/.null-space/`)
 

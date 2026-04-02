@@ -63,6 +63,10 @@ type consoleModel struct {
 	// Per-console plugins
 	plugins     []*jsPlugin
 	pluginNames []string
+
+	// Per-console shaders (post-processing, run in order)
+	shaders     []common.Shader
+	shaderNames []string
 }
 
 func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
@@ -237,6 +241,7 @@ func (m *consoleModel) consoleMenus() []common.MenuDef {
 			Items: []common.MenuItemDef{
 				{Label: "&Themes...", Handler: func(_ string) { m.showListDialog("Themes", "themes", ".json") }},
 				{Label: "&Plugins...", Handler: func(_ string) { m.showListDialog("Plugins", "plugins", ".js") }},
+				{Label: "&Shaders...", Handler: func(_ string) { m.showShaderDialog() }},
 				{Label: "&Games...", Handler: func(_ string) { m.showListDialog("Games", "games", ".js") }},
 				{Label: "---"},
 				{Label: "E&xit", Hotkey: "ctrl+q", Handler: func(_ string) {
@@ -293,6 +298,43 @@ func (m *consoleModel) consoleMenus() []common.MenuDef {
 }
 
 // showListDialog opens a dialog listing available items from a dist/ subdirectory.
+func (m *consoleModel) showShaderDialog() {
+	available := listDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+	loadedSet := make(map[string]bool)
+	for _, n := range m.shaderNames {
+		loadedSet[n] = true
+	}
+
+	var lines []string
+	if len(m.shaderNames) > 0 {
+		lines = append(lines, "Active (in order):")
+		for i, name := range m.shaderNames {
+			lines = append(lines, fmt.Sprintf("  %d. %s", i+1, name))
+		}
+		lines = append(lines, "")
+	}
+	lines = append(lines, "Available:")
+	if len(available) == 0 {
+		lines = append(lines, "  (none)")
+	} else {
+		for _, name := range available {
+			tag := ""
+			if loadedSet[name] {
+				tag = "  [active]"
+			}
+			lines = append(lines, "  "+name+tag)
+		}
+	}
+	lines = append(lines, "")
+	lines = append(lines, "Use /shader load|unload|up|down <name>")
+
+	m.overlay.pushDialog(common.DialogRequest{
+		Title:   "Shaders",
+		Body:    strings.Join(lines, "\n"),
+		Buttons: []string{"Close"},
+	})
+}
+
 func (m *consoleModel) showListDialog(title, subdir, ext string) {
 	dir := filepath.Join(m.app.dataDir, subdir)
 	items := listDir(dir, ext)
@@ -416,6 +458,9 @@ func (m *consoleModel) View() tea.View {
 	}
 	buf.WriteString(startX, statusRow, statusText, sbFg, sbBg, common.AttrNone)
 
+	// Post-processing shaders: run in sequence on the fully-rendered buffer.
+	applyShaders(m.shaders, buf)
+
 	// Overlay layers: render to sub-buffers, blit, then recolor for shadow.
 	shadowFg := t.ShadowFgC()
 	shadowBg := t.ShadowBgC()
@@ -520,6 +565,10 @@ func (m *consoleModel) submitInput(text string) {
 	}
 	if strings.HasPrefix(text, "/theme") {
 		m.handleThemeCommand(text)
+		return
+	}
+	if strings.HasPrefix(text, "/shader") {
+		m.handleShaderCommand(text)
 		return
 	}
 	ctx := common.CommandContext{
@@ -676,6 +725,126 @@ func (m *consoleModel) dispatchPluginReply(text string) {
 	}
 	// Plain text from console plugin → broadcast as admin chat.
 	m.app.broadcastChat(common.Message{Author: "admin", Text: text})
+}
+
+func (m *consoleModel) handleShaderCommand(input string) {
+	parts := strings.Fields(input)
+	// /shader with no args → list
+	if len(parts) <= 1 {
+		available := listDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+		loadedSet := make(map[string]bool)
+		for _, n := range m.shaderNames {
+			loadedSet[n] = true
+		}
+		if len(available) == 0 && len(m.shaderNames) == 0 {
+			m.appendLog("No shaders found in shaders/")
+			return
+		}
+		var lines []string
+		for _, name := range available {
+			line := "  " + name
+			if loadedSet[name] {
+				line += "  [active]"
+			}
+			lines = append(lines, line)
+		}
+		m.appendLog("Available shaders:\n" + strings.Join(lines, "\n"))
+		return
+	}
+	switch parts[1] {
+	case "load":
+		if len(parts) < 3 {
+			m.appendLog("Usage: /shader load <name|url>")
+			return
+		}
+		nameOrURL := parts[2]
+		name, path, err := resolveShaderPath(nameOrURL, m.app.dataDir)
+		if err != nil {
+			m.appendLog(fmt.Sprintf("Failed: %v", err))
+			return
+		}
+		for _, n := range m.shaderNames {
+			if strings.EqualFold(n, name) {
+				m.appendLog(fmt.Sprintf("Shader '%s' is already loaded.", name))
+				return
+			}
+		}
+		sh, err := LoadShader(path, m.app.clock)
+		if err != nil {
+			m.appendLog(fmt.Sprintf("Failed to load shader: %v", err))
+			return
+		}
+		m.shaders = append(m.shaders, sh)
+		m.shaderNames = append(m.shaderNames, name)
+		m.appendLog(fmt.Sprintf("Shader loaded: %s", name))
+	case "unload":
+		if len(parts) < 3 {
+			m.appendLog("Usage: /shader unload <name>")
+			return
+		}
+		target := parts[2]
+		found := false
+		for i, n := range m.shaderNames {
+			if strings.EqualFold(n, target) {
+				m.shaders[i].Unload()
+				m.shaders = append(m.shaders[:i], m.shaders[i+1:]...)
+				m.shaderNames = append(m.shaderNames[:i], m.shaderNames[i+1:]...)
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.appendLog(fmt.Sprintf("Shader '%s' is not loaded.", target))
+			return
+		}
+		m.appendLog(fmt.Sprintf("Shader unloaded: %s", target))
+	case "list":
+		if len(m.shaderNames) == 0 {
+			m.appendLog("No shaders currently loaded.")
+			return
+		}
+		var lines []string
+		for i, name := range m.shaderNames {
+			lines = append(lines, fmt.Sprintf("  %d. %s", i+1, name))
+		}
+		m.appendLog("Active shaders (in order):\n" + strings.Join(lines, "\n"))
+	case "up":
+		if len(parts) < 3 {
+			m.appendLog("Usage: /shader up <name>")
+			return
+		}
+		m.moveShader(parts[2], -1)
+	case "down":
+		if len(parts) < 3 {
+			m.appendLog("Usage: /shader down <name>")
+			return
+		}
+		m.moveShader(parts[2], +1)
+	default:
+		m.appendLog(fmt.Sprintf("Unknown subcommand '%s'. Use: load, unload, list, up, down", parts[1]))
+	}
+}
+
+func (m *consoleModel) moveShader(name string, delta int) {
+	idx := -1
+	for i, n := range m.shaderNames {
+		if strings.EqualFold(n, name) {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		m.appendLog(fmt.Sprintf("Shader '%s' is not loaded.", name))
+		return
+	}
+	newIdx := idx + delta
+	if newIdx < 0 || newIdx >= len(m.shaderNames) {
+		m.appendLog(fmt.Sprintf("Shader '%s' is already at position %d.", name, idx+1))
+		return
+	}
+	m.shaders[idx], m.shaders[newIdx] = m.shaders[newIdx], m.shaders[idx]
+	m.shaderNames[idx], m.shaderNames[newIdx] = m.shaderNames[newIdx], m.shaderNames[idx]
+	m.appendLog(fmt.Sprintf("Shader '%s' moved to position %d.", name, newIdx+1))
 }
 
 // slogLine carries a formatted slog record to the console.

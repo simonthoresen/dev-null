@@ -546,3 +546,94 @@ renderNC: function(playerID, width, height) {
 ```
 
 This renders the raw game view in the top-left, a stats panel below it, and a players panel on the right — all using the framework's themed NC borders. Existing games that don't define `renderNC` are unaffected.
+
+---
+
+## Shaders (post-processing)
+
+Shaders are per-player scripts that modify the rendered screen buffer before it's displayed. They run after all game/lobby content is drawn but before menus and dialogs are overlaid.
+
+### Loading shaders
+
+```
+/shader load invert       # Load from dist/shaders/invert.js
+/shader load https://...  # Load from URL (cached locally)
+/shader unload invert     # Remove shader
+/shader list              # Show active shaders in order
+/shader up invert         # Move shader earlier in the chain
+/shader down invert       # Move shader later in the chain
+/shader                   # List available + active shaders
+```
+
+Shaders are also accessible from the **File → Shaders...** menu.
+
+### Writing a shader
+
+Shaders are JS files in `dist/shaders/`. A shader exports a global `Shader` object with a required `process(buf)` method:
+
+```javascript
+const Shader = {
+    // Optional: called once when the shader is loaded.
+    init() { },
+
+    // Required: called every frame with the full screen buffer.
+    process(buf) {
+        for (var y = 0; y < buf.height; y++) {
+            for (var x = 0; x < buf.width; x++) {
+                var p = buf.getPixel(x, y);
+                if (p) {
+                    // Swap foreground and background
+                    buf.setChar(x, y, p.char, p.bg, p.fg, p.attr);
+                }
+            }
+        }
+    },
+
+    // Optional: called when the shader is unloaded.
+    unload() { }
+};
+```
+
+### Buffer API
+
+The `buf` object passed to `process()` provides:
+
+| Method | Description |
+|--------|-------------|
+| `buf.width` | Buffer width in columns |
+| `buf.height` | Buffer height in rows |
+| `buf.getPixel(x, y)` | Returns `{char, fg, bg, attr}` or `null` if out of bounds. Colors are `"#rrggbb"` strings or `null` (default). |
+| `buf.setChar(x, y, ch, fg, bg, attr)` | Set a single cell. `ch` is a string (first character used). Colors are `"#rrggbb"` or `null`. |
+| `buf.writeString(x, y, text, fg, bg, attr)` | Write text starting at (x, y) |
+| `buf.fill(x, y, w, h, ch, fg, bg, attr)` | Fill a rectangle |
+| `buf.recolor(x, y, w, h, fg, bg, attr)` | Change colors/attributes without changing characters |
+
+### Global constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `ATTR_NONE` | 0 | No attributes |
+| `ATTR_BOLD` | 1 | Bold text |
+| `ATTR_FAINT` | 2 | Dim/faint text |
+| `ATTR_ITALIC` | 4 | Italic text |
+| `ATTR_UNDERLINE` | 8 | Underlined text |
+| `ATTR_REVERSE` | 16 | Reverse video |
+
+### Global functions
+
+| Function | Description |
+|----------|-------------|
+| `log(msg)` | Log a debug message (visible in server log) |
+| `now()` | Server time in epoch milliseconds |
+
+### Bundled shaders
+
+| Shader | Effect |
+|--------|--------|
+| `invert` | Swaps foreground and background colors |
+| `scanlines` | Dims every other row (CRT scanline effect) |
+| `crt` | Green-on-black retro terminal look |
+
+### Execution order
+
+Multiple shaders run in the order they were loaded. Use `/shader up` and `/shader down` to reorder. Each shader receives the buffer as modified by the previous shader in the chain.

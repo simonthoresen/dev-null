@@ -126,6 +126,10 @@ type chromeModel struct {
 	plugins     []*jsPlugin
 	pluginNames []string // parallel to plugins; display names
 
+	// Per-player shaders (post-processing, run in order)
+	shaders     []common.Shader
+	shaderNames []string // parallel to shaders; display names
+
 	overlay overlayState
 
 	// Cached menu tree — rebuilt only on invalidation.
@@ -813,6 +817,9 @@ func (m chromeModel) View() tea.View {
 		m.renderPlaying(buf, menus, game, gameName, mbStyle, chStyle, ciStyle, defaultChatBg)
 	}
 
+	// Post-processing shaders: run in sequence on the fully-rendered buffer.
+	applyShaders(m.shaders, buf)
+
 	// Overlay layers: render to sub-buffers, blit, then shadow via RecolorRect.
 	shadowFg := m.theme.ShadowFgC()
 	shadowBg := m.theme.ShadowBgC()
@@ -1364,6 +1371,7 @@ func (m *chromeModel) cachedMenus() []common.MenuDef {
 	fileItems := []common.MenuItemDef{
 		{Label: "&Themes...", Handler: func(_ string) { m.showPlayerListDialog("Themes", "themes", ".json") }},
 		{Label: "&Plugins...", Handler: func(_ string) { m.showPlayerListDialog("Plugins", "plugins", ".js") }},
+		{Label: "&Shaders...", Handler: func(_ string) { m.showShaderDialog() }},
 		{Label: "---"},
 	}
 	if m.isLocal {
@@ -1420,6 +1428,43 @@ func (m *chromeModel) showPlayerListDialog(title, subdir, ext string) {
 	})
 }
 
+func (m *chromeModel) showShaderDialog() {
+	available := listDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+	loadedSet := make(map[string]bool)
+	for _, n := range m.shaderNames {
+		loadedSet[n] = true
+	}
+
+	var lines []string
+	if len(m.shaderNames) > 0 {
+		lines = append(lines, "Active (in order):")
+		for i, name := range m.shaderNames {
+			lines = append(lines, fmt.Sprintf("  %d. %s", i+1, name))
+		}
+		lines = append(lines, "")
+	}
+	lines = append(lines, "Available:")
+	if len(available) == 0 {
+		lines = append(lines, "  (none)")
+	} else {
+		for _, name := range available {
+			tag := ""
+			if loadedSet[name] {
+				tag = "  [active]"
+			}
+			lines = append(lines, "  "+name+tag)
+		}
+	}
+	lines = append(lines, "")
+	lines = append(lines, "Use /shader load|unload|up|down <name>")
+
+	m.overlay.pushDialog(common.DialogRequest{
+		Title:   "Shaders",
+		Body:    strings.Join(lines, "\n"),
+		Buttons: []string{"Close"},
+	})
+}
+
 func (m *chromeModel) submitInput() {
 	text := strings.TrimSpace(m.input.Value())
 	m.input.SetValue("")
@@ -1448,6 +1493,10 @@ func (m *chromeModel) submitInput() {
 	}
 	if strings.HasPrefix(text, "/theme") {
 		m.handleThemeCommand(text)
+		return
+	}
+	if strings.HasPrefix(text, "/shader") {
+		m.handleShaderCommand(text)
 		return
 	}
 	if strings.HasPrefix(text, "/") {
@@ -1628,6 +1677,126 @@ func (m *chromeModel) dispatchPluginReply(text string) {
 		playerName = p.Name
 	}
 	m.app.broadcastChat(common.Message{Author: playerName, Text: text})
+}
+
+func (m *chromeModel) handleShaderCommand(input string) {
+	parts := strings.Fields(input)
+	// /shader with no args → list
+	if len(parts) <= 1 {
+		available := listDir(filepath.Join(m.app.dataDir, "shaders"), ".js")
+		loadedSet := make(map[string]bool)
+		for _, n := range m.shaderNames {
+			loadedSet[n] = true
+		}
+		if len(available) == 0 && len(m.shaderNames) == 0 {
+			m.pluginReply("No shaders found in shaders/")
+			return
+		}
+		var lines []string
+		for _, name := range available {
+			line := "  " + name
+			if loadedSet[name] {
+				line += "  [active]"
+			}
+			lines = append(lines, line)
+		}
+		m.pluginReply("Available shaders:\n" + strings.Join(lines, "\n"))
+		return
+	}
+	switch parts[1] {
+	case "load":
+		if len(parts) < 3 {
+			m.pluginReply("Usage: /shader load <name|url>")
+			return
+		}
+		nameOrURL := parts[2]
+		name, path, err := resolveShaderPath(nameOrURL, m.app.dataDir)
+		if err != nil {
+			m.pluginReply(fmt.Sprintf("Failed: %v", err))
+			return
+		}
+		for _, n := range m.shaderNames {
+			if strings.EqualFold(n, name) {
+				m.pluginReply(fmt.Sprintf("Shader '%s' is already loaded.", name))
+				return
+			}
+		}
+		sh, err := LoadShader(path, m.app.clock)
+		if err != nil {
+			m.pluginReply(fmt.Sprintf("Failed to load shader: %v", err))
+			return
+		}
+		m.shaders = append(m.shaders, sh)
+		m.shaderNames = append(m.shaderNames, name)
+		m.pluginReply(fmt.Sprintf("Shader loaded: %s", name))
+	case "unload":
+		if len(parts) < 3 {
+			m.pluginReply("Usage: /shader unload <name>")
+			return
+		}
+		target := parts[2]
+		found := false
+		for i, n := range m.shaderNames {
+			if strings.EqualFold(n, target) {
+				m.shaders[i].Unload()
+				m.shaders = append(m.shaders[:i], m.shaders[i+1:]...)
+				m.shaderNames = append(m.shaderNames[:i], m.shaderNames[i+1:]...)
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.pluginReply(fmt.Sprintf("Shader '%s' is not loaded.", target))
+			return
+		}
+		m.pluginReply(fmt.Sprintf("Shader unloaded: %s", target))
+	case "list":
+		if len(m.shaderNames) == 0 {
+			m.pluginReply("No shaders currently loaded.")
+			return
+		}
+		var lines []string
+		for i, name := range m.shaderNames {
+			lines = append(lines, fmt.Sprintf("  %d. %s", i+1, name))
+		}
+		m.pluginReply("Active shaders (in order):\n" + strings.Join(lines, "\n"))
+	case "up":
+		if len(parts) < 3 {
+			m.pluginReply("Usage: /shader up <name>")
+			return
+		}
+		m.moveShader(parts[2], -1)
+	case "down":
+		if len(parts) < 3 {
+			m.pluginReply("Usage: /shader down <name>")
+			return
+		}
+		m.moveShader(parts[2], +1)
+	default:
+		m.pluginReply(fmt.Sprintf("Unknown subcommand '%s'. Use: load, unload, list, up, down", parts[1]))
+	}
+}
+
+func (m *chromeModel) moveShader(name string, delta int) {
+	idx := -1
+	for i, n := range m.shaderNames {
+		if strings.EqualFold(n, name) {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		m.pluginReply(fmt.Sprintf("Shader '%s' is not loaded.", name))
+		return
+	}
+	newIdx := idx + delta
+	if newIdx < 0 || newIdx >= len(m.shaderNames) {
+		m.pluginReply(fmt.Sprintf("Shader '%s' is already at position %d.", name, idx+1))
+		return
+	}
+	m.shaders[idx], m.shaders[newIdx] = m.shaders[newIdx], m.shaders[idx]
+	m.shaderNames[idx], m.shaderNames[newIdx] = m.shaderNames[newIdx], m.shaderNames[idx]
+	m.pluginReply(fmt.Sprintf("Shader '%s' moved to position %d.", name, newIdx+1))
 }
 
 func headerWithSpinner(text string, width int, spinner string) string {
