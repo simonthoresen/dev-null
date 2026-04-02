@@ -311,6 +311,8 @@ func (r *JSRuntime) registerGlobals() {
 		if err != nil {
 			panic(r.vm.NewGoError(fmt.Errorf("include %q: %w", name, err)))
 		}
+		// Record for client-side replication.
+		r.SourceFiles = append(r.SourceFiles, SourceFile{Name: name, Content: string(src)})
 		_, err = r.vm.RunScript(name, string(src))
 		if err != nil {
 			panic(r.vm.NewGoError(fmt.Errorf("include %q: %w", name, err)))

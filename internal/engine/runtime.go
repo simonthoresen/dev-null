@@ -14,6 +14,12 @@ import (
 	"null-space/internal/render"
 )
 
+// SourceFile represents a JS file loaded by the game (main or included).
+type SourceFile struct {
+	Name    string // filename (e.g. "main.js", "helper.js")
+	Content string // full JS source
+}
+
 // JSCallTimeout is how long a JS method can run before being interrupted.
 const JSCallTimeout = 2 * time.Second
 
@@ -76,6 +82,10 @@ type JSRuntime struct {
 	logFn       func(string)
 	chatCh      chan domain.Message // drained by server goroutine; closed on unload
 
+	// SourceFiles records all JS files loaded (main + includes), in order.
+	// Used to send game source to enhanced clients for local rendering.
+	SourceFiles []SourceFile
+
 	// game object methods (nil if not defined)
 	updateFn        goja.Callable
 	onPlayerLeave   goja.Callable
@@ -122,6 +132,12 @@ func LoadGame(path string, logFn func(string), chatCh chan domain.Message, clock
 		clock:   clock,
 		dataDir: dataDir,
 	}
+
+	// Record the main source file.
+	rt.SourceFiles = append(rt.SourceFiles, SourceFile{
+		Name:    filepath.Base(path),
+		Content: string(src),
+	})
 
 	rt.registerGlobals()
 
@@ -549,6 +565,15 @@ func (r *JSRuntime) SetState(state any) {
 		return
 	}
 	obj.Set("state", r.vm.ToValue(state))
+}
+
+// GameSource returns all JS source files for client-side replication.
+func (r *JSRuntime) GameSource() []domain.GameSourceFile {
+	result := make([]domain.GameSourceFile, len(r.SourceFiles))
+	for i, sf := range r.SourceFiles {
+		result[i] = domain.GameSourceFile{Name: sf.Name, Content: sf.Content}
+	}
+	return result
 }
 
 // ChatCh returns the channel used by JS chat()/chatPlayer() to send messages.

@@ -108,4 +108,13 @@ type Game interface {
 	// SetState replaces the game's Game.state object. Used by the framework
 	// to restore state on resume after a cold reload.
 	SetState(state any)
+
+	// GameSource returns all JS files (main + includes) for client-side replication.
+	GameSource() []GameSourceFile
+}
+
+// GameSourceFile is a JS file loaded by the game (main or included).
+type GameSourceFile struct {
+	Name    string // filename (e.g. "main.js")
+	Content string // full JS source
 }

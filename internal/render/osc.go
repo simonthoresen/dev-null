@@ -66,6 +66,41 @@ func EncodeFrameOSC(pngData []byte) string {
 	return "\x1b]ns;frame;" + base64.StdEncoding.EncodeToString(buf.Bytes()) + "\x07"
 }
 
+// EncodeGameSourceOSC returns an OSC sequence containing a game source file (gzipped).
+func EncodeGameSourceOSC(filename, content string) string {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := gz.Write([]byte(content)); err != nil {
+		return ""
+	}
+	if err := gz.Close(); err != nil {
+		return ""
+	}
+	return "\x1b]ns;gamesrc;" + filename + ";" + base64.StdEncoding.EncodeToString(buf.Bytes()) + "\x07"
+}
+
+// EncodeStateOSC returns an OSC sequence containing game state (gzipped JSON).
+func EncodeStateOSC(state any) string {
+	data, err := json.Marshal(state)
+	if err != nil {
+		return ""
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := gz.Write(data); err != nil {
+		return ""
+	}
+	if err := gz.Close(); err != nil {
+		return ""
+	}
+	return "\x1b]ns;state;" + base64.StdEncoding.EncodeToString(buf.Bytes()) + "\x07"
+}
+
+// EncodeModeOSC returns an OSC sequence to switch the client rendering mode.
+func EncodeModeOSC(mode string) string {
+	return "\x1b]ns;mode;" + mode + "\x07"
+}
+
 // CanvasFrameSize estimates the bandwidth in bytes for a single canvas frame
 // at the given pixel dimensions. Uses empirical PNG compression ratio.
 func CanvasFrameSize(pixelW, pixelH int) int {

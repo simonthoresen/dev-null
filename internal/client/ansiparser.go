@@ -1,13 +1,22 @@
 package client
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/base64"
 	"image/color"
+	"io"
 	"strconv"
 	"strings"
 
 	"null-space/internal/render"
 )
+
+// GameSrcFile is a JS source file received from the server.
+type GameSrcFile struct {
+	Name    string
+	Content string
+}
 
 // Cell represents a single terminal cell in the parsed grid.
 type Cell struct {
@@ -32,6 +41,13 @@ type TerminalGrid struct {
 	ViewportY   int
 	ViewportW   int
 	ViewportH   int
+
+	// Game source files for local rendering.
+	GameSrcFiles []GameSrcFile // accumulated from ns;gamesrc OSC
+	// Game state for local rendering (gzipped JSON from ns;state OSC).
+	StateData []byte
+	// Render mode from ns;mode OSC ("local" or "remote").
+	RenderMode string
 
 	// Current SGR state for parsing.
 	curFg   color.RGBA
@@ -347,6 +363,20 @@ func (g *TerminalGrid) handleOSC(payload string) {
 			if decoded, err := decodeBase64Str(data); err == nil {
 				g.FrameData = decoded
 			}
+		case "gamesrc":
+			// Format: ns;gamesrc;<filename>;<base64 gzipped JS>
+			if sepIdx := strings.Index(data, ";"); sepIdx >= 0 {
+				filename := data[:sepIdx]
+				if decoded, err := decodeBase64Str(data[sepIdx+1:]); err == nil {
+					g.GameSrcFiles = append(g.GameSrcFiles, GameSrcFile{Name: filename, Content: decompressString(decoded)})
+				}
+			}
+		case "state":
+			if decoded, err := decodeBase64Str(data); err == nil {
+				g.StateData = decoded
+			}
+		case "mode":
+			g.RenderMode = data
 		case "viewport":
 			parts := strings.Split(data, ",")
 			if len(parts) == 4 {
@@ -362,6 +392,20 @@ func (g *TerminalGrid) handleOSC(payload string) {
 // decodeBase64Str decodes a standard base64 string.
 func decodeBase64Str(s string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(s)
+}
+
+// decompressString decompresses gzipped data to a string.
+func decompressString(data []byte) string {
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return ""
+	}
+	defer gz.Close()
+	raw, err := io.ReadAll(gz)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 // decodeUTF8 decodes the first UTF-8 rune from data.

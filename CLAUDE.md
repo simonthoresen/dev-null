@@ -367,6 +367,9 @@ buf.setChar(x, y, "\uE000", "#ffff00", "#000000"); // renders as sprite in custo
 - `\x1b]ns;atlas;<base64 gzipped PNG>\x07` — sprite sheet (sent once on game load)
 - `\x1b]ns;viewport;<x>,<y>,<w>,<h>\x07` — game viewport bounds (sent every frame)
 - `\x1b]ns;frame;<base64 gzipped PNG>\x07` — canvas frame (sent every frame when canvas mode active)
+- `\x1b]ns;gamesrc;<filename>;<base64 gzipped JS>\x07` — game source file (sent once per file on game load)
+- `\x1b]ns;state;<base64 gzipped JSON>\x07` — Game.state delta (sent when state changes)
+- `\x1b]ns;mode;<local|remote>\x07` — switch client rendering mode
 
 **Rendering rules:** Charmaps apply only to the game viewport. NC chrome (menus, dialogs, chat, status bars) always renders as text. Drop shadows on PUA cells clear the sprite and fill with shadow color.
 

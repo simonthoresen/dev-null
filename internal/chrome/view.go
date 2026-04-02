@@ -77,9 +77,16 @@ func (m Model) View() tea.View {
 		}
 	}
 
-	// Enhanced client OSC protocol: send charmap data and viewport bounds.
+	// Enhanced client OSC protocol: send charmap data, game source, state, and viewport bounds.
 	var oscPrefix string
 	if m.IsEnhancedClient && m.inActiveGame && game != nil {
+		// Send game source files once on game load (for client-side local rendering).
+		if !m.gameSrcSent {
+			for _, sf := range game.GameSource() {
+				oscPrefix += render.EncodeGameSourceOSC(sf.Name, sf.Content)
+			}
+			m.gameSrcSent = true
+		}
 		if !m.charmapSent {
 			if cm := game.CharMap(); cm != nil {
 				oscPrefix += render.EncodeCharmapOSC(cm)
@@ -92,6 +99,14 @@ func (m Model) View() tea.View {
 		}
 		if m.viewportW > 0 && m.viewportH > 0 {
 			oscPrefix += render.EncodeViewportOSC(m.viewportX, m.viewportY, m.viewportW, m.viewportH)
+
+			// Send Game.state if it changed since last frame (for local rendering).
+			if phase == domain.PhasePlaying {
+				if stateJSON := render.EncodeStateOSC(game.State()); stateJSON != "" && stateJSON != m.lastStateJSON {
+					oscPrefix += stateJSON
+					m.lastStateJSON = stateJSON
+				}
+			}
 
 			// Canvas frame: render and send if game has renderCanvas and scale > 0.
 			m.api.State().RLock()

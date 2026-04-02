@@ -113,9 +113,11 @@ type Model struct {
 	shaders     []domain.Shader
 	shaderNames []string // parallel to shaders; display names
 
-	// Enhanced client protocol (null-space-client with charmap support).
+	// Enhanced client protocol (null-space-client with charmap/canvas/local-render support).
 	IsEnhancedClient bool
-	charmapSent      bool // true after charmap+atlas OSC have been sent for the current game
+	charmapSent      bool   // true after charmap+atlas OSC have been sent for the current game
+	gameSrcSent      bool   // true after game source files have been sent
+	lastStateJSON    string // JSON of last sent Game.state (for delta detection)
 
 	overlay widget.OverlayState
 
@@ -405,6 +407,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// This player was connected when the game loaded — they're in the game.
 		m.inActiveGame = true
 		m.charmapSent = false
+		m.gameSrcSent = false
+		m.lastStateJSON = ""
 		m.invalidateMenuCache()
 		m.lobbyInput.Model.Blur()
 		// Focus the playing gameview.

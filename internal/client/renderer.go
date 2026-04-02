@@ -39,6 +39,11 @@ type Game struct {
 	// Canvas frame — rendered image from server-side renderCanvas.
 	canvasFrame *ebiten.Image // latest decoded canvas frame, or nil
 
+	// Local rendering state (received from server for future local-render mode).
+	gameSrcFiles  []GameSrcFile // JS source files for the current game
+	gameStateJSON []byte        // latest decompressed game state JSON
+	renderMode    string        // "local" or "remote" (default)
+
 	// Read buffer for SSH data.
 	readBuf []byte
 	mu      sync.Mutex
@@ -96,6 +101,21 @@ func (g *Game) readLoop() {
 				g.loadCanvasFrame(g.grid.FrameData)
 				g.grid.FrameData = nil
 			}
+			// Game source files for local rendering.
+			if len(g.grid.GameSrcFiles) > 0 {
+				g.gameSrcFiles = g.grid.GameSrcFiles
+				g.grid.GameSrcFiles = nil
+			}
+			// Game state delta.
+			if g.grid.StateData != nil {
+				g.gameStateJSON = decompressBytes(g.grid.StateData)
+				g.grid.StateData = nil
+			}
+			// Render mode.
+			if g.grid.RenderMode != "" {
+				g.renderMode = g.grid.RenderMode
+				g.grid.RenderMode = ""
+			}
 			g.mu.Unlock()
 		}
 		if err != nil {
@@ -132,6 +152,20 @@ func (g *Game) loadAtlas(gzipData []byte) {
 
 	g.atlasImage = ebiten.NewImageFromImage(img)
 	g.spriteCache = make(map[rune]*ebiten.Image)
+}
+
+// decompressBytes decompresses gzipped data.
+func decompressBytes(data []byte) []byte {
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil
+	}
+	defer gz.Close()
+	raw, err := io.ReadAll(gz)
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 func (g *Game) loadCanvasFrame(gzipData []byte) {
