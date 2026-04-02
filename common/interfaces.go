@@ -88,5 +88,10 @@ type Game interface {
 	Commands() []Command
 	Menus() []MenuDef
 	Unload()
+
+	// Suspend/resume support — optional for JS games.
+	CanSuspend() bool        // true if the game supports suspend/resume
+	Suspend() any            // called on suspend; returns session state to persist
+	Resume(sessionState any) // called on resume; nil sessionState = warm resume (runtime still alive)
 }
 

@@ -29,10 +29,11 @@ type Message struct {
 type GamePhase int
 
 const (
-	PhaseNone     GamePhase = 0 // lobby — no game loaded
-	PhaseSplash   GamePhase = 1 // splash screen before game starts
-	PhasePlaying  GamePhase = 2 // game is actively running
-	PhaseGameOver GamePhase = 3 // game-over screen, waiting for acknowledgment
+	PhaseNone      GamePhase = 0 // lobby — no game loaded
+	PhaseSplash    GamePhase = 1 // splash screen before game starts
+	PhasePlaying   GamePhase = 2 // game is actively running
+	PhaseGameOver  GamePhase = 3 // game-over screen, waiting for acknowledgment
+	PhaseSuspended GamePhase = 4 // game suspended — runtime may be alive or restored from disk
 )
 
 // GameResult is a single entry in the game-over results, displayed in the
@@ -145,3 +146,5 @@ type GameLoadedMsg struct{ Name string }
 type GameUnloadedMsg struct{}
 type GamePhaseMsg struct{ Phase GamePhase } // broadcast when game phase changes
 type TeamUpdatedMsg struct{}                // broadcast when team assignments change
+type GameSuspendedMsg struct{ Name string } // broadcast when a game is suspended
+type GameResumedMsg struct{ Name string }   // broadcast when a suspended game is resumed

@@ -905,6 +905,205 @@ func (a *Server) unloadGame() {
 	a.serverLog("game unloaded")
 }
 
+// suspendGame suspends the active game, persisting its session state.
+func (a *Server) suspendGame(saveName string) error {
+	a.state.RLock()
+	game := a.state.ActiveGame
+	phase := a.state.GamePhase
+	gameName := a.state.GameName
+	a.state.RUnlock()
+
+	if game == nil || phase != common.PhasePlaying {
+		return fmt.Errorf("no game is currently playing")
+	}
+	if !game.CanSuspend() {
+		return fmt.Errorf("this game does not support suspend/resume")
+	}
+
+	// Call suspend() on the game to get session state.
+	sessionState := game.Suspend()
+
+	// Build the save.
+	a.state.RLock()
+	teams := make([]common.Team, len(a.state.GameTeams))
+	for i, t := range a.state.GameTeams {
+		teams[i] = common.Team{
+			Name:    t.Name,
+			Color:   t.Color,
+			Players: append([]string(nil), t.Players...),
+		}
+	}
+	disc := make(map[string]string)
+	for k, v := range a.state.GameDisconnected {
+		disc[k] = v
+	}
+	a.state.RUnlock()
+
+	save := &state.SuspendSave{
+		GameName:     gameName,
+		SaveName:     saveName,
+		SavedAt:      a.clock.Now(),
+		Teams:        teams,
+		Disconnected: disc,
+		GameState:    sessionState,
+	}
+	if err := state.SaveSuspend(a.dataDir, save); err != nil {
+		return fmt.Errorf("save suspend state: %w", err)
+	}
+
+	// Unregister game commands.
+	for _, cmd := range game.Commands() {
+		a.registry.Unregister(cmd.Name)
+	}
+
+	// Transition to suspended phase — runtime stays alive.
+	a.state.Lock()
+	a.state.GamePhase = common.PhaseSuspended
+	a.state.Unlock()
+
+	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhaseSuspended})
+	a.broadcastMsg(common.GameSuspendedMsg{Name: gameName})
+	a.broadcastChat(common.Message{Text: fmt.Sprintf("Game suspended: %s (save: %s)", gameName, saveName)})
+	a.serverLog(fmt.Sprintf("game suspended: %s/%s", gameName, saveName))
+	return nil
+}
+
+// resumeGame resumes a suspended game. If the runtime is still alive (warm),
+// calls Resume(nil). If loading from disk (cold), loads the game JS fresh,
+// calls init(globalState)+start(), then Resume(sessionState).
+func (a *Server) resumeGame(gameName, saveName string) error {
+	save, err := state.LoadSuspend(a.dataDir, gameName, saveName)
+	if err != nil {
+		return fmt.Errorf("load suspend save: %w", err)
+	}
+
+	// Validate team count against the lobby teams if this is a cold resume
+	// (warm resume keeps the original game teams).
+	a.state.RLock()
+	currentGame := a.state.ActiveGame
+	currentName := a.state.GameName
+	currentPhase := a.state.GamePhase
+	a.state.RUnlock()
+
+	isWarm := currentGame != nil && currentName == gameName && currentPhase == common.PhaseSuspended
+
+	if isWarm {
+		// Warm resume — runtime is alive, just unpause.
+		// Re-register game commands.
+		for _, cmd := range currentGame.Commands() {
+			a.registry.Register(cmd)
+		}
+
+		currentGame.Resume(nil)
+
+		a.state.Lock()
+		a.state.GamePhase = common.PhasePlaying
+		a.state.Unlock()
+
+		a.lastUpdate = a.clock.Now()
+		a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhasePlaying})
+		a.broadcastMsg(common.GameResumedMsg{Name: gameName})
+		a.broadcastChat(common.Message{Text: fmt.Sprintf("Game resumed: %s", gameName)})
+		a.serverLog(fmt.Sprintf("game resumed (warm): %s/%s", gameName, saveName))
+		return nil
+	}
+
+	// Cold resume — load the game fresh and restore from save.
+	if currentGame != nil {
+		a.unloadGame()
+	}
+
+	// Validate team count.
+	tr := common.TeamRange{} // will be updated after loading
+	_ = tr
+
+	gamesDir := filepath.Join(a.dataDir, "games")
+	path := engine.ResolveGamePath(gamesDir, gameName)
+
+	gameChatCh := make(chan common.Message, 64)
+	rt, err := engine.LoadGame(path, a.serverLog, gameChatCh, a.clock)
+	if err != nil {
+		close(gameChatCh)
+		return fmt.Errorf("load game for resume: %w", err)
+	}
+	if jrt, ok := rt.(*engine.JSRuntime); ok {
+		jrt.ShowDialogFn = a.ShowDialog
+	}
+
+	// Validate team count against game's declared range.
+	tr = rt.TeamRange()
+	teamCount := len(save.Teams)
+	if tr.Min > 0 && teamCount < tr.Min {
+		close(gameChatCh)
+		return fmt.Errorf("saved session has %d teams but game requires at least %d", teamCount, tr.Min)
+	}
+	if tr.Max > 0 && teamCount > tr.Max {
+		close(gameChatCh)
+		return fmt.Errorf("saved session has %d teams but game supports at most %d", teamCount, tr.Max)
+	}
+
+	// Restore teams from save.
+	a.state.Lock()
+	a.state.GameTeams = save.Teams
+	a.state.GameDisconnected = save.Disconnected
+	if a.state.GameDisconnected == nil {
+		a.state.GameDisconnected = make(map[string]string)
+	}
+	a.state.ActiveGame = rt
+	a.state.GameName = gameName
+	a.state.GamePhase = common.PhasePlaying // skip splash
+	a.state.Unlock()
+
+	// Populate teams cache.
+	if jrt, ok := rt.(*engine.JSRuntime); ok {
+		jrt.SetTeamsCache(a.buildTeamsCache())
+	}
+
+	// Drain JS chat.
+	go func() {
+		for msg := range gameChatCh {
+			a.broadcastChat(msg)
+		}
+	}()
+
+	// Call init with global saved state (high scores etc), then start, then resume.
+	globalState, err := state.LoadGameState(a.dataDir, gameName)
+	if err != nil {
+		a.serverLog(fmt.Sprintf("warning: could not load global state: %v", err))
+	}
+	rt.Init(globalState)
+	rt.Start()
+	rt.Resume(save.GameState)
+
+	// Register game commands.
+	for _, cmd := range rt.Commands() {
+		a.registry.Register(cmd)
+	}
+
+	a.lastUpdate = a.clock.Now()
+	a.broadcastMsg(common.GameLoadedMsg{Name: gameName})
+	a.broadcastMsg(common.GamePhaseMsg{Phase: common.PhasePlaying})
+	a.broadcastMsg(common.GameResumedMsg{Name: gameName})
+	a.broadcastChat(common.Message{Text: fmt.Sprintf("Game resumed: %s (from save: %s)", gameName, saveName)})
+	a.serverLog(fmt.Sprintf("game resumed (cold): %s/%s", gameName, saveName))
+
+	// Clean up the suspend save after successful resume.
+	if err := state.DeleteSuspend(a.dataDir, gameName, saveName); err != nil {
+		a.serverLog(fmt.Sprintf("warning: could not delete suspend save: %v", err))
+	}
+
+	return nil
+}
+
+// SuspendGame exposes suspendGame to the chrome/command layer.
+func (a *Server) SuspendGame(saveName string) error { return a.suspendGame(saveName) }
+
+// ResumeGame exposes resumeGame to the chrome/command layer.
+func (a *Server) ResumeGame(gameName, saveName string) error { return a.resumeGame(gameName, saveName) }
+
+// ListSuspends returns all suspend saves for the resume menu.
+func (a *Server) ListSuspends() []state.SuspendInfo { return state.ListSuspends(a.dataDir, "") }
+
 // buildTeamsCache builds a pre-resolved teams snapshot for JS teams().
 // Resolves player IDs to names so JSRuntime doesn't need CentralState access.
 func (a *Server) buildTeamsCache() []map[string]any {
@@ -1089,11 +1288,11 @@ func (a *Server) registerBuiltins() {
 
 	a.registry.Register(common.Command{
 		Name:        "game",
-		Description: "Game management. No args = list available. /game load|unload [name]",
+		Description: "Game management. /game list|load|unload|suspend|resume",
 		Complete: func(before []string) []string {
 			switch len(before) {
 			case 0:
-				return []string{"list", "load", "unload"}
+				return []string{"list", "load", "unload", "suspend", "resume"}
 			case 1:
 				switch before[0] {
 				case "load":
@@ -1105,6 +1304,8 @@ func (a *Server) registerBuiltins() {
 					if name != "" {
 						return []string{strings.TrimSuffix(filepath.Base(name), ".js")}
 					}
+				case "resume":
+					return state.ListSuspendNames(a.dataDir)
 				}
 			}
 			return nil
@@ -1160,8 +1361,57 @@ func (a *Server) registerBuiltins() {
 					return
 				}
 				a.unloadGame()
+			case "suspend":
+				if !ctx.IsAdmin {
+					ctx.Reply("Permission denied (admin only)")
+					return
+				}
+				saveName := ""
+				if len(args) >= 2 {
+					saveName = args[1]
+				}
+				if saveName == "" {
+					// Auto-generate a save name from the current time.
+					saveName = a.clock.Now().Format("2006-01-02_15-04-05")
+				}
+				if err := a.suspendGame(saveName); err != nil {
+					ctx.Reply(fmt.Sprintf("Failed to suspend: %v", err))
+					return
+				}
+			case "resume":
+				if !ctx.IsAdmin {
+					ctx.Reply("Permission denied (admin only)")
+					return
+				}
+				if len(args) < 2 {
+					// List available saves.
+					saves := state.ListSuspends(a.dataDir, "")
+					if len(saves) == 0 {
+						ctx.Reply("No suspended games found. Usage: /game resume <gameName/saveName>")
+						return
+					}
+					var lines []string
+					lines = append(lines, "Suspended games:")
+					for _, s := range saves {
+						lines = append(lines, fmt.Sprintf("  %s/%s  (%d teams, %s)",
+							s.GameName, s.SaveName, s.TeamCount, s.SavedAt.Format("Jan 2 15:04")))
+					}
+					lines = append(lines, "Usage: /game resume <gameName/saveName>")
+					ctx.Reply(strings.Join(lines, "\n"))
+					return
+				}
+				ref := args[1]
+				parts := strings.SplitN(ref, "/", 2)
+				if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+					ctx.Reply("Usage: /game resume <gameName/saveName>")
+					return
+				}
+				if err := a.resumeGame(parts[0], parts[1]); err != nil {
+					ctx.Reply(fmt.Sprintf("Failed to resume: %v", err))
+					return
+				}
 			default:
-				ctx.Reply(fmt.Sprintf("Unknown subcommand '%s'. Use: list, load, unload", args[0]))
+				ctx.Reply(fmt.Sprintf("Unknown subcommand '%s'. Use: list, load, unload, suspend, resume", args[0]))
 			}
 		},
 	})

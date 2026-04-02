@@ -58,6 +58,10 @@ go run ./cmd/null-space-server --local --data-dir dist --game example --player a
 ### Game Lifecycle
 ```
 LOBBY (teams + chat) → SPLASH → PLAYING → GAME OVER → LOBBY
+                                   ↓
+                               SUSPENDED → LOBBY (game still in memory)
+                                   ↑
+                                RESUME (warm or cold)
 ```
 1. **Lobby**: Players configure teams, chat. Admin loads game with `/game load <name>`.
 2. **Load**: Framework snapshots teams for the game (lobby teams stay independent), loads saved state, calls `init(savedState)`. `teams()` returns game teams.
@@ -67,8 +71,24 @@ LOBBY (teams + chat) → SPLASH → PLAYING → GAME OVER → LOBBY
 5. **Playing**: Normal game mode. Game calls `gameOver(results, state)` when done.
 4. **Game Over**: Framework renders ranked results screen. All players press Enter or 15s auto-transition.
 5. Back to **Lobby** — game unloaded, teams preserved for next round.
+6. **Suspend** (optional): Admin runs `/game suspend [saveName]`. Framework calls `Game.suspend()` to get session state, persists it to `dist/state/saves/<gameName>/<saveName>.json`, transitions to lobby. Runtime stays alive for warm resume.
+7. **Resume**: Admin runs `/game resume <gameName/saveName>` or uses File → Resume Game menu. **Warm resume** (runtime alive): calls `Game.resume(nil)`, goes straight to Playing. **Cold resume** (server restarted): loads game fresh, calls `init(globalState)` + `start()` + `resume(sessionState)`, skips splash.
 
 Late joiners see the lobby and can chat but don't join the active game. Lobby teams are independent from game teams — players can freely organize for the next round while a game is running.
+
+### Suspend/Resume
+Games opt in to suspend/resume by setting `canSuspend: true` on the `Game` object. Suspend saves are independent of global game state (high scores via `gameOver(results, state)`) — you can have multiple suspended sessions of the same game.
+
+**JS hooks** (all optional, require `canSuspend: true`):
+- `suspend()` — called on `/game suspend`. Returns session state to persist. Game should pause internal logic.
+- `resume(sessionState)` — called on resume. `sessionState` is `null` for warm resume (runtime still alive), or the saved state for cold resume.
+
+**Save files**: `dist/state/saves/<gameName>/<saveName>.json` — contains team snapshot, disconnected player map, and game session state. Deleted after successful resume.
+
+**Commands**:
+- `/game suspend [saveName]` — admin only. Auto-generates timestamp name if omitted.
+- `/game resume <gameName/saveName>` — admin only. Tab-completes against saved sessions. No args lists available saves.
+- File → Resume Game menu — shows saves in a dialog with team count validation.
 
 ### Teams
 Players manage teams in the lobby panel (right side, fixed 32 chars). New players start **unassigned** (shown under "Unassigned" at the top of the team list). Tab switches focus between chat and team panel. Navigation in team panel:
@@ -191,7 +211,13 @@ type Game interface {
     StatusBar(playerID string) string      // feeds framework status bar (left-aligned)
     CommandBar(playerID string) string     // command bar (above framework status bar)
     Commands() []Command
+    Menus() []MenuDef
     Unload()
+
+    // Suspend/resume (optional — requires canSuspend: true in JS)
+    CanSuspend() bool        // true if game supports suspend/resume
+    Suspend() any            // returns session state to persist
+    Resume(sessionState any) // nil = warm resume, non-nil = cold resume from disk
 }
 ```
 `jsRuntime` implements `Game`. `init()` is mandatory; all other JS hooks are optional. `teams()` global returns game team snapshot during init/start/playing.

@@ -40,6 +40,9 @@ type ServerAPI interface {
 	// Game lifecycle
 	StartGame()
 	AcknowledgeGameOver(playerID string)
+	SuspendGame(saveName string) error
+	ResumeGame(gameName, saveName string) error
+	ListSuspends() []state.SuspendInfo
 
 	// Session management
 	KickPlayer(playerID string) error
@@ -424,6 +427,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resizeViewports()
 			return m, cmd
 		}
+		if msg.Phase == common.PhaseSuspended {
+			// Return to lobby view but keep inActiveGame true so resume works.
+			m.lobbyWindow.FocusIdx = 4
+			cmd := m.lobbyInput.Model.Focus()
+			m.playingInput.Model.Blur()
+			m.resizeViewports()
+			return m, cmd
+		}
 		m.resizeViewports()
 		return m, nil
 
@@ -714,7 +725,7 @@ func (m Model) View() tea.View {
 	phase := m.api.State().GamePhase
 	m.api.State().RUnlock()
 
-	if (!m.inActiveGame || phase == common.PhaseNone) && m.teamEditing {
+	if (!m.inActiveGame || phase == common.PhaseNone || phase == common.PhaseSuspended) && m.teamEditing {
 		SetInputStyle(&m.teamEditInput, m.theme.LayerAt(0).InputBgC(), m.theme.LayerAt(0).InputFgC())
 	}
 
@@ -723,7 +734,7 @@ func (m Model) View() tea.View {
 
 	buf := common.NewImageBuffer(m.width, m.height)
 
-	if !m.inActiveGame || phase == common.PhaseNone {
+	if !m.inActiveGame || phase == common.PhaseNone || phase == common.PhaseSuspended {
 		m.renderLobby(buf, menus)
 	} else {
 		m.renderPlaying(buf, menus, game, gameName, phase)
@@ -758,7 +769,7 @@ func (m Model) View() tea.View {
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
 
-	isLobby := !m.inActiveGame || phase == common.PhaseNone
+	isLobby := !m.inActiveGame || phase == common.PhaseNone || phase == common.PhaseSuspended
 
 	if isLobby && m.lobbyWindow.FocusIdx == 4 {
 		if cx, cy, visible := m.lobbyWindow.CursorPosition(); visible {
@@ -833,7 +844,15 @@ func (m Model) renderLobby(buf *common.ImageBuffer, menus []common.MenuDef) {
 	if m.IsLocal {
 		modeLabel = "local"
 	}
-	m.lobbyStatusBar.LeftText = fmt.Sprintf(" null-space (%s) | %d players | uptime %s", modeLabel, m.api.State().PlayerCount(), m.api.Uptime())
+	statusLeft := fmt.Sprintf(" null-space (%s) | %d players | uptime %s", modeLabel, m.api.State().PlayerCount(), m.api.Uptime())
+	m.api.State().RLock()
+	suspPhase := m.api.State().GamePhase
+	suspName := m.api.State().GameName
+	m.api.State().RUnlock()
+	if suspPhase == common.PhaseSuspended && suspName != "" {
+		statusLeft += fmt.Sprintf(" | suspended: %s", suspName)
+	}
+	m.lobbyStatusBar.LeftText = statusLeft
 	m.lobbyStatusBar.RightText = time.Now().Format("2006-01-02 15:04:05") + " "
 
 	// Render the full screen: menu bar + window + status bar.
@@ -1074,7 +1093,7 @@ func (m *Model) syncChat() {
 func (m *Model) resizeViewports() {
 	phase := m.api.State().GetGamePhase()
 
-	if !m.inActiveGame || phase == common.PhaseNone {
+	if !m.inActiveGame || phase == common.PhaseNone || phase == common.PhaseSuspended {
 		// Lobby — chatH for scroll math.
 		windowH := m.height - 2 // minus menu bar and status bar
 		chatH := max(1, windowH-4) // approx: borders + divider + cmd bar
@@ -1112,6 +1131,8 @@ func (m *Model) cachedMenus() []common.MenuDef {
 	}
 
 	fileItems := []common.MenuItemDef{
+		{Label: "&Resume Game...", Handler: func(_ string) { m.showResumeGameDialog() }},
+		{Label: "---"},
 		{Label: "&Themes...", Handler: func(_ string) { m.showPlayerListDialog("Themes", "themes", ".json") }},
 		{Label: "&Plugins...", Handler: func(_ string) { m.showPlayerListDialog("Plugins", "plugins", ".js") }},
 		{Label: "&Shaders...", Handler: func(_ string) { m.showShaderDialog() }},
@@ -1151,6 +1172,64 @@ func (m *Model) cachedMenus() []common.MenuDef {
 	m.menuCache = menus
 	m.menuCacheGame = game
 	return menus
+}
+
+func (m *Model) showResumeGameDialog() {
+	saves := m.api.ListSuspends()
+	if len(saves) == 0 {
+		m.overlay.PushDialog(common.DialogRequest{
+			Title:   "Resume Game",
+			Body:    "No suspended games found.",
+			Buttons: []string{"OK"},
+		})
+		return
+	}
+
+	teamCount := m.api.State().TeamCount()
+
+	var lines []string
+	var buttons []string
+	for i, s := range saves {
+		if i >= 9 {
+			break // limit to 9 saves in the dialog
+		}
+		teamNote := ""
+		if s.TeamCount != teamCount {
+			teamNote = fmt.Sprintf("  (lobby has %d teams)", teamCount)
+		}
+		lines = append(lines, fmt.Sprintf("  %d. %s/%s  (%d teams, %s)%s",
+			i+1, s.GameName, s.SaveName, s.TeamCount, s.SavedAt.Format("Jan 2 15:04"), teamNote))
+		buttons = append(buttons, fmt.Sprintf("%d", i+1))
+	}
+	buttons = append(buttons, "Cancel")
+
+	body := strings.Join(lines, "\n")
+
+	// Capture saves slice for the OnClose callback.
+	capturedSaves := saves
+	m.overlay.PushDialog(common.DialogRequest{
+		Title:   "Resume Game",
+		Body:    body,
+		Buttons: buttons,
+		OnClose: func(button string) {
+			if button == "Cancel" || button == "" {
+				return
+			}
+			idx := 0
+			fmt.Sscanf(button, "%d", &idx)
+			if idx < 1 || idx > len(capturedSaves) {
+				return
+			}
+			s := capturedSaves[idx-1]
+			if err := m.api.ResumeGame(s.GameName, s.SaveName); err != nil {
+				m.overlay.PushDialog(common.DialogRequest{
+					Title:   "Resume Failed",
+					Body:    err.Error(),
+					Buttons: []string{"OK"},
+				})
+			}
+		},
+	})
 }
 
 func (m *Model) showPlayerListDialog(title, subdir, ext string) {

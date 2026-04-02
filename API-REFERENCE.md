@@ -147,6 +147,26 @@ var Game = {
     // Called at splash→playing transition. Set up game state here. Optional.
     start: function() {
         // game begins — teams() available
+    },
+
+    // --- Suspend/resume (optional, requires canSuspend: true) ---
+
+    // Set to true to enable /game suspend and the Resume Game menu.
+    canSuspend: true,
+
+    // Called when admin runs /game suspend. Return session state to persist.
+    // This is separate from gameOver state — suspend saves are per-session.
+    suspend: function() {
+        return { board: board, turn: turn };
+    },
+
+    // Called when game is resumed. sessionState is null for warm resume
+    // (runtime still in memory), or the saved state for cold resume.
+    resume: function(sessionState) {
+        if (sessionState) {
+            board = sessionState.board;
+            turn = sessionState.turn;
+        }
     }
 };
 ```
@@ -408,6 +428,49 @@ Games can persist data between runs. Saved state is stored as JSON in `dist/stat
 **Saving**: Pass state as the second argument to `gameOver(results, state)`. Only saved when the game ends naturally — manual `/game unload` does not persist state.
 
 **Loading**: Receive previous state as the argument to `init(savedState)` (null on first run).
+
+## Suspend/resume
+
+Games can support suspend/resume for long-running sessions (e.g. RPGs). This is separate from `gameOver` state — suspend saves are per-session, while `gameOver` state is global (high scores, etc.). Multiple suspended sessions of the same game can coexist.
+
+**Opt in**: Set `canSuspend: true` on the `Game` object.
+
+```javascript
+var Game = {
+    canSuspend: true,
+
+    suspend: function() {
+        // Return session state to persist (similar to gameOver's 2nd arg).
+        return { board: board, turn: turn, scores: scores };
+    },
+
+    resume: function(sessionState) {
+        // sessionState is null for warm resume (runtime still in memory),
+        // or the saved state object for cold resume (server was restarted).
+        if (sessionState) {
+            board = sessionState.board;
+            turn = sessionState.turn;
+            scores = sessionState.scores;
+        }
+        // Re-start timers, etc.
+    },
+
+    // ... other hooks ...
+};
+```
+
+| Hook | When called | Return value |
+|------|------------|--------------|
+| `suspend()` | Admin runs `/game suspend` | Session state object (persisted to JSON) |
+| `resume(sessionState)` | Game is resumed | — |
+
+**Commands**:
+- `/game suspend [saveName]` — suspends the active game. Auto-generates a timestamp name if omitted.
+- `/game resume <gameName/saveName>` — resumes a saved session. Tab-completes against existing saves.
+
+**Save location**: `dist/state/saves/<gameName>/<saveName>.json`
+
+**Warm vs cold resume**: If the server hasn't restarted, the JS runtime is still alive and `resume(null)` is called. If the server was restarted, the game is loaded fresh (`init` + `start` are called first), then `resume(sessionState)` is called with the saved state.
 
 ## Layout and sizing
 

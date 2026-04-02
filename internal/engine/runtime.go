@@ -93,6 +93,11 @@ type JSRuntime struct {
 	initFn           goja.Callable
 	startFn          goja.Callable
 
+	// suspend/resume
+	canSuspendProp bool
+	suspendFn      goja.Callable
+	resumeFn       goja.Callable
+
 	// gameOver() callback state — set by JS, detected by tick loop
 	gameOverPending bool
 	gameOverResults []common.GameResult // results passed to gameOver()
@@ -516,6 +521,12 @@ func (r *JSRuntime) extractGameObject() error {
 		}
 	}
 
+	// Suspend/resume support (all optional)
+	if v := gameObj.Get("canSuspend"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+		r.canSuspendProp = v.ToBoolean()
+	}
+	r.suspendFn = extractCallable(gameObj, "suspend")
+	r.resumeFn = extractCallable(gameObj, "resume")
 	return nil
 }
 
@@ -937,6 +948,46 @@ func (r *JSRuntime) GameOverStateExport() any {
 		return nil
 	}
 	return r.gameOverState.Export()
+}
+
+// --- Suspend/resume ---
+
+func (r *JSRuntime) CanSuspend() bool {
+	return r.canSuspendProp
+}
+
+func (r *JSRuntime) Suspend() any {
+	if r.suspendFn == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	defer r.recoverJS("Suspend")
+	defer TraceJS(r.vm, "Suspend")()
+	cancel := WatchdogJS(r.vm, "Suspend")
+	defer cancel()
+	val, err := r.suspendFn(goja.Undefined())
+	if err != nil {
+		slog.Error("JS Suspend error", "error", err)
+		return nil
+	}
+	if val == nil || goja.IsUndefined(val) || goja.IsNull(val) {
+		return nil
+	}
+	return val.Export()
+}
+
+func (r *JSRuntime) Resume(sessionState any) {
+	if r.resumeFn == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	defer r.recoverJS("Resume")
+	defer TraceJS(r.vm, "Resume")()
+	cancel := WatchdogJS(r.vm, "Resume")
+	defer cancel()
+	_, _ = r.resumeFn(goja.Undefined(), r.vm.ToValue(sessionState))
 }
 
 func (r *JSRuntime) recoverJS(method string) {
