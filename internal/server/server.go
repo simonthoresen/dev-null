@@ -20,17 +20,14 @@ import (
 	"charm.land/wish/v2"
 	"charm.land/wish/v2/activeterm"
 	wishbubbletea "charm.land/wish/v2/bubbletea"
-	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/ssh"
 
+	"null-space/internal/console"
 	"null-space/internal/domain"
 	"null-space/internal/render"
-	"null-space/internal/chrome"
-	"null-space/internal/console"
 	"null-space/internal/engine"
 	"null-space/internal/network"
 	"null-space/internal/state"
-	"null-space/internal/widget"
 )
 
 type Server struct {
@@ -205,32 +202,6 @@ func (a *Server) SetupPublicIP() string {
 // SetPort stores the SSH listen port so invite scripts can reference it.
 func (a *Server) SetPort(port string) { a.port = port }
 
-// OpenChatLog derives the chat log path from NULL_SPACE_LOG_FILE by inserting
-// "-chat" before the extension. E.g. "logs/20260401-152702.log" → "logs/20260401-152702-chat.log".
-// If no log file is configured, no chat log is created.
-func (a *Server) OpenChatLog() {
-	serverLog := os.Getenv("NULL_SPACE_LOG_FILE")
-	if serverLog == "" {
-		return
-	}
-	ext := filepath.Ext(serverLog)
-	path := strings.TrimSuffix(serverLog, ext) + "-chat" + ext
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		slog.Warn("failed to open chat log", "path", path, "error", err)
-		return
-	}
-	a.chatLogFile = f
-	slog.Info("chat log opened", "path", path)
-}
-
-// CloseChatLog closes the chat log file.
-func (a *Server) CloseChatLog() {
-	if a.chatLogFile != nil {
-		a.chatLogFile.Close()
-		a.chatLogFile = nil
-	}
-}
 
 // InviteToken returns a base64url-encoded binary token containing the server's
 // connection endpoints. The token is variable-length — trailing absent fields
@@ -358,151 +329,6 @@ func (a *Server) LogGameList() {
 	a.broadcastChat(domain.Message{Text: a.formatGameList(gamesDir, available)})
 }
 
-func (a *Server) sessionMiddleware() wish.Middleware {
-	return func(next ssh.Handler) ssh.Handler {
-		return func(sess ssh.Session) {
-			player := a.registerSession(sess)
-			defer a.unregisterSession(player.ID)
-			next(sess)
-		}
-	}
-}
-
-func (a *Server) programHandler(sess ssh.Session) *tea.Program {
-	playerID := sess.Context().SessionID()
-	model := chrome.NewModel(a, playerID)
-
-	// Check for init commands and enhanced client flag from SSH env vars.
-	for _, e := range sess.Environ() {
-		if strings.HasPrefix(e, "NULL_SPACE_INIT=") {
-			encoded := strings.TrimPrefix(e, "NULL_SPACE_INIT=")
-			if decoded, err := base64.StdEncoding.DecodeString(encoded); err == nil {
-				for _, line := range strings.Split(strings.TrimSpace(string(decoded)), "\n") {
-					line = strings.TrimSpace(line)
-					if line != "" && !strings.HasPrefix(line, "#") {
-						model.InitCommands = append(model.InitCommands, line)
-					}
-				}
-			}
-		}
-		if e == "NULL_SPACE_CLIENT=enhanced" {
-			model.IsEnhancedClient = true
-		}
-	}
-
-	program := tea.NewProgram(model, a.sessionProgramOptions(sess)...)
-	a.programsMu.Lock()
-	a.programs[playerID] = program
-	a.programsMu.Unlock()
-	return program
-}
-
-func (a *Server) sessionProgramOptions(sess ssh.Session) []tea.ProgramOption {
-	envs := sess.Environ()
-	if pty, _, ok := sess.Pty(); ok && pty.Term != "" {
-		envs = append(envs, "TERM="+pty.Term)
-	}
-	// Default to TrueColor if the client didn't send COLORTERM.
-	// Most modern terminals (Windows Terminal, iTerm2, etc.) support it,
-	// and without this the UI degrades to ugly ANSI-16 approximations.
-	hasColorTerm := false
-	for _, e := range envs {
-		if strings.HasPrefix(e, "COLORTERM=") {
-			hasColorTerm = true
-			break
-		}
-	}
-	if !hasColorTerm {
-		envs = append(envs, "COLORTERM=truecolor")
-	}
-	cp := colorprofile.Env(envs)
-	slog.Info("SSH session color profile", "profile", cp.String(), "envs_count", len(envs))
-	opts := wishbubbletea.MakeOptions(sess)
-	opts = append(opts,
-		tea.WithFPS(60),
-		tea.WithEnvironment(envs), // override MakeOptions' env to include COLORTERM
-		tea.WithColorProfile(cp),
-		tea.WithOutput(network.NewKittyStripWriter(sess)),
-	)
-	return opts
-}
-
-func (a *Server) registerSession(sess ssh.Session) *domain.Player {
-	player := &domain.Player{
-		ID:   sess.Context().SessionID(),
-		Name: a.uniqueName(sess.User()),
-	}
-
-	a.sessionsMu.Lock()
-	a.sessions[player.ID] = sess
-	a.sessionsMu.Unlock()
-
-	a.state.AddPlayer(player)
-	slog.Info("player joined", "player_id", player.ID, "name", player.Name)
-
-	joinMsg := domain.Message{
-		Author: "",
-		Text:   fmt.Sprintf("%s joined.", player.Name),
-	}
-	a.broadcastChat(joinMsg)
-	a.broadcastMsg(domain.PlayerJoinedMsg{Player: player})
-
-	a.broadcastMsg(domain.TeamUpdatedMsg{})
-
-	// Check if this player was disconnected from a running game.
-	a.state.Lock()
-	if oldID, ok := a.state.GameDisconnected[player.Name]; ok {
-		a.state.ReplaceGamePlayerID(oldID, player.ID)
-		delete(a.state.GameDisconnected, player.Name)
-		game := a.state.ActiveGame
-		a.state.Unlock()
-		a.serverLog(fmt.Sprintf("player %s rejoined game (was %s, now %s)", player.Name, oldID, player.ID))
-		// Refresh the teams cache so JS sees the updated player ID.
-		if jrt, ok := game.(*engine.JSRuntime); ok {
-			jrt.SetTeamsCache(a.buildTeamsCache())
-		}
-	} else {
-		a.state.Unlock()
-	}
-
-	return player
-}
-
-func (a *Server) unregisterSession(playerID string) {
-	player := a.state.GetPlayer(playerID)
-	if player != nil {
-		slog.Info("player left", "player_id", playerID, "name", player.Name)
-		a.broadcastChat(domain.Message{
-			Text: fmt.Sprintf("%s left.", player.Name),
-		})
-	}
-
-	// Notify the game if this player was in the active game.
-	if a.state.ActiveGame != nil && a.state.IsGamePlayer(playerID) {
-		a.state.ActiveGame.OnPlayerLeave(playerID)
-		if player != nil {
-			a.state.Lock()
-			a.state.GameDisconnected[player.Name] = playerID
-			a.state.Unlock()
-		}
-	}
-
-	// Always clean up lobby teams (game teams are a separate snapshot).
-	a.state.RemovePlayerFromTeams(playerID)
-	a.broadcastMsg(domain.TeamUpdatedMsg{})
-
-	a.state.RemovePlayer(playerID)
-
-	a.programsMu.Lock()
-	delete(a.programs, playerID)
-	a.programsMu.Unlock()
-
-	a.sessionsMu.Lock()
-	delete(a.sessions, playerID)
-	a.sessionsMu.Unlock()
-
-	a.broadcastMsg(domain.PlayerLeftMsg{PlayerID: playerID})
-}
 
 func (a *Server) runTicker(ctx context.Context) {
 	ticker := time.NewTicker(a.tickInterval)
@@ -537,97 +363,6 @@ func (a *Server) runTicker(ctx context.Context) {
 	}
 }
 
-func (a *Server) broadcastMsg(msg tea.Msg) {
-	a.programsMu.Lock()
-	progs := make([]*tea.Program, 0, len(a.programs))
-	for _, p := range a.programs {
-		progs = append(progs, p)
-	}
-	a.programsMu.Unlock()
-
-	for _, p := range progs {
-		go p.Send(msg)
-	}
-
-	a.consoleProgramMu.Lock()
-	cp := a.consoleProgram
-	a.consoleProgramMu.Unlock()
-	if cp != nil {
-		go cp.Send(msg)
-	}
-}
-
-func (a *Server) broadcastChat(msg domain.Message) {
-	start := time.Now()
-	a.state.AddChat(msg)
-
-	// Write to chat log file.
-	if a.chatLogFile != nil {
-		ts := time.Now().Format("2006-01-02 15:04:05")
-		var line string
-		switch {
-		case msg.IsPrivate:
-			line = fmt.Sprintf("%s [PM %s→%s] %s\n", ts, msg.FromID, msg.ToID, msg.Text)
-		case msg.Author == "":
-			line = fmt.Sprintf("%s [system] %s\n", ts, msg.Text)
-		default:
-			line = fmt.Sprintf("%s <%s> %s\n", ts, msg.Author, msg.Text)
-		}
-		_, _ = a.chatLogFile.WriteString(line)
-	}
-
-	select {
-	case a.chatCh <- msg:
-	default:
-	}
-
-	a.broadcastMsg(domain.ChatMsg{Msg: msg})
-	if dur := time.Since(start); dur > 100*time.Millisecond {
-		slog.Warn("broadcastChat slow", "duration", dur, "text", msg.Text)
-	}
-}
-
-func (a *Server) sendToPlayer(playerID string, msg tea.Msg) {
-	a.programsMu.Lock()
-	p := a.programs[playerID]
-	a.programsMu.Unlock()
-	if p != nil {
-		go p.Send(msg)
-	}
-}
-
-func (a *Server) kickPlayer(playerID string) error {
-	a.sessionsMu.RLock()
-	sess := a.sessions[playerID]
-	a.sessionsMu.RUnlock()
-	if sess == nil {
-		return fmt.Errorf("session not found")
-	}
-	return sess.Close()
-}
-
-// ShowDialog sends a modal dialog request to the specified player's TUI program.
-func (a *Server) ShowDialog(playerID string, d domain.DialogRequest) {
-	a.programsMu.Lock()
-	prog := a.programs[playerID]
-	a.programsMu.Unlock()
-	if prog != nil {
-		prog.Send(widget.ShowDialogMsg{Dialog: d})
-	}
-}
-
-func (a *Server) serverLog(line string) {
-	slog.Info(line)
-}
-
-// InstallConsoleSlogHandler wraps the current default slog handler to also
-// route records to the server's slogCh. Call after server creation.
-func (a *Server) InstallConsoleSlogHandler() {
-	existing := slog.Default().Handler()
-	handler := console.NewSlogHandler(a.slogCh, existing)
-	slog.SetDefault(slog.New(handler))
-}
-
 func (a *Server) uptime() string {
 	duration := time.Since(a.state.StartTime).Truncate(time.Second)
 	minutes := int(duration / time.Minute)
@@ -635,39 +370,6 @@ func (a *Server) uptime() string {
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
 }
 
-var romanNumerals = []string{
-	"", "", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
-	"XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX",
-}
-
-func (a *Server) uniqueName(raw string) string {
-	base := strings.TrimSpace(raw)
-	if base == "" {
-		base = "pilot"
-	}
-	// Replace spaces with hyphens.
-	base = strings.ReplaceAll(base, " ", "-")
-
-	// If this name belongs to a disconnected game player, let them reclaim it.
-	a.state.RLock()
-	_, isReconnect := a.state.GameDisconnected[base]
-	a.state.RUnlock()
-	if isReconnect {
-		return base
-	}
-
-	name := base
-	index := 2
-	for a.state.PlayerByName(name) != nil {
-		if index < len(romanNumerals) {
-			name = fmt.Sprintf("%s-%s", base, romanNumerals[index])
-		} else {
-			name = fmt.Sprintf("%s-%d", base, index)
-		}
-		index++
-	}
-	return name
-}
 
 func (a *Server) SetConsoleProgram(p *tea.Program) {
 	a.consoleProgramMu.Lock()
@@ -1123,7 +825,9 @@ func (l *noDelayListener) Accept() (net.Conn, error) {
 		return nil, err
 	}
 	if tc, ok := conn.(*net.TCPConn); ok {
-		_ = tc.SetNoDelay(true)
+		if err := tc.SetNoDelay(true); err != nil {
+			slog.Debug("TCP_NODELAY failed", "error", err)
+		}
 	}
 	return conn, nil
 }
