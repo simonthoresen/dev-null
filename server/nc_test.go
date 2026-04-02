@@ -16,12 +16,13 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/common"
+	"null-space/internal/theme"
 )
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
-func testTheme() *Theme        { return DefaultTheme() }
-func testLayer() *ThemeLayer   { return testTheme().LayerAt(0) }
+func testTheme() *theme.Theme  { return theme.Default() }
+func testLayer() *theme.Layer  { return testTheme().LayerAt(0) }
 
 func newTestTextInput() *textinput.Model {
 	m := new(textinput.Model)
@@ -48,7 +49,7 @@ func stripANSI(s string) string {
 }
 
 // renderControl is a test helper that renders a control into a ImageBuffer and returns the string.
-func renderControl(ctrl NCControl, w, h int, focused bool, layer *ThemeLayer) string {
+func renderControl(ctrl NCControl, w, h int, focused bool, layer *theme.Layer) string {
 	buf := common.NewImageBuffer(w, h)
 	ctrl.Render(buf, 0, 0, w, h, focused, layer)
 	return buf.ToString()
@@ -57,7 +58,7 @@ func renderControl(ctrl NCControl, w, h int, focused bool, layer *ThemeLayer) st
 // ─── Theme & Palette tests ────────────────────────────────────────────────────
 
 func TestDefaultThemeNotNil(t *testing.T) {
-	th := DefaultTheme()
+	th := theme.Default()
 	if th == nil {
 		t.Fatal("DefaultTheme returned nil")
 	}
@@ -67,7 +68,7 @@ func TestDefaultThemeNotNil(t *testing.T) {
 }
 
 func TestLayerAtDepth(t *testing.T) {
-	th := DefaultTheme()
+	th := theme.Default()
 	l0 := th.LayerAt(0)
 	l1 := th.LayerAt(1)
 	l2 := th.LayerAt(2)
@@ -92,7 +93,7 @@ func TestLayerAtDepth(t *testing.T) {
 }
 
 func TestWarningLayer(t *testing.T) {
-	th := DefaultTheme()
+	th := theme.Default()
 	w := th.WarningLayer()
 	if w != &th.Warning {
 		t.Error("WarningLayer should return Warning layer")
@@ -100,7 +101,7 @@ func TestWarningLayer(t *testing.T) {
 }
 
 func TestBorderDefaults(t *testing.T) {
-	th := DefaultTheme()
+	th := theme.Default()
 	layer := th.LayerAt(0)
 	if layer.OTL() != "╔" {
 		t.Errorf("expected double-line TL, got %q", layer.OTL())

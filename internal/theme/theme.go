@@ -1,4 +1,4 @@
-package server
+package theme
 
 import (
 	"encoding/json"
@@ -87,35 +87,35 @@ type BorderSet struct {
 	BarSep  string `json:"barSep,omitempty"`
 }
 
-// ─── ThemeLayer ──────────────────────────────────────────────────────────────
+// ─── Layer ───────────────────────────────────────────────────────────────────
 
-// ThemeLayer combines a color palette and border characters for one depth level.
-type ThemeLayer struct {
+// Layer combines a color palette and border characters for one depth level.
+type Layer struct {
 	Palette   // embedded — promotes BaseStyle(), HighlightStyle(), etc.
 	BorderSet // embedded — border fields
 }
 
 // Outer border accessors (default: double-line, matching NC windows).
-func (l *ThemeLayer) OTL() string { return ts(l.OuterTL, "╔") }
-func (l *ThemeLayer) OTR() string { return ts(l.OuterTR, "╗") }
-func (l *ThemeLayer) OBL() string { return ts(l.OuterBL, "╚") }
-func (l *ThemeLayer) OBR() string { return ts(l.OuterBR, "╝") }
-func (l *ThemeLayer) OH() string  { return ts(l.OuterH, "═") }
-func (l *ThemeLayer) OV() string  { return ts(l.OuterV, "║") }
+func (l *Layer) OTL() string { return ts(l.OuterTL, "╔") }
+func (l *Layer) OTR() string { return ts(l.OuterTR, "╗") }
+func (l *Layer) OBL() string { return ts(l.OuterBL, "╚") }
+func (l *Layer) OBR() string { return ts(l.OuterBR, "╝") }
+func (l *Layer) OH() string  { return ts(l.OuterH, "═") }
+func (l *Layer) OV() string  { return ts(l.OuterV, "║") }
 
 // Inner divider accessors (default: single-line).
-func (l *ThemeLayer) IH() string { return ts(l.InnerH, "─") }
-func (l *ThemeLayer) IV() string { return ts(l.InnerV, "│") }
+func (l *Layer) IH() string { return ts(l.InnerH, "─") }
+func (l *Layer) IV() string { return ts(l.InnerV, "│") }
 
 // Intersection accessors (inner single meets outer double).
-func (l *ThemeLayer) XL() string { return ts(l.CrossL, "╟") }
-func (l *ThemeLayer) XR() string { return ts(l.CrossR, "╢") }
-func (l *ThemeLayer) XT() string { return ts(l.CrossT, "╤") }
-func (l *ThemeLayer) XB() string { return ts(l.CrossB, "╧") }
-func (l *ThemeLayer) XX() string { return ts(l.CrossX, "┼") }
+func (l *Layer) XL() string { return ts(l.CrossL, "╟") }
+func (l *Layer) XR() string { return ts(l.CrossR, "╢") }
+func (l *Layer) XT() string { return ts(l.CrossT, "╤") }
+func (l *Layer) XB() string { return ts(l.CrossB, "╧") }
+func (l *Layer) XX() string { return ts(l.CrossX, "┼") }
 
 // Action bar separator.
-func (l *ThemeLayer) Sep() string { return ts(l.BarSep, "│") }
+func (l *Layer) Sep() string { return ts(l.BarSep, "│") }
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -132,10 +132,10 @@ func (l *ThemeLayer) Sep() string { return ts(l.BarSep, "│") }
 type Theme struct {
 	Name string `json:"name"`
 
-	Primary   ThemeLayer `json:"primary"`
-	Secondary ThemeLayer `json:"secondary"`
-	Tertiary  ThemeLayer `json:"tertiary"`
-	Warning   ThemeLayer `json:"warning"`
+	Primary   Layer `json:"primary"`
+	Secondary Layer `json:"secondary"`
+	Tertiary  Layer `json:"tertiary"`
+	Warning   Layer `json:"warning"`
 
 	// Drop shadow (bg = shadow area, fg = half-block foreground for depth effect)
 	ShadowBg string `json:"shadowBg"`
@@ -162,7 +162,7 @@ type Theme struct {
 
 // LayerAt returns the theme layer for the given depth level.
 // Depth 0 = Primary, odd = Secondary, even > 0 = Tertiary.
-func (t *Theme) LayerAt(depth int) *ThemeLayer {
+func (t *Theme) LayerAt(depth int) *Layer {
 	switch {
 	case depth <= 0:
 		return &t.Primary
@@ -174,7 +174,7 @@ func (t *Theme) LayerAt(depth int) *ThemeLayer {
 }
 
 // WarningLayer returns the warning theme layer.
-func (t *Theme) WarningLayer() *ThemeLayer { return &t.Warning }
+func (t *Theme) WarningLayer() *Layer { return &t.Warning }
 
 // Global color accessors.
 func (t *Theme) ShadowBgC() color.Color { return tc(t.ShadowBg, "#000000") }
@@ -196,7 +196,7 @@ func ts(s, fallback string) string {
 // resolveDefaults copies global (legacy) border fields into any layer
 // that has empty border fields, providing JSON backwards compatibility.
 func (t *Theme) resolveDefaults() {
-	for _, layer := range []*ThemeLayer{&t.Primary, &t.Secondary, &t.Tertiary, &t.Warning} {
+	for _, layer := range []*Layer{&t.Primary, &t.Secondary, &t.Tertiary, &t.Warning} {
 		copyIfEmpty(&layer.OuterTL, t.LegacyOuterTL)
 		copyIfEmpty(&layer.OuterTR, t.LegacyOuterTR)
 		copyIfEmpty(&layer.OuterBL, t.LegacyOuterBL)
@@ -220,8 +220,8 @@ func copyIfEmpty(dst *string, src string) {
 	}
 }
 
-// LoadTheme reads a theme JSON file and returns the parsed Theme.
-func LoadTheme(path string) (*Theme, error) {
+// Load reads a theme JSON file and returns the parsed Theme.
+func Load(path string) (*Theme, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -237,32 +237,32 @@ func LoadTheme(path string) (*Theme, error) {
 	return &t, nil
 }
 
-// DefaultTheme returns the built-in norton theme.
-func DefaultTheme() *Theme {
+// Default returns the built-in norton theme.
+func Default() *Theme {
 	return &Theme{
 		Name: "norton",
-		Primary: ThemeLayer{Palette: Palette{
+		Primary: Layer{Palette: Palette{
 			Bg: "#000080", Fg: "#00AAAA", Accent: "#FFFF55",
 			HighlightBg: "#00AAAA", HighlightFg: "#000000",
 			ActiveBg: "#FFFF55", ActiveFg: "#000000",
 			InputBg: "#000000", InputFg: "#55FFFF",
 			DisabledFg: "#555555",
 		}},
-		Secondary: ThemeLayer{Palette: Palette{
+		Secondary: Layer{Palette: Palette{
 			Bg: "#008080", Fg: "#000000", Accent: "#FFFF55",
 			HighlightBg: "#000000", HighlightFg: "#00AAAA",
 			ActiveBg: "#FFFF55", ActiveFg: "#000000",
 			InputBg: "#000000", InputFg: "#55FFFF",
 			DisabledFg: "#555555",
 		}},
-		Tertiary: ThemeLayer{Palette: Palette{
+		Tertiary: Layer{Palette: Palette{
 			Bg: "#AAAAAA", Fg: "#000000", Accent: "#FFFF55",
 			HighlightBg: "#000000", HighlightFg: "#FFFFFF",
 			ActiveBg: "#FFFF55", ActiveFg: "#000000",
 			InputBg: "#000000", InputFg: "#55FFFF",
 			DisabledFg: "#555555",
 		}},
-		Warning: ThemeLayer{Palette: Palette{
+		Warning: Layer{Palette: Palette{
 			Bg: "#AA0000", Fg: "#FFFFFF", Accent: "#FFFF55",
 			HighlightBg: "#FFFFFF", HighlightFg: "#AA0000",
 			ActiveBg: "#FFFF55", ActiveFg: "#000000",

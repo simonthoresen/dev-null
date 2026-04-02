@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/common"
+	"null-space/internal/theme"
 )
 
 // lobbyTeamPanelW is the fixed width of the team panel in the lobby.
@@ -92,7 +93,7 @@ type chromeModel struct {
 	initCommands []string
 
 	// Per-player theme
-	theme *Theme
+	theme *theme.Theme
 
 	// Per-player plugins
 	plugins     []*jsPlugin
@@ -172,7 +173,7 @@ func newChromeModel(app *Server, playerID string) chromeModel {
 		input:          input,
 		teamEditInput:  teamInput,
 		historyIdx:     -1,
-		theme:          DefaultTheme(),
+		theme:          theme.Default(),
 		overlay:        overlayState{openMenu: -1},
 		lobbyWindow:    lobbyWindow,
 		lobbyChatView:  lobbyChatView,
@@ -1464,7 +1465,7 @@ func (m *chromeModel) submitInput() {
 func (m *chromeModel) handleThemeCommand(input string) {
 	parts := strings.Fields(input)
 	if len(parts) <= 1 {
-		available := ListThemes(m.app.dataDir)
+		available := theme.ListThemes(m.app.dataDir)
 		if len(available) == 0 {
 			m.pluginReply("No themes found in themes/")
 			return
@@ -1482,7 +1483,7 @@ func (m *chromeModel) handleThemeCommand(input string) {
 	}
 	name := parts[1]
 	path := filepath.Join(m.app.dataDir, "themes", name+".json")
-	t, err := LoadTheme(path)
+	t, err := theme.Load(path)
 	if err != nil {
 		m.pluginReply(fmt.Sprintf("Failed to load theme: %v", err))
 		return

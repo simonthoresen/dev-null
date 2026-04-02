@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
+
+	"null-space/internal/theme"
 )
 
 var benchDuration = flag.Duration("nc.benchtime", 10*time.Second, "how long to run NC render benchmark")
@@ -25,7 +27,7 @@ var benchDuration = flag.Duration("nc.benchtime", 10*time.Second, "how long to r
 //	2026-04-01  827 µs/op
 //	2026-04-01  121 µs/op  (cellbuf rewrite — 6.8x speedup)
 func BenchmarkComplexNCRender(b *testing.B) {
-	theme := DefaultTheme()
+	theme := theme.Default()
 	layer := theme.LayerAt(0)
 
 	window := buildComplexWindow()

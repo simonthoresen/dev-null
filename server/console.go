@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"null-space/common"
+	"null-space/internal/theme"
 )
 
 // logCategory tags console log lines for filtering.
@@ -52,7 +53,7 @@ type consoleModel struct {
 	tabIndex      int
 
 	// Per-console theme
-	theme *Theme
+	theme *theme.Theme
 
 	// NC overlay (menus, dialogs)
 	overlay overlayState
@@ -102,7 +103,7 @@ func NewConsoleModel(app *Server, cancel context.CancelFunc) *consoleModel {
 			catCommand: true,
 			// catDebug defaults to false
 		},
-		theme:     DefaultTheme(),
+		theme:     theme.Default(),
 		overlay:   overlayState{openMenu: -1},
 	}
 
@@ -591,7 +592,7 @@ func (m *consoleModel) submitInput(text string) {
 func (m *consoleModel) handleThemeCommand(input string) {
 	parts := strings.Fields(input)
 	if len(parts) <= 1 {
-		available := ListThemes(m.app.dataDir)
+		available := theme.ListThemes(m.app.dataDir)
 		if len(available) == 0 {
 			m.appendLog("No themes found in themes/")
 			return
@@ -609,7 +610,7 @@ func (m *consoleModel) handleThemeCommand(input string) {
 	}
 	name := parts[1]
 	path := filepath.Join(m.app.dataDir, "themes", name+".json")
-	t, err := LoadTheme(path)
+	t, err := theme.Load(path)
 	if err != nil {
 		m.appendLog(fmt.Sprintf("Failed to load theme: %v", err))
 		return

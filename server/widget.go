@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/common"
+	"null-space/internal/theme"
 )
 
 
@@ -503,7 +504,7 @@ type overlayBox struct {
 // ─── Menu bar rendering ────────────────────────────────────────────────────────
 
 // renderNCBar renders the NC-style action bar row (full terminal width).
-func (o *overlayState) renderNCBar(width int, menus []common.MenuDef, layer *ThemeLayer) string {
+func (o *overlayState) renderNCBar(width int, menus []common.MenuDef, layer *theme.Layer) string {
 	barStyle     := layer.BaseStyle()
 	activeStyle  := layer.HighlightStyle()
 	barAccent    := layer.AccentStyle()
@@ -552,7 +553,7 @@ func ncBarMenuPositions(menus []common.MenuDef) []int {
 
 // renderDropdown returns (overlayString, col, row) for PlaceOverlay.
 // ncBarRow is the screen row (0-based) of the NC action bar.
-func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, layer *ThemeLayer) overlayBox {
+func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, layer *theme.Layer) overlayBox {
 	if o.openMenu < 0 || o.openMenu >= len(menus) {
 		return overlayBox{}
 	}
@@ -662,7 +663,7 @@ func (o *overlayState) renderDropdown(menus []common.MenuDef, ncBarRow int, laye
 // ─── Dialog rendering ──────────────────────────────────────────────────────────
 
 // renderDialog returns an overlayBox for PlaceOverlay, centered in the screen.
-func (o *overlayState) renderDialog(screenW, screenH int, layer *ThemeLayer) overlayBox {
+func (o *overlayState) renderDialog(screenW, screenH int, layer *theme.Layer) overlayBox {
 	d := o.topDialog()
 	if d == nil {
 		return overlayBox{}

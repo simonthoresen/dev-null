@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/common"
+	"null-space/internal/theme"
 )
 
 // ─── Screen test harness ─────────────────────────────────────────────────────
@@ -209,9 +210,9 @@ func TestScreenRegionOutOfBounds(t *testing.T) {
 // ─── Theme border tests ─────────────────────────────────────────────────────
 
 // singleLineTheme returns a theme that uses single-line box drawing chars.
-func singleLineTheme() *Theme {
-	th := DefaultTheme()
-	for _, l := range []*ThemeLayer{&th.Primary, &th.Secondary, &th.Tertiary, &th.Warning} {
+func singleLineTheme() *theme.Theme {
+	th := theme.Default()
+	for _, l := range []*theme.Layer{&th.Primary, &th.Secondary, &th.Tertiary, &th.Warning} {
 		l.OuterTL = "┌"
 		l.OuterTR = "┐"
 		l.OuterBL = "└"
@@ -228,9 +229,9 @@ func singleLineTheme() *Theme {
 }
 
 // asciiTheme returns a theme with plain ASCII borders.
-func asciiTheme() *Theme {
-	th := DefaultTheme()
-	for _, l := range []*ThemeLayer{&th.Primary, &th.Secondary, &th.Tertiary, &th.Warning} {
+func asciiTheme() *theme.Theme {
+	th := theme.Default()
+	for _, l := range []*theme.Layer{&th.Primary, &th.Secondary, &th.Tertiary, &th.Warning} {
 		l.OuterTL = "+"
 		l.OuterTR = "+"
 		l.OuterBL = "+"
@@ -254,7 +255,7 @@ func TestNCWindowBordersDefaultTheme(t *testing.T) {
 			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
 		},
 	}
-	th := DefaultTheme()
+	th := theme.Default()
 	output := win.Render(0, 0, 10, 3, th.LayerAt(0))
 	s := newScreen(output)
 
@@ -362,7 +363,7 @@ func TestMenuBarSeparatorFromTheme(t *testing.T) {
 	}
 
 	// Default theme separator is │.
-	th := DefaultTheme()
+	th := theme.Default()
 	output := o.renderNCBar(30, menus, th.LayerAt(1))
 	s := newScreen(output)
 	if !strings.Contains(s.lines[0], "│") {
@@ -424,7 +425,7 @@ func TestSameLayoutDifferentThemeBorders(t *testing.T) {
 		}
 	}
 
-	themes := []*Theme{DefaultTheme(), singleLineTheme(), asciiTheme()}
+	themes := []*theme.Theme{theme.Default(), singleLineTheme(), asciiTheme()}
 	corners := [][4]string{
 		{"╔", "╗", "╚", "╝"},
 		{"┌", "┐", "└", "┘"},
@@ -461,8 +462,8 @@ func TestSameLayoutDifferentThemeBorders(t *testing.T) {
 
 // distinctPaletteTheme creates a theme where each palette has a unique,
 // easily-identifiable background color.
-func distinctPaletteTheme() *Theme {
-	th := DefaultTheme()
+func distinctPaletteTheme() *theme.Theme {
+	th := theme.Default()
 	th.Primary.Bg = "#110000"   // depth 0
 	th.Secondary.Bg = "#002200" // depth 1, 3, 5...
 	th.Tertiary.Bg = "#000033"  // depth 2, 4, 6...
@@ -614,8 +615,8 @@ func TestNCBarPaletteMatchesDepth(t *testing.T) {
 
 // layeredBorderTheme creates a theme where each layer has distinct border chars,
 // allowing depth cycling to be verified structurally from stripped text.
-func layeredBorderTheme() *Theme {
-	th := DefaultTheme()
+func layeredBorderTheme() *theme.Theme {
+	th := theme.Default()
 	// Primary (depth 0): double-line (default)
 	th.Primary.OuterTL = "╔"
 	th.Primary.OuterTR = "╗"
