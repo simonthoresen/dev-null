@@ -279,17 +279,27 @@ func TestReconcileCacheInvalidatesOnChange(t *testing.T) {
 
 	cached1 := gw1.Controls["0.0"]
 	cached2 := gw2.Controls["0.0"]
-	if cached1.Control == cached2.Control {
+
+	// Unwrap RenderCached to find the inner Label.
+	unwrap := func(ctrl Control) Control {
+		if rc, ok := ctrl.(*RenderCached); ok {
+			return rc.Inner
+		}
+		return ctrl
+	}
+	inner1 := unwrap(cached1.Control)
+	inner2 := unwrap(cached2.Control)
+	if inner1 == inner2 {
 		t.Error("label control should be rebuilt when text changes, but same pointer was reused")
 	}
 
 	// Verify the new label has the updated text.
-	if label, ok := cached2.Control.(*Label); ok {
+	if label, ok := inner2.(*Label); ok {
 		if label.Text != "v2" {
 			t.Errorf("expected label text 'v2', got %q", label.Text)
 		}
 	} else {
-		t.Error("expected *Label at path 0.0")
+		t.Errorf("expected *Label at path 0.0, got %T", inner2)
 	}
 }
 
@@ -299,6 +309,9 @@ func TestReconcileCacheInvalidatesOnChange(t *testing.T) {
 func findButton(ctrl Control) (*Button, bool) {
 	if btn, ok := ctrl.(*Button); ok {
 		return btn, true
+	}
+	if rc, ok := ctrl.(*RenderCached); ok {
+		return findButton(rc.Inner)
 	}
 	if c, ok := ctrl.(*Container); ok {
 		for _, child := range c.Children {
@@ -321,6 +334,9 @@ func findButton(ctrl Control) (*Button, bool) {
 func findTextView(ctrl Control) (*TextView, bool) {
 	if tv, ok := ctrl.(*TextView); ok {
 		return tv, true
+	}
+	if rc, ok := ctrl.(*RenderCached); ok {
+		return findTextView(rc.Inner)
 	}
 	if c, ok := ctrl.(*Container); ok {
 		for _, child := range c.Children {

@@ -166,6 +166,24 @@ func (gw *GameWindow) buildControl(node *common.WidgetNode, path string, prev ma
 		ctrl = gw.buildGameView(node)
 	}
 
+	// Wrap cacheable controls in RenderCached for pixel-level caching.
+	// Controls with hash=0 (gameview, interactive) render every frame.
+	if hash != 0 {
+		// Carry forward the cached pixels from prev if the wrapper exists.
+		var prevRC *RenderCached
+		if cached, ok := prev[path]; ok {
+			prevRC, _ = cached.Control.(*RenderCached)
+		}
+		rc := &RenderCached{Inner: ctrl, Hash: hash}
+		if prevRC != nil {
+			rc.cached = prevRC.cached
+			rc.cachedW = prevRC.cachedW
+			rc.cachedH = prevRC.cachedH
+			rc.prevHash = prevRC.prevHash
+		}
+		ctrl = rc
+	}
+
 	gw.Controls[path] = CachedControl{NodeType: node.Type, Control: ctrl, Hash: hash, ChildPaths: childPaths}
 	return ctrl
 }
