@@ -23,6 +23,7 @@ var benchDuration = flag.Duration("nc.benchtime", 10*time.Second, "how long to r
 // Performance history (AMD Ryzen 9 9950X, 120x40):
 //
 //	2026-04-01  827 µs/op
+//	2026-04-01  121 µs/op  (cellbuf rewrite — 6.8x speedup)
 func BenchmarkComplexNCRender(b *testing.B) {
 	theme := DefaultTheme()
 	layer := theme.LayerAt(0)
