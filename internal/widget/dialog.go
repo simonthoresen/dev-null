@@ -21,8 +21,13 @@ type dialogEntry struct {
 	closed  bool        // set true by button OnPress
 }
 
+// dialogPad is the number of cells of padding between dialog border and content.
+const dialogPad = 1
+
 // buildDialogWindow constructs an NC Window from a DialogRequest.
-// The returned dialogEntry owns the Window and all child controls.
+// Content is placed in a 3-column grid (pad | content | pad) with spacer rows
+// at top and bottom, giving 1-cell padding between the border and content
+// without modifying the Window class.
 func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 	entry := &dialogEntry{request: d}
 
@@ -35,7 +40,13 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 
 	var children []GridChild
 	tabIdx := 0
-	row := 0
+	row := 1 // row 0 is top padding
+
+	// Top-left spacer: establishes padding column 0 and padding row 0.
+	children = append(children, GridChild{
+		Control:    &Label{Text: ""},
+		Constraint: GridConstraint{Col: 0, Row: 0, MinW: dialogPad, MinH: dialogPad},
+	})
 
 	// --- Content area: body text OR list ---
 	if hasList {
@@ -45,18 +56,17 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 			Control:  lb,
 			TabIndex: tabIdx,
 			Constraint: GridConstraint{
-				Col: 0, Row: row, WeightX: 1, WeightY: 1, Fill: FillBoth,
+				Col: 1, Row: row, WeightX: 1, WeightY: 1, Fill: FillBoth,
 			},
 		})
 		tabIdx++
 	} else if d.Body != "" {
 		bodyLines := strings.Split(d.Body, "\n")
-		// Use a non-scrollable TextView to display multi-line body text.
 		tv := &TextView{Lines: bodyLines}
 		children = append(children, GridChild{
 			Control: tv,
 			Constraint: GridConstraint{
-				Col: 0, Row: row, WeightX: 1,
+				Col: 1, Row: row, WeightX: 1,
 				MinH: len(bodyLines), Fill: FillBoth,
 			},
 		})
@@ -67,7 +77,7 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 	children = append(children, GridChild{
 		Control: &HDivider{},
 		Constraint: GridConstraint{
-			Col: 0, Row: row, MinH: 1, Fill: FillHorizontal,
+			Col: 1, Row: row, MinH: 1, Fill: FillHorizontal,
 		},
 	})
 	row++
@@ -85,7 +95,7 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 			Control:  ti,
 			TabIndex: tabIdx,
 			Constraint: GridConstraint{
-				Col: 0, Row: row, WeightX: 1, Fill: FillHorizontal,
+				Col: 1, Row: row, WeightX: 1, Fill: FillHorizontal,
 			},
 		})
 		tabIdx++
@@ -94,7 +104,7 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 		children = append(children, GridChild{
 			Control: &HDivider{},
 			Constraint: GridConstraint{
-				Col: 0, Row: row, MinH: 1, Fill: FillHorizontal,
+				Col: 1, Row: row, MinH: 1, Fill: FillHorizontal,
 			},
 		})
 		row++
@@ -121,15 +131,21 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 		Control:  btnContainer,
 		TabIndex: tabIdx,
 		Constraint: GridConstraint{
-			Col: 0, Row: row, WeightX: 1, Fill: FillHorizontal,
+			Col: 1, Row: row, WeightX: 1, Fill: FillHorizontal,
 		},
+	})
+	row++
+
+	// Bottom-right spacer: establishes padding column 2 and padding bottom row.
+	children = append(children, GridChild{
+		Control:    &Label{Text: ""},
+		Constraint: GridConstraint{Col: 2, Row: row, MinW: dialogPad, MinH: dialogPad},
 	})
 
 	// --- Assemble Window ---
 	win := &Window{
 		Title:    d.Title,
 		Children: children,
-		Padding:  1,
 	}
 	// Focus the first focusable child (list, input, or buttons).
 	win.FocusIdx = -1
@@ -206,9 +222,8 @@ func (o *OverlayState) DialogSize(screenW, screenH int) (int, int) {
 		minW = tw
 	}
 
-	pad := entry.window.Padding
-	w := minW + 2 + 2*pad // + borders + horizontal padding
-	h := minH + 2*pad     // + vertical padding
+	w := minW + 2 + 2*dialogPad // + borders + padding columns
+	h := minH
 	if w > screenW-4 {
 		w = screenW - 4
 	}
