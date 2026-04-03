@@ -304,7 +304,7 @@ func (m *Model) consoleMenus() []domain.MenuDef {
 				{Label: "&Themes...", Handler: func(_ string) { m.showListDialog("Themes", "themes", ".json") }},
 				{Label: "&Shaders...", Handler: func(_ string) { m.showShaderDialog() }},
 				{Label: "---"},
-				{Label: "&Shutdown", Hotkey: "ctrl+q", Handler: func(_ string) {
+				{Label: "S&hutdown", Hotkey: "ctrl+q", Handler: func(_ string) {
 					m.overlay.PushDialog(domain.DialogRequest{
 						Title:   "Shutdown",
 						Body:    "Are you sure you want to shut down the server?",
