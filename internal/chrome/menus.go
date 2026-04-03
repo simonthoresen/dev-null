@@ -9,8 +9,6 @@ import (
 	"null-space/internal/engine"
 )
 
-// allMenus returns the full ordered list of menus for the NC action bar:
-// the framework "File" menu followed by any game-registered menus.
 // invalidateMenuCache forces the next cachedMenus() call to rebuild.
 func (m *Model) invalidateMenuCache() {
 	m.menuCache = nil
@@ -27,7 +25,7 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 	}
 
 	fileItems := []domain.MenuItemDef{
-		{Label: "&Resume Game...", Handler: func(_ string) { m.showResumeGameDialog() }},
+		{Label: "&Games...", Handler: func(_ string) { m.showGamesDialog() }},
 		{Label: "---"},
 		{Label: "&Themes...", Handler: func(_ string) { m.showPlayerListDialog("Themes", "themes", ".json") }},
 		{Label: "&Plugins...", Handler: func(_ string) { m.showPlayerListDialog("Plugins", "plugins", ".js") }},
@@ -70,61 +68,64 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 	return menus
 }
 
-func (m *Model) showResumeGameDialog() {
-	saves := m.api.ListSuspends()
-	if len(saves) == 0 {
-		m.overlay.PushDialog(domain.DialogRequest{
-			Title:   "Resume Game",
-			Body:    "No suspended games found.",
-			Buttons: []string{"OK"},
-		})
-		return
-	}
+func (m *Model) showGamesDialog() {
+	m.api.State().RLock()
+	player := m.api.State().Players[m.playerID]
+	phase := m.api.State().GamePhase
+	gameName := m.api.State().GameName
+	m.api.State().RUnlock()
 
-	teamCount := m.api.State().TeamCount()
+	isAdmin := player != nil && player.IsAdmin
+	available := engine.ListGames(filepath.Join(m.api.DataDir(), "games"))
+	saves := m.api.ListSuspends()
 
 	var lines []string
-	var buttons []string
-	for i, s := range saves {
-		if i >= 9 {
-			break // limit to 9 saves in the dialog
+
+	// Current game status.
+	if phase != domain.PhaseNone && gameName != "" {
+		status := "playing"
+		if phase == domain.PhaseSuspended {
+			status = "suspended"
 		}
-		teamNote := ""
-		if s.TeamCount != teamCount {
-			teamNote = fmt.Sprintf("  (lobby has %d teams)", teamCount)
-		}
-		lines = append(lines, fmt.Sprintf("  %d. %s/%s  (%d teams, %s)%s",
-			i+1, s.GameName, s.SaveName, s.TeamCount, s.SavedAt.Format(domain.TimeFormatShort), teamNote))
-		buttons = append(buttons, fmt.Sprintf("%d", i+1))
+		lines = append(lines, fmt.Sprintf("Current: %s (%s)", gameName, status))
+		lines = append(lines, "")
 	}
-	buttons = append(buttons, "Cancel")
 
-	body := strings.Join(lines, "\n")
+	// Available games.
+	lines = append(lines, "Available games:")
+	if len(available) == 0 {
+		lines = append(lines, "  (none)")
+	} else {
+		for _, name := range available {
+			lines = append(lines, "  "+name)
+		}
+	}
 
-	// Capture saves slice for the OnClose callback.
-	capturedSaves := saves
+	// Suspended saves.
+	if len(saves) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "Suspended:")
+		teamCount := m.api.State().TeamCount()
+		for _, s := range saves {
+			teamNote := ""
+			if s.TeamCount != teamCount {
+				teamNote = fmt.Sprintf("  (lobby has %d teams)", teamCount)
+			}
+			lines = append(lines, fmt.Sprintf("  %s/%s  (%d teams, %s)%s",
+				s.GameName, s.SaveName, s.TeamCount,
+				s.SavedAt.Format(domain.TimeFormatShort), teamNote))
+		}
+	}
+
+	if isAdmin {
+		lines = append(lines, "")
+		lines = append(lines, "Use /game load|unload|suspend|resume")
+	}
+
 	m.overlay.PushDialog(domain.DialogRequest{
-		Title:   "Resume Game",
-		Body:    body,
-		Buttons: buttons,
-		OnClose: func(button string) {
-			if button == "Cancel" || button == "" {
-				return
-			}
-			idx := 0
-			fmt.Sscanf(button, "%d", &idx)
-			if idx < 1 || idx > len(capturedSaves) {
-				return
-			}
-			s := capturedSaves[idx-1]
-			if err := m.api.ResumeGame(s.GameName, s.SaveName); err != nil {
-				m.overlay.PushDialog(domain.DialogRequest{
-					Title:   "Resume Failed",
-					Body:    err.Error(),
-					Buttons: []string{"OK"},
-				})
-			}
-		},
+		Title:   "Games",
+		Body:    strings.Join(lines, "\n"),
+		Buttons: []string{"Close"},
 	})
 }
 

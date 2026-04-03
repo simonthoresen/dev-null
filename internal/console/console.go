@@ -295,13 +295,11 @@ func (m *Model) consoleMenus() []domain.MenuDef {
 			Label: "&File",
 			Items: []domain.MenuItemDef{
 				{Label: "&Themes...", Handler: func(_ string) { m.showListDialog("Themes", "themes", ".json") }},
-				{Label: "&Plugins...", Handler: func(_ string) { m.showListDialog("Plugins", "plugins", ".js") }},
 				{Label: "&Shaders...", Handler: func(_ string) { m.showShaderDialog() }},
-				{Label: "&Games...", Handler: func(_ string) { m.showListDialog("Games", "games", ".js") }},
 				{Label: "---"},
-				{Label: "E&xit", Hotkey: "ctrl+q", Handler: func(_ string) {
+				{Label: "&Shutdown", Hotkey: "ctrl+q", Handler: func(_ string) {
 					m.overlay.PushDialog(domain.DialogRequest{
-						Title:   "Exit",
+						Title:   "Shutdown",
 						Body:    "Are you sure you want to shut down the server?",
 						Buttons: []string{"Yes", "No"},
 						OnClose: func(btn string) {
