@@ -60,7 +60,7 @@ func (w *Window) RenderToBuf(buf *render.ImageBuffer, x, y, width, height int, l
 		buf.SetChar(x+width-1, y, render.RuneOf(layer.OuterTR), fg, bg, render.AttrNone)
 		if w.Title != "" {
 			titleText := " " + w.Title + " "
-			buf.SetChar(x+1, y, render.RuneOf(layer.InnerH), fg, bg, render.AttrNone)
+			buf.SetChar(x+1, y, render.RuneOf(layer.OuterH), fg, bg, render.AttrNone)
 			n := buf.WriteString(x+2, y, titleText, hlFg, hlBg, render.AttrBold)
 			for col := x + 2 + n; col < x+width-1; col++ {
 				buf.SetChar(col, y, render.RuneOf(layer.OuterH), fg, bg, render.AttrNone)

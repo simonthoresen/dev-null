@@ -201,11 +201,8 @@ func TestDialogBordersASCIITheme(t *testing.T) {
 	if !strings.Contains(s.lines[0], "---") {
 		t.Errorf("expected --- in top border, got %q", s.lines[0])
 	}
-	// Title separator uses CrossL/CrossR + inner-H (after padding row).
+	// Dialog dividers are non-connected — separator floats inside padding.
 	sepRow := 3 // top border + padding + body
-	if !strings.HasPrefix(s.lines[sepRow], "+") || !strings.HasSuffix(s.lines[sepRow], "+") {
-		t.Errorf("expected ASCII separator at row %d, got %q", sepRow, s.lines[sepRow])
-	}
 	if !strings.Contains(s.lines[sepRow], "...") {
 		t.Errorf("expected ... in separator at row %d, got %q", sepRow, s.lines[sepRow])
 	}
@@ -557,10 +554,10 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 	if !strings.HasPrefix(s2.lines[0], "+") || !strings.HasSuffix(s2.lines[0], "+") {
 		t.Errorf("depth 2 dialog: expected ASCII top, got %q", s2.lines[0])
 	}
-	// Title separator should use Tertiary CrossL/CrossR (after padding row).
+	// Dialog dividers are non-connected — separator floats inside padding.
 	sepRow := 3 // top border + padding + body
-	if !strings.HasPrefix(s2.lines[sepRow], "+") || !strings.HasSuffix(s2.lines[sepRow], "+") {
-		t.Errorf("depth 2 dialog separator: expected +...+, got %q", s2.lines[sepRow])
+	if !strings.Contains(s2.lines[sepRow], ".") {
+		t.Errorf("depth 2 dialog separator: expected dots at row %d, got %q", sepRow, s2.lines[sepRow])
 	}
 
 	// Depth 1 → Secondary → single-line.

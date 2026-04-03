@@ -65,7 +65,7 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 
 	// Divider before input or buttons.
 	children = append(children, GridChild{
-		Control: &HDivider{Connected: true},
+		Control: &HDivider{},
 		Constraint: GridConstraint{
 			Col: 0, Row: row, MinH: 1, Fill: FillHorizontal,
 		},
@@ -92,7 +92,7 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 		row++
 
 		children = append(children, GridChild{
-			Control: &HDivider{Connected: true},
+			Control: &HDivider{},
 			Constraint: GridConstraint{
 				Col: 0, Row: row, MinH: 1, Fill: FillHorizontal,
 			},
