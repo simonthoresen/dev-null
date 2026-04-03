@@ -129,6 +129,7 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 	win := &Window{
 		Title:    d.Title,
 		Children: children,
+		Padding:  1,
 	}
 	// Focus the first focusable child (list, input, or buttons).
 	win.FocusIdx = -1
@@ -205,8 +206,9 @@ func (o *OverlayState) DialogSize(screenW, screenH int) (int, int) {
 		minW = tw
 	}
 
-	w := minW + 2 // + borders
-	h := minH
+	pad := entry.window.Padding
+	w := minW + 2 + 2*pad // + borders + horizontal padding
+	h := minH + 2*pad     // + vertical padding
 	if w > screenW-4 {
 		w = screenW - 4
 	}

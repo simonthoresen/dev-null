@@ -16,6 +16,7 @@ type Window struct {
 	Children    []GridChild
 	FocusIdx    int  // index into Children; -1 = none
 	NoTopBorder bool // skip top border row (e.g. when menu bar sits above)
+	Padding     int  // inner padding between border and content (cells)
 
 	// Computed during Render.
 	screenX, screenY int
@@ -38,12 +39,12 @@ func (w *Window) RenderToBuf(buf *render.ImageBuffer, x, y, width, height int, l
 	w.screenY = y
 	w.width = width
 	w.height = height
-	w.innerW = max(1, width-2)
+	w.innerW = max(1, width-2-2*w.Padding)
 	topRows := 1
 	if w.NoTopBorder {
 		topRows = 0
 	}
-	w.innerH = max(1, height-1-topRows) // bottom border + optional top border
+	w.innerH = max(1, height-1-topRows-2*w.Padding) // bottom border + optional top border + padding
 
 	fg := layer.Fg
 	bg := layer.Bg
@@ -185,7 +186,7 @@ func (w *Window) computeGrid() {
 	// Compute absolute positions.
 	w.cellX = reuseIntSlice(w.cellX, maxCol)
 	w.cellY = reuseIntSlice(w.cellY, maxRow)
-	cx := w.screenX + 1 // +1 for left border
+	cx := w.screenX + 1 + w.Padding // +1 for left border + padding
 	for i := range w.cellX {
 		w.cellX[i] = cx
 		cx += w.cellW[i]
@@ -194,7 +195,7 @@ func (w *Window) computeGrid() {
 	if w.NoTopBorder {
 		topRows = 0
 	}
-	cy := w.screenY + topRows // +1 for top border (0 if NoTopBorder)
+	cy := w.screenY + topRows + w.Padding // +1 for top border (0 if NoTopBorder) + padding
 	for i := range w.cellY {
 		w.cellY[i] = cy
 		cy += w.cellH[i]
