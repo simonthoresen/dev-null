@@ -262,6 +262,71 @@ func (b *ImageBuffer) PaintANSI(x, y, w, h int, s string, defaultFg, defaultBg c
 	}
 }
 
+// WrapANSI splits s into lines of at most width visible characters,
+// preserving ANSI escape sequences. Each output line carries the ANSI
+// color/attribute state from the end of the previous line.
+func WrapANSI(s string, width int) []string {
+	if width <= 0 {
+		return []string{s}
+	}
+	var lines []string
+	var cur strings.Builder
+	col := 0
+	var sgrState strings.Builder // accumulated SGR sequences for carry-over
+
+	i := 0
+	for i < len(s) {
+		if s[i] == '\n' {
+			lines = append(lines, cur.String())
+			cur.Reset()
+			col = 0
+			if sgrState.Len() > 0 {
+				cur.WriteString(sgrState.String())
+			}
+			i++
+			continue
+		}
+
+		// CSI escape sequence.
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) && !isCSIFinal(s[j]) {
+				j++
+			}
+			if j < len(s) {
+				j++
+			}
+			seq := s[i:j]
+			cur.WriteString(seq)
+			if len(seq) >= 3 && seq[len(seq)-1] == 'm' {
+				if seq == "\x1b[m" || seq == "\x1b[0m" {
+					sgrState.Reset()
+				} else {
+					sgrState.WriteString(seq)
+				}
+			}
+			i = j
+			continue
+		}
+
+		// Visible character — wrap before writing if at width.
+		_, size := utf8.DecodeRuneInString(s[i:])
+		if col >= width {
+			lines = append(lines, cur.String())
+			cur.Reset()
+			col = 0
+			if sgrState.Len() > 0 {
+				cur.WriteString(sgrState.String())
+			}
+		}
+		cur.WriteString(s[i : i+size])
+		col++
+		i += size
+	}
+	lines = append(lines, cur.String())
+	return lines
+}
+
 // isCSIFinal returns true if b is a CSI final byte (0x40–0x7E).
 func isCSIFinal(b byte) bool {
 	return b >= 0x40 && b <= 0x7E

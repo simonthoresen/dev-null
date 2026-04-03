@@ -85,13 +85,41 @@ func (v *TextView) Render(buf *render.ImageBuffer, x, y, width, height int, focu
 	bg := layer.Bg
 	v.height = height
 	h := max(1, height)
-	v.clampScroll()
 
-	n := len(v.Lines)
 	contentW := width
-	showScrollbar := v.Scrollable && n > h
-	if showScrollbar {
+	// Tentatively check if scrollbar is needed (may change after wrapping).
+	if v.Scrollable && len(v.Lines) > 0 {
 		contentW = max(1, width-1)
+	}
+
+	// Wrap lines to content width.
+	var wrapped []string
+	for _, line := range v.Lines {
+		wrapped = append(wrapped, render.WrapANSI(line, contentW)...)
+	}
+
+	n := len(wrapped)
+	showScrollbar := v.Scrollable && n > h
+	if !showScrollbar && contentW < width {
+		// No scrollbar needed after wrapping — reclaim the column and re-wrap.
+		contentW = width
+		wrapped = wrapped[:0]
+		for _, line := range v.Lines {
+			wrapped = append(wrapped, render.WrapANSI(line, contentW)...)
+		}
+		n = len(wrapped)
+	}
+
+	// Clamp scroll to wrapped line count.
+	maxOff := n - h
+	if maxOff < 0 {
+		maxOff = 0
+	}
+	if v.ScrollOffset > maxOff {
+		v.ScrollOffset = maxOff
+	}
+	if v.ScrollOffset < 0 {
+		v.ScrollOffset = 0
 	}
 
 	// Fill background.
@@ -108,7 +136,7 @@ func (v *TextView) Render(buf *render.ImageBuffer, x, y, width, height int, focu
 		if start < 0 {
 			start = 0
 		}
-		visibleLines = v.Lines[start:end]
+		visibleLines = wrapped[start:end]
 	}
 
 	// Render visible lines. Lines may contain ANSI codes (chat messages).

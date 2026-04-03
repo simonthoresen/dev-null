@@ -311,6 +311,39 @@ func TestAnsi256Color(t *testing.T) {
 	}
 }
 
+func TestWrapANSI(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		width int
+		want  []string
+	}{
+		{"short line", "hello", 10, []string{"hello"}},
+		{"exact width", "hello", 5, []string{"hello"}},
+		{"wrap at width", "abcdefgh", 5, []string{"abcde", "fgh"}},
+		{"multiple wraps", "abcdefghij", 3, []string{"abc", "def", "ghi", "j"}},
+		{"newlines preserved", "ab\ncd", 5, []string{"ab", "cd"}},
+		{"newline + wrap", "abcdef\nghi", 4, []string{"abcd", "ef", "ghi"}},
+		{"ansi not counted", "\x1b[31mhello\x1b[m", 5, []string{"\x1b[31mhello\x1b[m"}},
+		{"ansi wrap carries state", "\x1b[31mabcdef\x1b[m", 3, []string{"\x1b[31mabc", "\x1b[31mdef\x1b[m"}},
+		{"empty", "", 5, []string{""}},
+		{"zero width", "abc", 0, []string{"abc"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := WrapANSI(tt.input, tt.width)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d lines %q, want %d lines %q", len(got), got, len(tt.want), tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("line %d: got %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
 // stripANSI removes all ANSI escape sequences from a string.
 func stripANSI(s string) string {
 	var sb strings.Builder
