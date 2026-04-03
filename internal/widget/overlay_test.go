@@ -300,6 +300,56 @@ func TestDialogClickMultiButton(t *testing.T) {
 	}
 }
 
+func TestDialogClickButton(t *testing.T) {
+	o := OverlayState{OpenMenu: -1}
+	var clicked string
+	o.PushDialog(domain.DialogRequest{
+		Title:   "Confirm",
+		Body:    "Click a button",
+		Buttons: []string{"OK", "Cancel"},
+		OnClose: func(btn string) { clicked = btn },
+	})
+
+	screenW, screenH := 80, 24
+	layer := testTheme().LayerAt(2)
+
+	// Render to populate layout caches.
+	buf, renderCol, renderRow := o.RenderDialogBuf(screenW, screenH, layer)
+	if buf == nil {
+		t.Fatal("RenderDialogBuf returned nil buffer")
+	}
+
+	// Find the "[ OK ]" text in the rendered buffer to get button coordinates.
+	found := false
+	for row := 0; row < buf.Height; row++ {
+		var line strings.Builder
+		for col := 0; col < buf.Width; col++ {
+			line.WriteRune(buf.Pixels[row*buf.Width+col].Char)
+		}
+		if idx := strings.Index(line.String(), "[ OK ]"); idx >= 0 {
+			// Click the center of the OK button in screen coordinates.
+			clickX := renderCol + idx + 3 // center of "[ OK ]"
+			clickY := renderRow + row
+			consumed := o.HandleDialogClick(clickX, clickY, screenW, screenH)
+			if !consumed {
+				t.Error("click on button should be consumed")
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("could not find '[ OK ]' text in rendered dialog buffer")
+	}
+
+	if o.HasDialog() {
+		t.Error("dialog should be dismissed after clicking OK button")
+	}
+	if clicked != "OK" {
+		t.Errorf("expected OnClose('OK'), got %q", clicked)
+	}
+}
+
 func TestAboutDialogKeyDismiss(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
 	body := engine.AboutLogo()

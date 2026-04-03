@@ -19,6 +19,9 @@ type Container struct {
 
 	wantTab     bool
 	wantBackTab bool
+
+	// Cached from last Render for click hit-testing.
+	cachedSizes []int
 }
 
 // ContainerChild pairs a Control with its sizing info.
@@ -209,6 +212,7 @@ func (c *Container) Render(buf *render.ImageBuffer, bx, by, width, height int, f
 	}
 
 	sizes := c.allocate(width, height)
+	c.cachedSizes = sizes
 
 	if c.Horizontal {
 		col := bx
@@ -278,6 +282,39 @@ func (c *Container) allocate(width, height int) []int {
 		}
 	}
 	return sizes
+}
+
+// HandleClick routes a mouse click to the correct child control.
+// (rx, ry) are relative to the container's top-left corner.
+func (c *Container) HandleClick(rx, ry int) {
+	if len(c.Children) == 0 || len(c.cachedSizes) != len(c.Children) {
+		return
+	}
+	offset := 0
+	for i, child := range c.Children {
+		sz := c.cachedSizes[i]
+		end := offset + sz
+		hit := false
+		if c.Horizontal {
+			hit = rx >= offset && rx < end
+		} else {
+			hit = ry >= offset && ry < end
+		}
+		if hit {
+			if child.Control.Focusable() {
+				c.FocusIdx = i
+			}
+			if cl, ok := child.Control.(Clickable); ok {
+				if c.Horizontal {
+					cl.HandleClick(rx-offset, ry)
+				} else {
+					cl.HandleClick(rx, ry-offset)
+				}
+			}
+			return
+		}
+		offset = end
+	}
 }
 
 // Ensure Container implements TabWanter at compile time.

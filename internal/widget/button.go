@@ -16,7 +16,12 @@ type Button struct {
 	WantBackTab bool
 }
 
-func (b *Button) Focusable() bool      { return true }
+func (b *Button) Focusable() bool       { return true }
+func (b *Button) HandleClick(rx, ry int) {
+	if b.OnPress != nil {
+		b.OnPress()
+	}
+}
 func (b *Button) MinSize() (int, int)  { return len(b.Label) + 4, 1 } // "[ " + label + " ]"
 func (b *Button) TabWant() (bool, bool) { return b.WantTab, b.WantBackTab }
 func (b *Button) Update(msg tea.Msg) {
