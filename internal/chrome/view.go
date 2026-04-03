@@ -73,11 +73,9 @@ func (m Model) View() tea.View {
 	}
 	if m.overlay.HasDialog() {
 		dlgLayer := m.theme.LayerAt(2)
-		if dlg := m.overlay.RenderDialog(m.width, m.height, dlgLayer); dlg.Content != "" {
-			sub := render.NewImageBuffer(dlg.Width, dlg.Height)
-			sub.PaintANSI(0, 0, dlg.Width, dlg.Height, dlg.Content, dlgLayer.Fg, dlgLayer.Bg)
-			buf.Blit(dlg.Col, dlg.Row, sub)
-			render.BlitShadow(buf, dlg.Col, dlg.Row, dlg.Width, dlg.Height, shadowFg, shadowBg)
+		if sub, col, row := m.overlay.RenderDialogBuf(m.width, m.height, dlgLayer); sub != nil {
+			buf.Blit(col, row, sub)
+			render.BlitShadow(buf, col, row, sub.Width, sub.Height, shadowFg, shadowBg)
 		}
 	}
 

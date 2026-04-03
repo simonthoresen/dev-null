@@ -39,7 +39,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Overlay intercepts keys when active (F10, menu navigation, dialog buttons).
+	// Dialog overlay gets the real tea.Msg for proper NC control handling.
+	if m.overlay.HasDialog() {
+		consumed, cmd := m.overlay.HandleDialogMsg(msg)
+		if consumed {
+			return m, cmd
+		}
+	}
+
+	// Menu overlay intercepts keys when active (F10, menu navigation).
 	if m.overlay.HandleKey(msg.String(), m.cachedMenus(), m.playerID) {
 		return m, nil
 	}

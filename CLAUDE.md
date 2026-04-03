@@ -97,6 +97,10 @@ go run ./cmd/null-space-server --local --data-dir dist --game example --player a
 | `install.ps1` | One-liner installer: downloads latest release zip, extracts to a folder, creates desktop shortcuts |
 | `.github/workflows/release.yml` | CI: builds binaries and publishes rolling `latest` release on every push to main |
 
+## UI Rule — No Bespoke Rendering
+
+**All UI must build on the NC widget system** (`internal/widget/`). Never hand-draw ANSI strings for dialogs, overlays, or modals. Use `Window` + child Controls (`Label`, `Button`, `ListBox`, `TextInput`, `TextView`, etc.) and render via `RenderToBuf`. If a control doesn't exist, add it to `internal/widget/` — that extends the system rather than creating a parallel one. Dialogs are NC Windows rendered into a sub-buffer and blitted as overlays.
+
 ## Concurrency — Lock Ordering
 
 Two primary mutexes protect shared state:

@@ -189,8 +189,11 @@ func TestDialogBordersASCIITheme(t *testing.T) {
 		Body:  "Oops",
 	})
 	th := asciiTheme()
-	dlg := o.RenderDialog(40, 20, th.WarningLayer()).Content
-	s := newScreen(dlg)
+	buf, _, _ := o.RenderDialogBuf(40, 20, th.WarningLayer())
+	if buf == nil {
+		t.Fatal("expected non-nil buffer")
+	}
+	s := newScreen(buf.ToString())
 
 	if !strings.HasPrefix(s.lines[0], "+") || !strings.HasSuffix(s.lines[0], "+") {
 		t.Errorf("expected ASCII top border, got %q", s.lines[0])
@@ -345,8 +348,11 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 		Body:    "Proceed?",
 		Buttons: []string{"Yes", "No"},
 	})
-	dlgBox := o2.RenderDialog(40, 12, th.LayerAt(2))
-	dlg, dlgCol, dlgRow := dlgBox.Content, dlgBox.Col, dlgBox.Row
+	dlgBuf, dlgCol, dlgRow := o2.RenderDialogBuf(40, 12, th.LayerAt(2))
+	if dlgBuf == nil {
+		t.Fatal("expected non-nil buffer for layer 2 dialog")
+	}
+	dlg := dlgBuf.ToString()
 	assertHasANSI(t, dlg, "#000033", "layer 2 dialog (Tertiary)")
 
 	layer2 := PlaceOverlay(dlgCol, dlgRow, dlg, layer1)
@@ -357,8 +363,11 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	// Layer 3: Nested dialog at depth 3 → Secondary again.
 	o3 := OverlayState{OpenMenu: -1}
 	o3.PushDialog(domain.DialogRequest{Title: "Nested", Body: "Inner"})
-	dlg3Box := o3.RenderDialog(40, 12, th.LayerAt(3))
-	dlg3, dlg3Col, dlg3Row := dlg3Box.Content, dlg3Box.Col, dlg3Box.Row
+	dlg3Buf, dlg3Col, dlg3Row := o3.RenderDialogBuf(40, 12, th.LayerAt(3))
+	if dlg3Buf == nil {
+		t.Fatal("expected non-nil buffer for layer 3 dialog")
+	}
+	dlg3 := dlg3Buf.ToString()
 	assertHasANSI(t, dlg3, "#002200", "layer 3 nested dialog (Secondary again)")
 
 	layer3 := PlaceOverlay(dlg3Col, dlg3Row, dlg3, layer2)
@@ -377,7 +386,11 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	// Layer 4: Depth 4 → Tertiary again.
 	o4 := OverlayState{OpenMenu: -1}
 	o4.PushDialog(domain.DialogRequest{Title: "Deep", Body: "Very deep"})
-	dlg4 := o4.RenderDialog(40, 12, th.LayerAt(4)).Content
+	dlg4Buf, _, _ := o4.RenderDialogBuf(40, 12, th.LayerAt(4))
+	if dlg4Buf == nil {
+		t.Fatal("expected non-nil buffer for layer 4 dialog")
+	}
+	dlg4 := dlg4Buf.ToString()
 	assertHasANSI(t, dlg4, "#000033", "layer 4 (Tertiary again)")
 }
 
@@ -386,12 +399,16 @@ func TestPaletteDepthWarningBypassesCycle(t *testing.T) {
 	o := OverlayState{OpenMenu: -1}
 	o.PushDialog(domain.DialogRequest{Title: "Error", Body: "Something broke"})
 
-	dlg := o.RenderDialog(40, 20, th.WarningLayer()).Content
-	assertHasANSI(t, dlg, "#330000", "warning dialog")
+	dlgBuf, _, _ := o.RenderDialogBuf(40, 20, th.WarningLayer())
+	if dlgBuf == nil {
+		t.Fatal("expected non-nil buffer for warning dialog")
+	}
+	dlgStr := dlgBuf.ToString()
+	assertHasANSI(t, dlgStr, "#330000", "warning dialog")
 
-	s := newScreen(dlg)
-	if !strings.Contains(s.lines[1], "Error") {
-		t.Errorf("expected 'Error' in title, got %q", s.lines[1])
+	// Title should appear somewhere in the rendered dialog (may be in border row).
+	if !strings.Contains(stripANSI(dlgStr), "Error") {
+		t.Errorf("expected 'Error' in dialog content, got %q", stripANSI(dlgStr))
 	}
 }
 
@@ -531,8 +548,11 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 	// Depth 2 → Tertiary → ASCII.
 	o2 := OverlayState{OpenMenu: -1}
 	o2.PushDialog(domain.DialogRequest{Title: "Test", Body: "Hello"})
-	dlg2 := o2.RenderDialog(40, 20, th.LayerAt(2)).Content
-	s2 := newScreen(dlg2)
+	dlg2Buf, _, _ := o2.RenderDialogBuf(40, 20, th.LayerAt(2))
+	if dlg2Buf == nil {
+		t.Fatal("expected non-nil buffer for depth 2 dialog")
+	}
+	s2 := newScreen(dlg2Buf.ToString())
 	if !strings.HasPrefix(s2.lines[0], "+") || !strings.HasSuffix(s2.lines[0], "+") {
 		t.Errorf("depth 2 dialog: expected ASCII top, got %q", s2.lines[0])
 	}
@@ -544,8 +564,11 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 	// Depth 1 → Secondary → single-line.
 	o1 := OverlayState{OpenMenu: -1}
 	o1.PushDialog(domain.DialogRequest{Title: "Test", Body: "Hello"})
-	dlg1 := o1.RenderDialog(40, 20, th.LayerAt(1)).Content
-	s1 := newScreen(dlg1)
+	dlg1Buf, _, _ := o1.RenderDialogBuf(40, 20, th.LayerAt(1))
+	if dlg1Buf == nil {
+		t.Fatal("expected non-nil buffer for depth 1 dialog")
+	}
+	s1 := newScreen(dlg1Buf.ToString())
 	if !strings.HasPrefix(s1.lines[0], "┌") || !strings.HasSuffix(s1.lines[0], "┐") {
 		t.Errorf("depth 1 dialog: expected single-line top, got %q", s1.lines[0])
 	}

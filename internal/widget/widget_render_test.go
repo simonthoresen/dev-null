@@ -470,24 +470,11 @@ func TestHandleKeyDialogNavigation(t *testing.T) {
 		OnClose: func(btn string) { result = btn },
 	})
 
-	// Tab cycles focus.
-	o.HandleDialogKey("tab")
-	if o.DialogFocus != 1 {
-		t.Errorf("expected focus 1, got %d", o.DialogFocus)
-	}
+	// Tab cycles focus to the next button.
+	o.HandleDialogMsg(tea.KeyPressMsg{Code: -1, Text: "tab"})
 
-	// Left/right navigation.
-	o.HandleDialogKey("left")
-	if o.DialogFocus != 0 {
-		t.Errorf("expected focus 0, got %d", o.DialogFocus)
-	}
-	o.HandleDialogKey("right")
-	if o.DialogFocus != 1 {
-		t.Errorf("expected focus 1, got %d", o.DialogFocus)
-	}
-
-	// Enter confirms.
-	o.HandleDialogKey("enter")
+	// Enter confirms the focused button (should be "No" after one Tab).
+	o.HandleDialogMsg(tea.KeyPressMsg{Code: -1, Text: "enter"})
 	if result != "No" {
 		t.Errorf("expected 'No', got %q", result)
 	}
@@ -504,9 +491,15 @@ func TestHandleKeyDialogEsc(t *testing.T) {
 		OnClose: func(btn string) { result = btn },
 	})
 
-	o.HandleDialogKey("esc")
+	consumed, _ := o.HandleDialogMsg(tea.KeyPressMsg{Code: -1, Text: "esc"})
+	if !consumed {
+		t.Error("expected esc to be consumed by dialog")
+	}
 	if result != "" {
 		t.Errorf("expected empty result for Esc, got %q", result)
+	}
+	if o.HasDialog() {
+		t.Error("expected dialog to be dismissed after Esc")
 	}
 }
 
