@@ -45,42 +45,42 @@ func (w *Window) RenderToBuf(buf *render.ImageBuffer, x, y, width, height int, l
 	}
 	w.innerH = max(1, height-1-topRows) // bottom border + optional top border
 
-	fg := layer.FgC()
-	bg := layer.BgC()
-	hlFg := layer.HighlightFgC()
-	hlBg := layer.HighlightBgC()
+	fg := layer.Fg
+	bg := layer.Bg
+	hlFg := layer.HighlightFg
+	hlBg := layer.HighlightBg
 
 	// Fill inner area with base bg.
 	buf.Fill(x, y, width, height, ' ', fg, bg, render.AttrNone)
 
 	// Top border row (skipped when NoTopBorder).
 	if !w.NoTopBorder {
-		buf.SetChar(x, y, render.RuneOf(layer.OTL()), fg, bg, render.AttrNone)
-		buf.SetChar(x+width-1, y, render.RuneOf(layer.OTR()), fg, bg, render.AttrNone)
+		buf.SetChar(x, y, render.RuneOf(layer.OuterTL), fg, bg, render.AttrNone)
+		buf.SetChar(x+width-1, y, render.RuneOf(layer.OuterTR), fg, bg, render.AttrNone)
 		if w.Title != "" {
 			titleText := " " + w.Title + " "
-			buf.SetChar(x+1, y, render.RuneOf(layer.IH()), fg, bg, render.AttrNone)
+			buf.SetChar(x+1, y, render.RuneOf(layer.InnerH), fg, bg, render.AttrNone)
 			n := buf.WriteString(x+2, y, titleText, hlFg, hlBg, render.AttrBold)
 			for col := x + 2 + n; col < x+width-1; col++ {
-				buf.SetChar(col, y, render.RuneOf(layer.OH()), fg, bg, render.AttrNone)
+				buf.SetChar(col, y, render.RuneOf(layer.OuterH), fg, bg, render.AttrNone)
 			}
 		} else {
 			for col := x + 1; col < x+width-1; col++ {
-				buf.SetChar(col, y, render.RuneOf(layer.OH()), fg, bg, render.AttrNone)
+				buf.SetChar(col, y, render.RuneOf(layer.OuterH), fg, bg, render.AttrNone)
 			}
 		}
 	}
 
 	// Bottom border row.
 	boty := y + height - 1
-	buf.SetChar(x, boty, render.RuneOf(layer.OBL()), fg, bg, render.AttrNone)
-	buf.SetChar(x+width-1, boty, render.RuneOf(layer.OBR()), fg, bg, render.AttrNone)
+	buf.SetChar(x, boty, render.RuneOf(layer.OuterBL), fg, bg, render.AttrNone)
+	buf.SetChar(x+width-1, boty, render.RuneOf(layer.OuterBR), fg, bg, render.AttrNone)
 	for col := x + 1; col < x+width-1; col++ {
-		buf.SetChar(col, boty, render.RuneOf(layer.OH()), fg, bg, render.AttrNone)
+		buf.SetChar(col, boty, render.RuneOf(layer.OuterH), fg, bg, render.AttrNone)
 	}
 
 	// Left and right border columns.
-	vr := render.RuneOf(layer.OV())
+	vr := render.RuneOf(layer.OuterV)
 	startRow := y + topRows
 	for row := startRow; row < boty; row++ {
 		buf.SetChar(x, row, vr, fg, bg, render.AttrNone)
@@ -109,15 +109,15 @@ func (w *Window) RenderToBuf(buf *render.ImageBuffer, x, y, width, height int, l
 		switch child.Control.(type) {
 		case *HDivider:
 			if child.Control.(*HDivider).Connected {
-				buf.SetChar(x, cy, render.RuneOf(layer.XL()), fg, bg, render.AttrNone)
-				buf.SetChar(x+width-1, cy, render.RuneOf(layer.XR()), fg, bg, render.AttrNone)
+				buf.SetChar(x, cy, render.RuneOf(layer.CrossL), fg, bg, render.AttrNone)
+				buf.SetChar(x+width-1, cy, render.RuneOf(layer.CrossR), fg, bg, render.AttrNone)
 			}
 		case *VDivider:
 			if child.Control.(*VDivider).Connected {
 				if !w.NoTopBorder {
-					buf.SetChar(cx, y, render.RuneOf(layer.XT()), fg, bg, render.AttrNone)
+					buf.SetChar(cx, y, render.RuneOf(layer.CrossT), fg, bg, render.AttrNone)
 				}
-				buf.SetChar(cx, boty, render.RuneOf(layer.XB()), fg, bg, render.AttrNone)
+				buf.SetChar(cx, boty, render.RuneOf(layer.CrossB), fg, bg, render.AttrNone)
 			}
 		}
 	}

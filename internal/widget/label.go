@@ -20,8 +20,8 @@ func (l *Label) Update(_ tea.Msg)    {}
 func (l *Label) Focusable() bool     { return false }
 func (l *Label) MinSize() (int, int) { return ansi.StringWidth(l.Text), 1 }
 func (l *Label) Render(buf *render.ImageBuffer, x, y, w, h int, _ bool, layer *theme.Layer) {
-	fg := layer.FgC()
-	bg := layer.BgC()
+	fg := layer.Fg
+	bg := layer.Bg
 	text := l.Text
 	vis := utf8.RuneCountInString(text)
 

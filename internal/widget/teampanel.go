@@ -101,8 +101,8 @@ func (tp *TeamPanel) Update(msg tea.Msg) {
 }
 
 func (tp *TeamPanel) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
-	fg := layer.FgC()
-	bg := layer.BgC()
+	fg := layer.Fg
+	bg := layer.Bg
 
 	// Fill background.
 	buf.Fill(x, y, width, height, ' ', fg, bg, render.AttrNone)
@@ -184,7 +184,7 @@ func (tp *TeamPanel) Render(buf *render.ImageBuffer, x, y, width, height int, fo
 	// [+ Create Team] button.
 	if tp.ShowCreate && row+1 < height {
 		row++ // blank separator
-		disabledFg := layer.DisabledFgC()
+		disabledFg := layer.DisabledFg
 		buf.WriteString(x+1, y+row, TruncateStr("[+ Create Team]", width-1), disabledFg, bg, render.AttrNone)
 	}
 }

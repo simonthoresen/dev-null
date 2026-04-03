@@ -29,11 +29,11 @@ func (m *MenuBar) Render(buf *render.ImageBuffer, x, y, width, height int, _ boo
 		return
 	}
 
-	fg := layer.FgC()
-	bg := layer.BgC()
-	accentFg := layer.AccentC()
-	hlFg := layer.HighlightFgC()
-	hlBg := layer.HighlightBgC()
+	fg := layer.Fg
+	bg := layer.Bg
+	accentFg := layer.Accent
+	hlFg := layer.HighlightFg
+	hlBg := layer.HighlightBg
 
 	// Fill the entire bar with the base background.
 	buf.Fill(x, y, width, 1, ' ', fg, bg, render.AttrNone)
@@ -46,7 +46,7 @@ func (m *MenuBar) Render(buf *render.ImageBuffer, x, y, width, height int, _ boo
 
 		// Separator between menus.
 		if i > 0 {
-			sep := layer.Sep()
+			sep := layer.BarSep
 			if sep != "" {
 				buf.WriteString(col, y, sep, fg, bg, render.AttrNone)
 				col++

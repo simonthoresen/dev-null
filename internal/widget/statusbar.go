@@ -24,8 +24,8 @@ func (s *StatusBar) Render(buf *render.ImageBuffer, x, y, width, height int, _ b
 		return
 	}
 
-	fg := layer.FgC()
-	bg := layer.BgC()
+	fg := layer.Fg
+	bg := layer.Bg
 
 	// Fill the entire bar.
 	buf.Fill(x, y, width, 1, ' ', fg, bg, render.AttrNone)

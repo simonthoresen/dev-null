@@ -6,6 +6,7 @@ import (
 	"os"
 )
 
+
 // PUA (Private Use Area) codepoint range used for charmap sprites.
 // Games write these into ImageBuffer cells; the custom client renders them
 // as sprites from a sprite sheet. Regular SSH clients show tofu/blank.
@@ -42,15 +43,33 @@ type CharMapDef struct {
 	lookup map[rune]*CharMapEntry // built lazily by Lookup
 }
 
+// buildLookup populates the codepoint→entry map from Entries.
+func (d *CharMapDef) buildLookup() {
+	d.lookup = make(map[rune]*CharMapEntry, len(d.Entries))
+	for i := range d.Entries {
+		d.lookup[d.Entries[i].Codepoint] = &d.Entries[i]
+	}
+}
+
 // Lookup returns the entry for a PUA codepoint, or nil if not mapped.
 func (d *CharMapDef) Lookup(r rune) *CharMapEntry {
 	if d.lookup == nil {
-		d.lookup = make(map[rune]*CharMapEntry, len(d.Entries))
-		for i := range d.Entries {
-			d.lookup[d.Entries[i].Codepoint] = &d.Entries[i]
-		}
+		d.buildLookup()
 	}
 	return d.lookup[r]
+}
+
+// UnmarshalJSON decodes a CharMapDef from JSON and eagerly builds the
+// codepoint lookup map.
+func (d *CharMapDef) UnmarshalJSON(data []byte) error {
+	type Alias CharMapDef // prevent recursion
+	var raw Alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*d = CharMapDef(raw)
+	d.buildLookup()
+	return nil
 }
 
 // LoadCharMapDef reads and parses a charmap JSON file.

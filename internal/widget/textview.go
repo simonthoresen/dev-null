@@ -81,8 +81,8 @@ func (v *TextView) clampScroll() {
 }
 
 func (v *TextView) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
-	fg := layer.FgC()
-	bg := layer.BgC()
+	fg := layer.Fg
+	bg := layer.Bg
 	v.height = height
 	h := max(1, height)
 	v.clampScroll()

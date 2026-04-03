@@ -62,12 +62,12 @@ func (ti *TextInput) Update(msg tea.Msg) {
 }
 
 func (ti *TextInput) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
-	inputBg := layer.InputBgC()
-	inputFg := layer.InputFgC()
+	inputBg := layer.InputBg
+	inputFg := layer.InputFg
 	ti.bg = inputBg
 	ti.fg = inputFg
-	baseFg := layer.FgC()
-	baseBg := layer.BgC()
+	baseFg := layer.Fg
+	baseBg := layer.Bg
 
 	fieldW := max(1, width-2)
 

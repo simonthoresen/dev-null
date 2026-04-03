@@ -27,12 +27,12 @@ func (o *OverlayState) RenderMenuBar(width int, menus []domain.MenuDef, layer *t
 	barStyle     := layer.BaseStyle()
 	activeStyle  := layer.HighlightStyle()
 	barAccent    := layer.AccentStyle()
-	activeAccent := lipgloss.NewStyle().Background(layer.HighlightBgC()).Foreground(layer.AccentC()).Bold(true).Underline(true)
+	activeAccent := lipgloss.NewStyle().Background(layer.HighlightBg).Foreground(layer.Accent).Bold(true).Underline(true)
 
 	var sb strings.Builder
 	for i, m := range menus {
 		if i > 0 {
-			sb.WriteString(barStyle.Render(layer.Sep()))
+			sb.WriteString(barStyle.Render(layer.BarSep))
 		}
 		focused := (o.MenuFocused || o.OpenMenu >= 0) && i == o.MenuCursor
 		if focused {
@@ -116,16 +116,16 @@ func (o *OverlayState) RenderDropdown(menus []domain.MenuDef, ncBarRow int, laye
 	activeStyle   := layer.HighlightStyle()
 	disabledStyle := layer.DisabledStyle()
 
-	top    := menuStyle.Render(layer.OTL() + strings.Repeat(layer.OH(), innerW) + layer.OTR())
-	bottom := menuStyle.Render(layer.OBL() + strings.Repeat(layer.OH(), innerW) + layer.OBR())
+	top    := menuStyle.Render(layer.OuterTL + strings.Repeat(layer.OuterH, innerW) + layer.OuterTR)
+	bottom := menuStyle.Render(layer.OuterBL + strings.Repeat(layer.OuterH, innerW) + layer.OuterBR)
 	// Menu separators don't connect to the outer border (unlike panel dividers).
-	sepRow := menuStyle.Render(layer.OV() + strings.Repeat(layer.IH(), innerW) + layer.OV())
+	sepRow := menuStyle.Render(layer.OuterV + strings.Repeat(layer.InnerH, innerW) + layer.OuterV)
 
 	var lines []string
 	lines = append(lines, top)
 
 	menuAccent  := layer.AccentStyle()
-	activeAccent := lipgloss.NewStyle().Background(layer.HighlightBgC()).Foreground(layer.AccentC()).Bold(true).Underline(true)
+	activeAccent := lipgloss.NewStyle().Background(layer.HighlightBg).Foreground(layer.Accent).Bold(true).Underline(true)
 
 	for i, it := range items {
 		if IsSeparator(it) {
@@ -158,7 +158,7 @@ func (o *OverlayState) RenderDropdown(menus []domain.MenuDef, ncBarRow int, laye
 		default:
 			inner = menuStyle.Render(" "+check) + RenderLabel(it.Label, menuStyle, menuAccent) + menuStyle.Render(pad+hk+" ")
 		}
-		lines = append(lines, menuStyle.Render(layer.OV())+inner+menuStyle.Render(layer.OV()))
+		lines = append(lines, menuStyle.Render(layer.OuterV)+inner+menuStyle.Render(layer.OuterV))
 	}
 	lines = append(lines, bottom)
 
@@ -224,17 +224,17 @@ func (o *OverlayState) RenderDialog(screenW, screenH int, layer *theme.Layer) Ov
 	hbar := func(l, f, r string) string {
 		return boxStyle.Render(l + strings.Repeat(f, innerW) + r)
 	}
-	lb := boxStyle.Render(layer.OV())
-	rb := boxStyle.Render(layer.OV())
+	lb := boxStyle.Render(layer.OuterV)
+	rb := boxStyle.Render(layer.OuterV)
 
 	var lines []string
-	lines = append(lines, hbar(layer.OTL(), layer.OH(), layer.OTR()))
+	lines = append(lines, hbar(layer.OuterTL, layer.OuterH, layer.OuterTR))
 
 	// Title: full-width blue bar.
 	titlePad := " " + d.Title + strings.Repeat(" ", max(0, innerW-1-ansi.StringWidth(d.Title)))
 	lines = append(lines, lb+titleStyle.Width(innerW).Render(titlePad)+rb)
 
-	lines = append(lines, hbar(layer.XL(), layer.IH(), layer.XR()))
+	lines = append(lines, hbar(layer.CrossL, layer.InnerH, layer.CrossR))
 
 	// Body rows.
 	for _, bl := range bodyLines {
@@ -245,7 +245,7 @@ func (o *OverlayState) RenderDialog(screenW, screenH int, layer *theme.Layer) Ov
 		}
 	}
 
-	lines = append(lines, hbar(layer.XL(), layer.IH(), layer.XR()))
+	lines = append(lines, hbar(layer.CrossL, layer.InnerH, layer.CrossR))
 
 	// Button row.
 	btnActiveSt := layer.ActiveStyle()
@@ -279,7 +279,7 @@ func (o *OverlayState) RenderDialog(screenW, screenH int, layer *theme.Layer) Ov
 	btnRow := boxStyle.Render(strings.Repeat(" ", lpad)) + btnContent + boxStyle.Render(strings.Repeat(" ", rpad))
 	lines = append(lines, lb+btnRow+rb)
 
-	lines = append(lines, hbar(layer.OBL(), layer.OH(), layer.OBR()))
+	lines = append(lines, hbar(layer.OuterBL, layer.OuterH, layer.OuterBR))
 
 	contentStr := strings.Join(lines, "\n")
 	totalW := innerW + 2

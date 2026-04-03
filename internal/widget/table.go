@@ -19,8 +19,8 @@ func (t *Table) Focusable() bool     { return false }
 func (t *Table) MinSize() (int, int) { return 1, len(t.Rows) }
 
 func (t *Table) Render(buf *render.ImageBuffer, x, y, width, height int, _ bool, layer *theme.Layer) {
-	fg := layer.FgC()
-	bg := layer.BgC()
+	fg := layer.Fg
+	bg := layer.Bg
 
 	if len(t.Rows) == 0 {
 		return

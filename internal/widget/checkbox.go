@@ -38,12 +38,12 @@ func (cb *Checkbox) Update(msg tea.Msg) {
 	}
 }
 func (cb *Checkbox) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
-	fg := layer.FgC()
-	bg := layer.BgC()
+	fg := layer.Fg
+	bg := layer.Bg
 	attr := render.PixelAttr(render.AttrNone)
 	if focused {
-		fg = layer.HighlightFgC()
-		bg = layer.HighlightBgC()
+		fg = layer.HighlightFg
+		bg = layer.HighlightBg
 		attr = render.AttrBold
 	}
 	mark := ' '

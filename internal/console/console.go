@@ -511,12 +511,12 @@ func (m *Model) View() tea.View {
 	engine.ApplyShaders(m.shaders, buf, shaderElapsed)
 
 	// Overlay layers: render to sub-buffers, blit, then recolor for shadow.
-	shadowFg := t.ShadowFgC()
-	shadowBg := t.ShadowBgC()
+	shadowFg := t.ShadowFg
+	shadowBg := t.ShadowBg
 	if m.overlay.OpenMenu >= 0 {
 		if dd := m.overlay.RenderDropdown(menus, 0, secondary); dd.Content != "" {
 			sub := render.NewImageBuffer(dd.Width, dd.Height)
-			sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, secondary.FgC(), secondary.BgC())
+			sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, secondary.Fg, secondary.Bg)
 			buf.Blit(dd.Col, dd.Row, sub)
 			render.BlitShadow(buf, dd.Col, dd.Row, dd.Width, dd.Height, shadowFg, shadowBg)
 		}
@@ -525,7 +525,7 @@ func (m *Model) View() tea.View {
 		if dlg := m.overlay.RenderDialog(m.width, m.height, t.LayerAt(2)); dlg.Content != "" {
 			sub := render.NewImageBuffer(dlg.Width, dlg.Height)
 			dlgLayer := t.LayerAt(2)
-			sub.PaintANSI(0, 0, dlg.Width, dlg.Height, dlg.Content, dlgLayer.FgC(), dlgLayer.BgC())
+			sub.PaintANSI(0, 0, dlg.Width, dlg.Height, dlg.Content, dlgLayer.Fg, dlgLayer.Bg)
 			buf.Blit(dlg.Col, dlg.Row, sub)
 			render.BlitShadow(buf, dlg.Col, dlg.Row, dlg.Width, dlg.Height, shadowFg, shadowBg)
 		}

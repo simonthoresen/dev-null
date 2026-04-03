@@ -14,107 +14,59 @@ import (
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 // Palette defines a complete color set for one visual layer.
+// Fields are populated at construction time (Default) or via Layer.UnmarshalJSON.
 type Palette struct {
-	Bg          string `json:"bg"`          // body background
-	Fg          string `json:"fg"`          // body foreground (normal text)
-	Accent      string `json:"accent"`      // shortcut letters, column headers
-	HighlightBg string `json:"highlightBg"` // selected item, active title, buttons
-	HighlightFg string `json:"highlightFg"` // selected item foreground
-	ActiveBg    string `json:"activeBg"`    // focused button, active accent
-	ActiveFg    string `json:"activeFg"`    // focused button foreground
-	InputBg     string `json:"inputBg"`     // text input field background
-	InputFg     string `json:"inputFg"`     // text input field foreground
-	DisabledFg  string `json:"disabledFg"`  // disabled/grayed items
-
-	// Cached resolved colors — populated by resolveColors().
-	resolved bool
-	bgC, fgC, accentC                             color.Color
-	highlightBgC, highlightFgC                     color.Color
-	activeBgC, activeFgC                           color.Color
-	inputBgC, inputFgC                             color.Color
-	disabledFgC                                    color.Color
+	Bg          color.Color
+	Fg          color.Color
+	Accent      color.Color
+	HighlightBg color.Color
+	HighlightFg color.Color
+	ActiveBg    color.Color
+	ActiveFg    color.Color
+	InputBg     color.Color
+	InputFg     color.Color
+	DisabledFg  color.Color
 }
-
-// tc converts a hex string to a color.Color, returning fallback if empty.
-func tc(hex, fallback string) color.Color {
-	if hex == "" {
-		return lipgloss.Color(fallback)
-	}
-	return lipgloss.Color(hex)
-}
-
-// resolveColors populates the cached color fields. Called once after loading.
-func (p *Palette) resolveColors() {
-	p.bgC = tc(p.Bg, "#000080")
-	p.fgC = tc(p.Fg, "#00AAAA")
-	p.accentC = tc(p.Accent, "#FFFF55")
-	p.highlightBgC = tc(p.HighlightBg, "#00AAAA")
-	p.highlightFgC = tc(p.HighlightFg, "#000000")
-	p.activeBgC = tc(p.ActiveBg, "#FFFF55")
-	p.activeFgC = tc(p.ActiveFg, "#000000")
-	p.inputBgC = tc(p.InputBg, "#000000")
-	p.inputFgC = tc(p.InputFg, "#55FFFF")
-	p.disabledFgC = tc(p.DisabledFg, "#555555")
-	p.resolved = true
-}
-
-// ensureResolved lazily resolves colors if not yet done.
-func (p *Palette) ensureResolved() {
-	if !p.resolved {
-		p.resolveColors()
-	}
-}
-
-// Resolved color accessors.
-func (p *Palette) BgC() color.Color          { p.ensureResolved(); return p.bgC }
-func (p *Palette) FgC() color.Color          { p.ensureResolved(); return p.fgC }
-func (p *Palette) AccentC() color.Color      { p.ensureResolved(); return p.accentC }
-func (p *Palette) HighlightBgC() color.Color { p.ensureResolved(); return p.highlightBgC }
-func (p *Palette) HighlightFgC() color.Color { p.ensureResolved(); return p.highlightFgC }
-func (p *Palette) ActiveBgC() color.Color    { p.ensureResolved(); return p.activeBgC }
-func (p *Palette) ActiveFgC() color.Color    { p.ensureResolved(); return p.activeFgC }
-func (p *Palette) InputBgC() color.Color     { p.ensureResolved(); return p.inputBgC }
-func (p *Palette) InputFgC() color.Color     { p.ensureResolved(); return p.inputFgC }
-func (p *Palette) DisabledFgC() color.Color  { p.ensureResolved(); return p.disabledFgC }
 
 // Lipgloss style helpers.
 func (p *Palette) BaseStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Background(p.BgC()).Foreground(p.FgC())
+	return lipgloss.NewStyle().Background(p.Bg).Foreground(p.Fg)
 }
 func (p *Palette) AccentStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Background(p.BgC()).Foreground(p.AccentC()).Underline(true)
+	return lipgloss.NewStyle().Background(p.Bg).Foreground(p.Accent).Underline(true)
 }
 func (p *Palette) HighlightStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Background(p.HighlightBgC()).Foreground(p.HighlightFgC()).Bold(true)
+	return lipgloss.NewStyle().Background(p.HighlightBg).Foreground(p.HighlightFg).Bold(true)
 }
 func (p *Palette) ActiveStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Background(p.ActiveBgC()).Foreground(p.ActiveFgC()).Bold(true)
+	return lipgloss.NewStyle().Background(p.ActiveBg).Foreground(p.ActiveFg).Bold(true)
 }
 func (p *Palette) DisabledStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Background(p.BgC()).Foreground(p.DisabledFgC())
+	return lipgloss.NewStyle().Background(p.Bg).Foreground(p.DisabledFg)
 }
 func (p *Palette) InputStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Background(p.InputBgC()).Foreground(p.InputFgC())
+	return lipgloss.NewStyle().Background(p.InputBg).Foreground(p.InputFg)
 }
 
 // ─── BorderSet ───────────────────────────────────────────────────────────────
 
 // BorderSet defines border/divider characters for one visual layer.
+// Fields are populated with defaults at construction time or via Layer.UnmarshalJSON.
 type BorderSet struct {
-	OuterTL string `json:"outerTL,omitempty"`
-	OuterTR string `json:"outerTR,omitempty"`
-	OuterBL string `json:"outerBL,omitempty"`
-	OuterBR string `json:"outerBR,omitempty"`
-	OuterH  string `json:"outerH,omitempty"`
-	OuterV  string `json:"outerV,omitempty"`
-	InnerH  string `json:"innerH,omitempty"`
-	InnerV  string `json:"innerV,omitempty"`
-	CrossL  string `json:"crossL,omitempty"`
-	CrossR  string `json:"crossR,omitempty"`
-	CrossT  string `json:"crossT,omitempty"`
-	CrossB  string `json:"crossB,omitempty"`
-	CrossX  string `json:"crossX,omitempty"`
-	BarSep  string `json:"barSep,omitempty"`
+	OuterTL string
+	OuterTR string
+	OuterBL string
+	OuterBR string
+	OuterH  string
+	OuterV  string
+	InnerH  string
+	InnerV  string
+	CrossL  string
+	CrossR  string
+	CrossT  string
+	CrossB  string
+	CrossX  string
+	BarSep  string
 }
 
 // ─── Layer ───────────────────────────────────────────────────────────────────
@@ -125,27 +77,163 @@ type Layer struct {
 	BorderSet // embedded — border fields
 }
 
-// Outer border accessors (default: double-line, matching NC windows).
-func (l *Layer) OTL() string { return ts(l.OuterTL, "╔") }
-func (l *Layer) OTR() string { return ts(l.OuterTR, "╗") }
-func (l *Layer) OBL() string { return ts(l.OuterBL, "╚") }
-func (l *Layer) OBR() string { return ts(l.OuterBR, "╝") }
-func (l *Layer) OH() string  { return ts(l.OuterH, "═") }
-func (l *Layer) OV() string  { return ts(l.OuterV, "║") }
+// fillDefaults populates zero-value palette colors and empty border strings
+// with their default values. Safe to call multiple times (idempotent).
+func (l *Layer) fillDefaults() {
+	if l.Bg == nil {
+		l.Bg = lipgloss.Color("#000080")
+	}
+	if l.Fg == nil {
+		l.Fg = lipgloss.Color("#00AAAA")
+	}
+	if l.Accent == nil {
+		l.Accent = lipgloss.Color("#FFFF55")
+	}
+	if l.HighlightBg == nil {
+		l.HighlightBg = lipgloss.Color("#00AAAA")
+	}
+	if l.HighlightFg == nil {
+		l.HighlightFg = lipgloss.Color("#000000")
+	}
+	if l.ActiveBg == nil {
+		l.ActiveBg = lipgloss.Color("#FFFF55")
+	}
+	if l.ActiveFg == nil {
+		l.ActiveFg = lipgloss.Color("#000000")
+	}
+	if l.InputBg == nil {
+		l.InputBg = lipgloss.Color("#000000")
+	}
+	if l.InputFg == nil {
+		l.InputFg = lipgloss.Color("#55FFFF")
+	}
+	if l.DisabledFg == nil {
+		l.DisabledFg = lipgloss.Color("#555555")
+	}
+	if l.OuterTL == "" {
+		l.OuterTL = "╔"
+	}
+	if l.OuterTR == "" {
+		l.OuterTR = "╗"
+	}
+	if l.OuterBL == "" {
+		l.OuterBL = "╚"
+	}
+	if l.OuterBR == "" {
+		l.OuterBR = "╝"
+	}
+	if l.OuterH == "" {
+		l.OuterH = "═"
+	}
+	if l.OuterV == "" {
+		l.OuterV = "║"
+	}
+	if l.InnerH == "" {
+		l.InnerH = "─"
+	}
+	if l.InnerV == "" {
+		l.InnerV = "│"
+	}
+	if l.CrossL == "" {
+		l.CrossL = "╟"
+	}
+	if l.CrossR == "" {
+		l.CrossR = "╢"
+	}
+	if l.CrossT == "" {
+		l.CrossT = "╤"
+	}
+	if l.CrossB == "" {
+		l.CrossB = "╧"
+	}
+	if l.CrossX == "" {
+		l.CrossX = "┼"
+	}
+	if l.BarSep == "" {
+		l.BarSep = "│"
+	}
+}
 
-// Inner divider accessors (default: single-line).
-func (l *Layer) IH() string { return ts(l.InnerH, "─") }
-func (l *Layer) IV() string { return ts(l.InnerV, "│") }
-
-// Intersection accessors (inner single meets outer double).
-func (l *Layer) XL() string { return ts(l.CrossL, "╟") }
-func (l *Layer) XR() string { return ts(l.CrossR, "╢") }
-func (l *Layer) XT() string { return ts(l.CrossT, "╤") }
-func (l *Layer) XB() string { return ts(l.CrossB, "╧") }
-func (l *Layer) XX() string { return ts(l.CrossX, "┼") }
-
-// Action bar separator.
-func (l *Layer) Sep() string { return ts(l.BarSep, "│") }
+// UnmarshalJSON decodes a Layer from JSON, applying defaults for missing fields.
+func (l *Layer) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Bg          string `json:"bg"`
+		Fg          string `json:"fg"`
+		Accent      string `json:"accent"`
+		HighlightBg string `json:"highlightBg"`
+		HighlightFg string `json:"highlightFg"`
+		ActiveBg    string `json:"activeBg"`
+		ActiveFg    string `json:"activeFg"`
+		InputBg     string `json:"inputBg"`
+		InputFg     string `json:"inputFg"`
+		DisabledFg  string `json:"disabledFg"`
+		OuterTL     string `json:"outerTL"`
+		OuterTR     string `json:"outerTR"`
+		OuterBL     string `json:"outerBL"`
+		OuterBR     string `json:"outerBR"`
+		OuterH      string `json:"outerH"`
+		OuterV      string `json:"outerV"`
+		InnerH      string `json:"innerH"`
+		InnerV      string `json:"innerV"`
+		CrossL      string `json:"crossL"`
+		CrossR      string `json:"crossR"`
+		CrossT      string `json:"crossT"`
+		CrossB      string `json:"crossB"`
+		CrossX      string `json:"crossX"`
+		BarSep      string `json:"barSep"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	// Palette: convert non-empty hex strings to lipgloss.Color.
+	if raw.Bg != "" {
+		l.Bg = lipgloss.Color(raw.Bg)
+	}
+	if raw.Fg != "" {
+		l.Fg = lipgloss.Color(raw.Fg)
+	}
+	if raw.Accent != "" {
+		l.Accent = lipgloss.Color(raw.Accent)
+	}
+	if raw.HighlightBg != "" {
+		l.HighlightBg = lipgloss.Color(raw.HighlightBg)
+	}
+	if raw.HighlightFg != "" {
+		l.HighlightFg = lipgloss.Color(raw.HighlightFg)
+	}
+	if raw.ActiveBg != "" {
+		l.ActiveBg = lipgloss.Color(raw.ActiveBg)
+	}
+	if raw.ActiveFg != "" {
+		l.ActiveFg = lipgloss.Color(raw.ActiveFg)
+	}
+	if raw.InputBg != "" {
+		l.InputBg = lipgloss.Color(raw.InputBg)
+	}
+	if raw.InputFg != "" {
+		l.InputFg = lipgloss.Color(raw.InputFg)
+	}
+	if raw.DisabledFg != "" {
+		l.DisabledFg = lipgloss.Color(raw.DisabledFg)
+	}
+	// Borders: copy raw strings.
+	l.OuterTL = raw.OuterTL
+	l.OuterTR = raw.OuterTR
+	l.OuterBL = raw.OuterBL
+	l.OuterBR = raw.OuterBR
+	l.OuterH = raw.OuterH
+	l.OuterV = raw.OuterV
+	l.InnerH = raw.InnerH
+	l.InnerV = raw.InnerV
+	l.CrossL = raw.CrossL
+	l.CrossR = raw.CrossR
+	l.CrossT = raw.CrossT
+	l.CrossB = raw.CrossB
+	l.CrossX = raw.CrossX
+	l.BarSep = raw.BarSep
+	l.fillDefaults()
+	return nil
+}
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -160,16 +248,49 @@ func (l *Layer) Sep() string { return ts(l.BarSep, "│") }
 //	3 → Secondary again, 4 → Tertiary, ...
 //	Warning dialogs → Warning (always, regardless of depth)
 type Theme struct {
-	Name string `json:"name"`
+	Name string `json:"-"`
 
-	Primary   Layer `json:"primary"`
-	Secondary Layer `json:"secondary"`
-	Tertiary  Layer `json:"tertiary"`
-	Warning   Layer `json:"warning"`
+	Primary   Layer `json:"-"`
+	Secondary Layer `json:"-"`
+	Tertiary  Layer `json:"-"`
+	Warning   Layer `json:"-"`
 
-	// Drop shadow (bg = shadow area, fg = half-block foreground for depth effect)
-	ShadowBg string `json:"shadowBg"`
-	ShadowFg string `json:"shadowFg"`
+	// Drop shadow (bg = shadow area, fg = half-block foreground for depth effect).
+	ShadowBg color.Color `json:"-"`
+	ShadowFg color.Color `json:"-"`
+}
+
+// UnmarshalJSON decodes a Theme from JSON, converting shadow color strings
+// and delegating layer decoding to Layer.UnmarshalJSON.
+func (t *Theme) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Name      string `json:"name"`
+		Primary   Layer  `json:"primary"`
+		Secondary Layer  `json:"secondary"`
+		Tertiary  Layer  `json:"tertiary"`
+		Warning   Layer  `json:"warning"`
+		ShadowBg  string `json:"shadowBg"`
+		ShadowFg  string `json:"shadowFg"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	t.Name = raw.Name
+	t.Primary = raw.Primary
+	t.Secondary = raw.Secondary
+	t.Tertiary = raw.Tertiary
+	t.Warning = raw.Warning
+	if raw.ShadowBg != "" {
+		t.ShadowBg = lipgloss.Color(raw.ShadowBg)
+	} else {
+		t.ShadowBg = lipgloss.Color("#000000")
+	}
+	if raw.ShadowFg != "" {
+		t.ShadowFg = lipgloss.Color(raw.ShadowFg)
+	} else {
+		t.ShadowFg = lipgloss.Color("#555555")
+	}
+	return nil
 }
 
 // LayerAt returns the theme layer for the given depth level.
@@ -188,21 +309,9 @@ func (t *Theme) LayerAt(depth int) *Layer {
 // WarningLayer returns the warning theme layer.
 func (t *Theme) WarningLayer() *Layer { return &t.Warning }
 
-// Global color accessors.
-func (t *Theme) ShadowBgC() color.Color { return tc(t.ShadowBg, "#000000") }
-func (t *Theme) ShadowFgC() color.Color { return tc(t.ShadowFg, "#555555") }
-
 // ShadowStyle returns the style for drop shadow rendering.
 func (t *Theme) ShadowStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Background(t.ShadowBgC()).Foreground(t.ShadowFgC())
-}
-
-// ts returns s if non-empty, otherwise fallback.
-func ts(s, fallback string) string {
-	if s == "" {
-		return fallback
-	}
-	return s
+	return lipgloss.NewStyle().Background(t.ShadowBg).Foreground(t.ShadowFg)
 }
 
 // Load reads a theme JSON file and returns the parsed Theme.
@@ -223,38 +332,44 @@ func Load(path string) (*Theme, error) {
 
 // Default returns the built-in norton theme.
 func Default() *Theme {
-	return &Theme{
+	t := &Theme{
 		Name: "norton",
 		Primary: Layer{Palette: Palette{
-			Bg: "#000080", Fg: "#00AAAA", Accent: "#FFFF55",
-			HighlightBg: "#00AAAA", HighlightFg: "#000000",
-			ActiveBg: "#FFFF55", ActiveFg: "#000000",
-			InputBg: "#000000", InputFg: "#55FFFF",
-			DisabledFg: "#555555",
+			Bg: lipgloss.Color("#000080"), Fg: lipgloss.Color("#00AAAA"), Accent: lipgloss.Color("#FFFF55"),
+			HighlightBg: lipgloss.Color("#00AAAA"), HighlightFg: lipgloss.Color("#000000"),
+			ActiveBg: lipgloss.Color("#FFFF55"), ActiveFg: lipgloss.Color("#000000"),
+			InputBg: lipgloss.Color("#000000"), InputFg: lipgloss.Color("#55FFFF"),
+			DisabledFg: lipgloss.Color("#555555"),
 		}},
 		Secondary: Layer{Palette: Palette{
-			Bg: "#008080", Fg: "#000000", Accent: "#FFFF55",
-			HighlightBg: "#000000", HighlightFg: "#00AAAA",
-			ActiveBg: "#FFFF55", ActiveFg: "#000000",
-			InputBg: "#000000", InputFg: "#55FFFF",
-			DisabledFg: "#555555",
+			Bg: lipgloss.Color("#008080"), Fg: lipgloss.Color("#000000"), Accent: lipgloss.Color("#FFFF55"),
+			HighlightBg: lipgloss.Color("#000000"), HighlightFg: lipgloss.Color("#00AAAA"),
+			ActiveBg: lipgloss.Color("#FFFF55"), ActiveFg: lipgloss.Color("#000000"),
+			InputBg: lipgloss.Color("#000000"), InputFg: lipgloss.Color("#55FFFF"),
+			DisabledFg: lipgloss.Color("#555555"),
 		}},
 		Tertiary: Layer{Palette: Palette{
-			Bg: "#AAAAAA", Fg: "#000000", Accent: "#FFFF55",
-			HighlightBg: "#000000", HighlightFg: "#FFFFFF",
-			ActiveBg: "#FFFF55", ActiveFg: "#000000",
-			InputBg: "#000000", InputFg: "#55FFFF",
-			DisabledFg: "#555555",
+			Bg: lipgloss.Color("#AAAAAA"), Fg: lipgloss.Color("#000000"), Accent: lipgloss.Color("#FFFF55"),
+			HighlightBg: lipgloss.Color("#000000"), HighlightFg: lipgloss.Color("#FFFFFF"),
+			ActiveBg: lipgloss.Color("#FFFF55"), ActiveFg: lipgloss.Color("#000000"),
+			InputBg: lipgloss.Color("#000000"), InputFg: lipgloss.Color("#55FFFF"),
+			DisabledFg: lipgloss.Color("#555555"),
 		}},
 		Warning: Layer{Palette: Palette{
-			Bg: "#AA0000", Fg: "#FFFFFF", Accent: "#FFFF55",
-			HighlightBg: "#FFFFFF", HighlightFg: "#AA0000",
-			ActiveBg: "#FFFF55", ActiveFg: "#000000",
-			InputBg: "#000000", InputFg: "#55FFFF",
-			DisabledFg: "#555555",
+			Bg: lipgloss.Color("#AA0000"), Fg: lipgloss.Color("#FFFFFF"), Accent: lipgloss.Color("#FFFF55"),
+			HighlightBg: lipgloss.Color("#FFFFFF"), HighlightFg: lipgloss.Color("#AA0000"),
+			ActiveBg: lipgloss.Color("#FFFF55"), ActiveFg: lipgloss.Color("#000000"),
+			InputBg: lipgloss.Color("#000000"), InputFg: lipgloss.Color("#55FFFF"),
+			DisabledFg: lipgloss.Color("#555555"),
 		}},
-		ShadowBg: "#333333",
+		ShadowBg: lipgloss.Color("#333333"),
+		ShadowFg: lipgloss.Color("#555555"),
 	}
+	t.Primary.fillDefaults()
+	t.Secondary.fillDefaults()
+	t.Tertiary.fillDefaults()
+	t.Warning.fillDefaults()
+	return t
 }
 
 // ListThemes returns the names of available theme files in the themes directory.

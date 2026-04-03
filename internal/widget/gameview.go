@@ -53,8 +53,8 @@ func (g *GameView) Update(msg tea.Msg) {
 
 func (g *GameView) Render(buf *render.ImageBuffer, x, y, width, height int, _ bool, layer *theme.Layer) {
 	if g.RenderFn == nil {
-		fg := layer.FgC()
-		bg := layer.BgC()
+		fg := layer.Fg
+		bg := layer.Bg
 		buf.Fill(x, y, width, height, ' ', fg, bg, render.AttrNone)
 		return
 	}

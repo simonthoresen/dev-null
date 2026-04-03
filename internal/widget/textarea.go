@@ -102,10 +102,10 @@ func (a *TextArea) Update(msg tea.Msg) {
 func (a *TextArea) Render(buf *render.ImageBuffer, x, y, width, height int, focused bool, layer *theme.Layer) {
 	a.height = height
 	fieldW := max(1, width-2) // -2 for "[" and "]"
-	baseFg := layer.FgC()
-	baseBg := layer.BgC()
-	inputFg := layer.InputFgC()
-	inputBg := layer.InputBgC()
+	baseFg := layer.Fg
+	baseBg := layer.Bg
+	inputFg := layer.InputFg
+	inputBg := layer.InputBg
 
 	// Ensure at least one line.
 	if len(a.Lines) == 0 {

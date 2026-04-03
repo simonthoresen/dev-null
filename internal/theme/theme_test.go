@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"charm.land/lipgloss/v2"
 )
 
 func TestDefaultThemeNotNil(t *testing.T) {
@@ -49,47 +51,47 @@ func TestWarningLayer(t *testing.T) {
 func TestBorderDefaults(t *testing.T) {
 	th := Default()
 	layer := th.LayerAt(0)
-	if layer.OTL() != "╔" {
-		t.Errorf("expected double-line TL, got %q", layer.OTL())
+	if layer.OuterTL != "╔" {
+		t.Errorf("expected double-line TL, got %q", layer.OuterTL)
 	}
-	if layer.OTR() != "╗" {
-		t.Errorf("expected double-line TR, got %q", layer.OTR())
+	if layer.OuterTR != "╗" {
+		t.Errorf("expected double-line TR, got %q", layer.OuterTR)
 	}
-	if layer.OBL() != "╚" {
-		t.Errorf("expected double-line BL, got %q", layer.OBL())
+	if layer.OuterBL != "╚" {
+		t.Errorf("expected double-line BL, got %q", layer.OuterBL)
 	}
-	if layer.OBR() != "╝" {
-		t.Errorf("expected double-line BR, got %q", layer.OBR())
+	if layer.OuterBR != "╝" {
+		t.Errorf("expected double-line BR, got %q", layer.OuterBR)
 	}
-	if layer.OH() != "═" {
-		t.Errorf("expected double-line H, got %q", layer.OH())
+	if layer.OuterH != "═" {
+		t.Errorf("expected double-line H, got %q", layer.OuterH)
 	}
-	if layer.OV() != "║" {
-		t.Errorf("expected double-line V, got %q", layer.OV())
+	if layer.OuterV != "║" {
+		t.Errorf("expected double-line V, got %q", layer.OuterV)
 	}
-	if layer.IH() != "─" {
-		t.Errorf("expected single-line inner H, got %q", layer.IH())
+	if layer.InnerH != "─" {
+		t.Errorf("expected single-line inner H, got %q", layer.InnerH)
 	}
-	if layer.IV() != "│" {
-		t.Errorf("expected single-line inner V, got %q", layer.IV())
+	if layer.InnerV != "│" {
+		t.Errorf("expected single-line inner V, got %q", layer.InnerV)
 	}
-	if layer.XL() != "╟" {
-		t.Errorf("expected intersection XL, got %q", layer.XL())
+	if layer.CrossL != "╟" {
+		t.Errorf("expected intersection CrossL, got %q", layer.CrossL)
 	}
-	if layer.XR() != "╢" {
-		t.Errorf("expected intersection XR, got %q", layer.XR())
+	if layer.CrossR != "╢" {
+		t.Errorf("expected intersection CrossR, got %q", layer.CrossR)
 	}
-	if layer.XT() != "╤" {
-		t.Errorf("expected intersection XT, got %q", layer.XT())
+	if layer.CrossT != "╤" {
+		t.Errorf("expected intersection CrossT, got %q", layer.CrossT)
 	}
-	if layer.XB() != "╧" {
-		t.Errorf("expected intersection XB, got %q", layer.XB())
+	if layer.CrossB != "╧" {
+		t.Errorf("expected intersection CrossB, got %q", layer.CrossB)
 	}
-	if layer.XX() != "┼" {
-		t.Errorf("expected intersection XX, got %q", layer.XX())
+	if layer.CrossX != "┼" {
+		t.Errorf("expected intersection CrossX, got %q", layer.CrossX)
 	}
-	if layer.Sep() != "│" {
-		t.Errorf("expected bar separator, got %q", layer.Sep())
+	if layer.BarSep != "│" {
+		t.Errorf("expected bar separator, got %q", layer.BarSep)
 	}
 }
 
@@ -98,63 +100,58 @@ func TestBorderCustomValues(t *testing.T) {
 	th.Primary.OuterTL = "+"
 	th.Primary.InnerH = "~"
 	layer := th.LayerAt(0)
-	if layer.OTL() != "+" {
-		t.Errorf("expected custom TL '+', got %q", layer.OTL())
+	if layer.OuterTL != "+" {
+		t.Errorf("expected custom TL '+', got %q", layer.OuterTL)
 	}
-	if layer.IH() != "~" {
-		t.Errorf("expected custom IH '~', got %q", layer.IH())
+	if layer.InnerH != "~" {
+		t.Errorf("expected custom IH '~', got %q", layer.InnerH)
 	}
 }
 
-func TestPaletteColorAccessors(t *testing.T) {
+func TestPaletteColors(t *testing.T) {
 	p := &Palette{
-		Bg: "#112233", Fg: "#445566",
-		Accent: "#778899", HighlightBg: "#aabbcc",
-		HighlightFg: "#ddeeff", ActiveBg: "#001122",
-		ActiveFg: "#334455", InputBg: "#667788",
-		InputFg: "#99aabb", DisabledFg: "#ccddee",
+		Bg: lipgloss.Color("#112233"), Fg: lipgloss.Color("#445566"),
+		Accent: lipgloss.Color("#778899"), HighlightBg: lipgloss.Color("#aabbcc"),
+		HighlightFg: lipgloss.Color("#ddeeff"), ActiveBg: lipgloss.Color("#001122"),
+		ActiveFg: lipgloss.Color("#334455"), InputBg: lipgloss.Color("#667788"),
+		InputFg: lipgloss.Color("#99aabb"), DisabledFg: lipgloss.Color("#ccddee"),
 	}
-	// Just verify they don't panic and return non-nil.
-	accessors := []func(){
-		func() { p.BgC() },
-		func() { p.FgC() },
-		func() { p.AccentC() },
-		func() { p.HighlightBgC() },
-		func() { p.HighlightFgC() },
-		func() { p.ActiveBgC() },
-		func() { p.ActiveFgC() },
-		func() { p.InputBgC() },
-		func() { p.InputFgC() },
-		func() { p.DisabledFgC() },
+	// Verify fields are set and non-nil.
+	if p.Bg == nil {
+		t.Error("Bg should not be nil")
 	}
-	for i, fn := range accessors {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					t.Errorf("accessor %d panicked: %v", i, r)
-				}
-			}()
-			fn()
-		}()
+	if p.Fg == nil {
+		t.Error("Fg should not be nil")
 	}
 }
 
 func TestPaletteColorFallbacks(t *testing.T) {
-	p := &Palette{} // all empty — should use fallbacks
-	// These should not panic.
-	p.BgC()
-	p.FgC()
-	p.AccentC()
-	p.InputBgC()
-	p.DisabledFgC()
+	// Empty layer — fillDefaults should populate all colors.
+	l := &Layer{}
+	l.fillDefaults()
+	if l.Bg == nil {
+		t.Error("Bg should be set by fillDefaults")
+	}
+	if l.Fg == nil {
+		t.Error("Fg should be set by fillDefaults")
+	}
+	if l.InputBg == nil {
+		t.Error("InputBg should be set by fillDefaults")
+	}
+	if l.DisabledFg == nil {
+		t.Error("DisabledFg should be set by fillDefaults")
+	}
 }
 
 func TestPaletteStyleBuilders(t *testing.T) {
-	p := &Palette{Bg: "#000000", Fg: "#ffffff", Accent: "#ff0000",
-		HighlightBg: "#0000ff", HighlightFg: "#ffffff",
-		ActiveBg: "#00ff00", ActiveFg: "#000000",
-		InputBg: "#111111", InputFg: "#eeeeee",
-		DisabledFg: "#888888"}
+	p := &Palette{
+		Bg: lipgloss.Color("#000000"), Fg: lipgloss.Color("#ffffff"),
+		Accent: lipgloss.Color("#ff0000"),
+		HighlightBg: lipgloss.Color("#0000ff"), HighlightFg: lipgloss.Color("#ffffff"),
+		ActiveBg: lipgloss.Color("#00ff00"), ActiveFg: lipgloss.Color("#000000"),
+		InputBg: lipgloss.Color("#111111"), InputFg: lipgloss.Color("#eeeeee"),
+		DisabledFg: lipgloss.Color("#888888"),
+	}
 
 	// Verify style builders don't panic and produce non-empty renders.
 	styles := []func() string{
@@ -199,8 +196,8 @@ func TestLoad(t *testing.T) {
 	if th.Name != "custom" {
 		t.Fatalf("expected 'custom', got %q", th.Name)
 	}
-	if th.Primary.Bg != "#111" {
-		t.Fatalf("expected primary bg '#111', got %q", th.Primary.Bg)
+	if th.Primary.Bg != lipgloss.Color("#111") {
+		t.Fatalf("expected primary bg lipgloss.Color('#111'), got %v", th.Primary.Bg)
 	}
 }
 
@@ -248,14 +245,14 @@ func TestLoadWithPerLayerBorders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if th.Primary.OTL() != "┌" {
-		t.Fatalf("expected primary TL '┌', got %q", th.Primary.OTL())
+	if th.Primary.OuterTL != "┌" {
+		t.Fatalf("expected primary TL '┌', got %q", th.Primary.OuterTL)
 	}
-	if th.Primary.OH() != "─" {
-		t.Fatalf("expected primary H '─', got %q", th.Primary.OH())
+	if th.Primary.OuterH != "─" {
+		t.Fatalf("expected primary H '─', got %q", th.Primary.OuterH)
 	}
-	if th.Secondary.OTL() != "╔" {
-		t.Fatalf("expected secondary TL '╔', got %q", th.Secondary.OTL())
+	if th.Secondary.OuterTL != "╔" {
+		t.Fatalf("expected secondary TL '╔', got %q", th.Secondary.OuterTL)
 	}
 }
 

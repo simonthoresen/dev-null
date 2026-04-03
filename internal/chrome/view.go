@@ -34,7 +34,7 @@ func (m Model) View() tea.View {
 	m.api.State().RUnlock()
 
 	if (!m.inActiveGame || phase == domain.PhaseNone || phase == domain.PhaseSuspended) && m.teamEditing {
-		SetInputStyle(&m.teamEditInput, m.theme.LayerAt(0).InputBgC(), m.theme.LayerAt(0).InputFgC())
+		SetInputStyle(&m.teamEditInput, m.theme.LayerAt(0).InputBg, m.theme.LayerAt(0).InputFg)
 	}
 
 	// Build menus once per frame — passed to sub-views and overlay rendering.
@@ -60,13 +60,13 @@ func (m Model) View() tea.View {
 	engine.ApplyShaders(m.shaders, buf, shaderElapsed)
 
 	// Overlay layers: render to sub-buffers, blit, then shadow via RecolorRect.
-	shadowFg := m.theme.ShadowFgC()
-	shadowBg := m.theme.ShadowBgC()
+	shadowFg := m.theme.ShadowFg
+	shadowBg := m.theme.ShadowBg
 	if m.overlay.OpenMenu >= 0 {
 		menuLayer := m.theme.LayerAt(1)
 		if dd := m.overlay.RenderDropdown(menus, 0, menuLayer); dd.Content != "" {
 			sub := render.NewImageBuffer(dd.Width, dd.Height)
-			sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, menuLayer.FgC(), menuLayer.BgC())
+			sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, menuLayer.Fg, menuLayer.Bg)
 			buf.Blit(dd.Col, dd.Row, sub)
 			render.BlitShadow(buf, dd.Col, dd.Row, dd.Width, dd.Height, shadowFg, shadowBg)
 		}
@@ -75,7 +75,7 @@ func (m Model) View() tea.View {
 		dlgLayer := m.theme.LayerAt(2)
 		if dlg := m.overlay.RenderDialog(m.width, m.height, dlgLayer); dlg.Content != "" {
 			sub := render.NewImageBuffer(dlg.Width, dlg.Height)
-			sub.PaintANSI(0, 0, dlg.Width, dlg.Height, dlg.Content, dlgLayer.FgC(), dlgLayer.BgC())
+			sub.PaintANSI(0, 0, dlg.Width, dlg.Height, dlg.Content, dlgLayer.Fg, dlgLayer.Bg)
 			buf.Blit(dlg.Col, dlg.Row, sub)
 			render.BlitShadow(buf, dlg.Col, dlg.Row, dlg.Width, dlg.Height, shadowFg, shadowBg)
 		}

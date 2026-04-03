@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	"null-space/internal/domain"
 	"null-space/internal/theme"
 )
@@ -262,10 +264,10 @@ func TestSameLayoutDifferentThemeBorders(t *testing.T) {
 // easily-identifiable background color.
 func distinctPaletteTheme() *theme.Theme {
 	th := theme.Default()
-	th.Primary.Bg = "#110000"   // depth 0
-	th.Secondary.Bg = "#002200" // depth 1, 3, 5...
-	th.Tertiary.Bg = "#000033"  // depth 2, 4, 6...
-	th.Warning.Bg = "#330000"   // warning dialogs
+	th.Primary.Bg = lipgloss.Color("#110000")   // depth 0
+	th.Secondary.Bg = lipgloss.Color("#002200") // depth 1, 3, 5...
+	th.Tertiary.Bg = lipgloss.Color("#000033")  // depth 2, 4, 6...
+	th.Warning.Bg = lipgloss.Color("#330000")   // warning dialogs
 	return th
 }
 
