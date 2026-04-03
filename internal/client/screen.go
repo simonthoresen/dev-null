@@ -3,6 +3,7 @@ package client
 import (
 	"time"
 
+	"null-space/internal/domain"
 	"null-space/internal/render"
 	"null-space/internal/theme"
 	"null-space/internal/widget"
@@ -97,7 +98,7 @@ func (cs *ClientScreen) RenderPlaying(
 	cs.gameView.RenderFn = renderFn
 	cs.chatView.Lines = chatLines
 	cs.statusBar.LeftText = " " + statusLeft
-	cs.statusBar.RightText = time.Now().Format("2006-01-02 15:04:05") + " "
+	cs.statusBar.RightText = time.Now().Format(domain.TimeFormatDateTime) + " "
 
 	buf := render.NewImageBuffer(width, height)
 	cs.screen.RenderToBuf(buf, 0, 0, width, height, cs.theme)

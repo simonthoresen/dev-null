@@ -94,7 +94,7 @@ func (m *Model) showResumeGameDialog() {
 			teamNote = fmt.Sprintf("  (lobby has %d teams)", teamCount)
 		}
 		lines = append(lines, fmt.Sprintf("  %d. %s/%s  (%d teams, %s)%s",
-			i+1, s.GameName, s.SaveName, s.TeamCount, s.SavedAt.Format("Jan 2 15:04"), teamNote))
+			i+1, s.GameName, s.SaveName, s.TeamCount, s.SavedAt.Format(domain.TimeFormatShort), teamNote))
 		buttons = append(buttons, fmt.Sprintf("%d", i+1))
 	}
 	buttons = append(buttons, "Cancel")

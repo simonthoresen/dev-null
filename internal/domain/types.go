@@ -137,6 +137,28 @@ func (n *WidgetNode) Hash() uint64 {
 	return h.Sum64()
 }
 
+// Shared constants used across packages.
+const (
+	// Time format constants — use these instead of inline format strings.
+	TimeFormatDateTime = "2006-01-02 15:04:05" // status bars, chat logs
+	TimeFormatFileSafe = "2006-01-02_15-04-05" // save file names
+	TimeFormatShort    = "Jan 2 15:04"         // compact timestamps (menus, lists)
+
+	// MaxChatDisplayLines is the maximum number of chat lines kept in the
+	// per-player display buffer (separate from the server's MaxChatHistory).
+	MaxChatDisplayLines = 200
+
+	// Canvas scale bounds for /canvas scale <n>.
+	MinCanvasScale = 1
+	MaxCanvasScale = 32
+
+	// MaxPlayerNameLen caps the length of sanitized player names.
+	MaxPlayerNameLen = 50
+
+	// MaxConnections is the default cap on concurrent SSH sessions.
+	MaxConnections = 100
+)
+
 // Tea messages
 
 type TickMsg struct{ N int }               // broadcast to all programs every tick; N is tick counter

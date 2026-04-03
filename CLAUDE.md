@@ -112,7 +112,9 @@ Two primary mutexes protect shared state:
 
 **Callers** (`internal/server/server.go`, `internal/chrome/model.go`) must release `state.mu` **before** calling any `jsRuntime` Game method (`Init`, `Start`, `Update`, `Render`, `OnInput`, etc.). All existing call sites follow this pattern — verify any new ones do too.
 
-Other mutexes (`programsMu`, `sessionsMu`, `consoleProgramMu`, `commandRegistry.mu`) are leaf locks — they don't call into JS or acquire `state.mu`.
+Other mutexes (`programsMu`, `sessionsMu`, `consoleProgramMu`, `commandRegistry.mu`, `lastUpdateMu`) are leaf locks — they don't call into JS or acquire `state.mu`.
+
+**`lastUpdateMu`** protects the `Server.lastUpdate` field, which is written from `splashTimer()`, `resumeGame()`, and read/written in `runTicker()`. All access must go through this mutex.
 
 ## Slog Feedback Loop Guard
 

@@ -358,8 +358,8 @@ func (m *Model) syncChat() {
 			addLines(fmt.Sprintf("<%s> %s", msg.Author, msg.Text))
 		}
 	}
-	if len(lines) > 200 {
-		lines = lines[len(lines)-200:]
+	if len(lines) > domain.MaxChatDisplayLines {
+		lines = lines[len(lines)-domain.MaxChatDisplayLines:]
 	}
 	m.chatLines = lines
 }

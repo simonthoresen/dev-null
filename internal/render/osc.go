@@ -18,6 +18,13 @@ import (
 //   charmap  — base64-encoded JSON charmap definition
 //   atlas    — base64-encoded gzipped PNG sprite sheet
 //   viewport — game viewport bounds: x,y,w,h
+//
+// Error handling: These functions return "" on error intentionally.
+// They are called exclusively from View()/Render() paths where errors
+// cannot be propagated (tea.View has no error return) and logging is
+// forbidden (slog in render paths causes a feedback loop — see CLAUDE.md).
+// A missing OSC sequence degrades gracefully: the enhanced client falls
+// back to text-mode rendering.
 
 // EncodeCharmapOSC returns an OSC sequence containing the charmap definition.
 func EncodeCharmapOSC(def *CharMapDef) string {

@@ -37,6 +37,7 @@ type Server struct {
 	port     string // SSH listen port, e.g. "23234"
 	clock    domain.Clock // central server clock (mockable in tests)
 
+	maxPlayers int // max concurrent SSH sessions (0 = unlimited)
 	programs   map[string]*tea.Program // key = playerID
 	programsMu sync.Mutex
 
@@ -60,7 +61,8 @@ type Server struct {
 	upnpMapping *network.UPnPMapping
 
 	tickInterval  time.Duration   // how often the server ticks (default 100ms)
-	lastUpdate    time.Time       // last time Update() was called on the active game
+	lastUpdateMu  sync.Mutex     // protects lastUpdate
+	lastUpdate    time.Time      // last time Update() was called on the active game
 	splashDone    chan struct{}   // closed to end splash phase early
 	gameOverTimer chan struct{}   // closed to end game-over phase early
 }
@@ -75,6 +77,7 @@ func New(address, password, dataDir string, tickInterval time.Duration) (*Server
 		dataDir:      dataDir,
 		clock:        domain.RealClock{},
 		tickInterval: tickInterval,
+		maxPlayers:   domain.MaxConnections,
 		programs:     make(map[string]*tea.Program),
 		sessions:     make(map[string]ssh.Session),
 		logCh:        make(chan string, 256),
@@ -350,8 +353,10 @@ func (a *Server) runTicker(ctx context.Context) {
 			// state is fresh when players render.
 			if game != nil && phase == domain.PhasePlaying {
 				now := a.clock.Now()
+				a.lastUpdateMu.Lock()
 				dt := now.Sub(a.lastUpdate).Seconds()
 				a.lastUpdate = now
+				a.lastUpdateMu.Unlock()
 				game.Update(dt)
 			}
 
@@ -364,7 +369,10 @@ func (a *Server) runTicker(ctx context.Context) {
 }
 
 func (a *Server) uptime() string {
-	duration := time.Since(a.state.StartTime).Truncate(time.Second)
+	a.state.RLock()
+	startTime := a.state.StartTime
+	a.state.RUnlock()
+	duration := time.Since(startTime).Truncate(time.Second)
 	minutes := int(duration / time.Minute)
 	seconds := int((duration % time.Minute) / time.Second)
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
@@ -549,8 +557,8 @@ func (a *Server) registerBuiltins() {
 					return
 				}
 				n, err := strconv.Atoi(args[1])
-				if err != nil || n < 1 || n > 32 {
-					ctx.Reply("Scale must be 1-32.")
+				if err != nil || n < domain.MinCanvasScale || n > domain.MaxCanvasScale {
+					ctx.Reply(fmt.Sprintf("Scale must be %d-%d.", domain.MinCanvasScale, domain.MaxCanvasScale))
 					return
 				}
 				a.state.Lock()
@@ -599,131 +607,8 @@ func (a *Server) registerBuiltins() {
 	a.registry.Register(domain.Command{
 		Name:        "game",
 		Description: "Game management. /game list|load|unload|suspend|resume",
-		Complete: func(before []string) []string {
-			switch len(before) {
-			case 0:
-				return []string{"list", "load", "unload", "suspend", "resume"}
-			case 1:
-				switch before[0] {
-				case "load":
-					return engine.ListGames(filepath.Join(a.dataDir, "games"))
-				case "unload":
-					a.state.RLock()
-					name := a.state.GameName
-					a.state.RUnlock()
-					if name != "" {
-						return []string{strings.TrimSuffix(filepath.Base(name), ".js")}
-					}
-				case "resume":
-					return state.ListSuspendNames(a.dataDir)
-				}
-			}
-			return nil
-		},
-		Handler: func(ctx domain.CommandContext, args []string) {
-			gamesDir := filepath.Join(a.dataDir, "games")
-			if len(args) == 0 {
-				available := engine.ListGames(gamesDir)
-				if len(available) == 0 {
-					ctx.Reply("No games found in games/")
-					return
-				}
-				ctx.Reply(a.formatGameList(gamesDir, available))
-				return
-			}
-			switch args[0] {
-			case "list":
-				available := engine.ListGames(gamesDir)
-				if len(available) == 0 {
-					ctx.Reply("No games found in games/")
-					return
-				}
-				ctx.Reply(a.formatGameList(gamesDir, available))
-			case "load":
-				if !ctx.IsAdmin {
-					ctx.Reply("Permission denied (admin only)")
-					return
-				}
-				if len(args) < 2 {
-					ctx.Reply("Usage: /game load <name>")
-					return
-				}
-				var path string
-				if network.IsURL(args[1]) {
-					path = args[1]
-				} else {
-					path = engine.ResolveGamePath(filepath.Join(a.dataDir, "games"), args[1])
-				}
-				if err := a.loadGame(path); err != nil {
-					ctx.Reply(fmt.Sprintf("Failed to load game: %v", err))
-					return
-				}
-			case "unload":
-				if !ctx.IsAdmin {
-					ctx.Reply("Permission denied (admin only)")
-					return
-				}
-				a.state.RLock()
-				active := a.state.GameName
-				a.state.RUnlock()
-				if active == "" {
-					ctx.Reply("No game is currently loaded.")
-					return
-				}
-				a.unloadGame()
-			case "suspend":
-				if !ctx.IsAdmin {
-					ctx.Reply("Permission denied (admin only)")
-					return
-				}
-				saveName := ""
-				if len(args) >= 2 {
-					saveName = args[1]
-				}
-				if saveName == "" {
-					// Auto-generate a save name from the current time.
-					saveName = a.clock.Now().Format("2006-01-02_15-04-05")
-				}
-				if err := a.suspendGame(saveName); err != nil {
-					ctx.Reply(fmt.Sprintf("Failed to suspend: %v", err))
-					return
-				}
-			case "resume":
-				if !ctx.IsAdmin {
-					ctx.Reply("Permission denied (admin only)")
-					return
-				}
-				if len(args) < 2 {
-					// List available saves.
-					saves := state.ListSuspends(a.dataDir, "")
-					if len(saves) == 0 {
-						ctx.Reply("No suspended games found. Usage: /game resume <gameName/saveName>")
-						return
-					}
-					var lines []string
-					lines = append(lines, "Suspended games:")
-					for _, s := range saves {
-						lines = append(lines, fmt.Sprintf("  %s/%s  (%d teams, %s)",
-							s.GameName, s.SaveName, s.TeamCount, s.SavedAt.Format("Jan 2 15:04")))
-					}
-					lines = append(lines, "Usage: /game resume <gameName/saveName>")
-					ctx.Reply(strings.Join(lines, "\n"))
-					return
-				}
-				ref := args[1]
-				parts := strings.SplitN(ref, "/", 2)
-				if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-					ctx.Reply("Usage: /game resume <gameName/saveName>")
-					return
-				}
-				if err := a.resumeGame(parts[0], parts[1]); err != nil {
-					ctx.Reply(fmt.Sprintf("Failed to resume: %v", err))
-					return
-				}
-			default:
-				ctx.Reply(fmt.Sprintf("Unknown subcommand '%s'. Use: list, load, unload, suspend, resume", args[0]))
-			}
-		},
+		Complete:    a.gameCommandComplete,
+		Handler:     a.gameCommandHandler,
 	})
 
 	// /games → /game list, /load <name> → /game load <name>
@@ -791,6 +676,137 @@ func (a *Server) registerBuiltins() {
 		},
 	})
 
+}
+
+// requireAdmin checks admin privileges and replies with a denial if lacking.
+// Returns true if the caller should return (i.e. not admin).
+func requireAdmin(ctx domain.CommandContext) bool {
+	if !ctx.IsAdmin {
+		ctx.Reply("Permission denied (admin only)")
+		return true
+	}
+	return false
+}
+
+func (a *Server) gameCommandComplete(before []string) []string {
+	switch len(before) {
+	case 0:
+		return []string{"list", "load", "unload", "suspend", "resume"}
+	case 1:
+		switch before[0] {
+		case "load":
+			return engine.ListGames(filepath.Join(a.dataDir, "games"))
+		case "unload":
+			a.state.RLock()
+			name := a.state.GameName
+			a.state.RUnlock()
+			if name != "" {
+				return []string{strings.TrimSuffix(filepath.Base(name), ".js")}
+			}
+		case "resume":
+			return state.ListSuspendNames(a.dataDir)
+		}
+	}
+	return nil
+}
+
+func (a *Server) gameCommandHandler(ctx domain.CommandContext, args []string) {
+	gamesDir := filepath.Join(a.dataDir, "games")
+	if len(args) == 0 {
+		available := engine.ListGames(gamesDir)
+		if len(available) == 0 {
+			ctx.Reply("No games found in games/")
+			return
+		}
+		ctx.Reply(a.formatGameList(gamesDir, available))
+		return
+	}
+	switch args[0] {
+	case "list":
+		available := engine.ListGames(gamesDir)
+		if len(available) == 0 {
+			ctx.Reply("No games found in games/")
+			return
+		}
+		ctx.Reply(a.formatGameList(gamesDir, available))
+	case "load":
+		if requireAdmin(ctx) {
+			return
+		}
+		if len(args) < 2 {
+			ctx.Reply("Usage: /game load <name>")
+			return
+		}
+		var path string
+		if network.IsURL(args[1]) {
+			path = args[1]
+		} else {
+			path = engine.ResolveGamePath(filepath.Join(a.dataDir, "games"), args[1])
+		}
+		if err := a.loadGame(path); err != nil {
+			ctx.Reply(fmt.Sprintf("Failed to load game: %v", err))
+			return
+		}
+	case "unload":
+		if requireAdmin(ctx) {
+			return
+		}
+		a.state.RLock()
+		active := a.state.GameName
+		a.state.RUnlock()
+		if active == "" {
+			ctx.Reply("No game is currently loaded.")
+			return
+		}
+		a.unloadGame()
+	case "suspend":
+		if requireAdmin(ctx) {
+			return
+		}
+		saveName := ""
+		if len(args) >= 2 {
+			saveName = args[1]
+		}
+		if saveName == "" {
+			saveName = a.clock.Now().Format(domain.TimeFormatFileSafe)
+		}
+		if err := a.suspendGame(saveName); err != nil {
+			ctx.Reply(fmt.Sprintf("Failed to suspend: %v", err))
+			return
+		}
+	case "resume":
+		if requireAdmin(ctx) {
+			return
+		}
+		if len(args) < 2 {
+			saves := state.ListSuspends(a.dataDir, "")
+			if len(saves) == 0 {
+				ctx.Reply("No suspended games found. Usage: /game resume <gameName/saveName>")
+				return
+			}
+			var lines []string
+			lines = append(lines, "Suspended games:")
+			for _, s := range saves {
+				lines = append(lines, fmt.Sprintf("  %s/%s  (%d teams, %s)",
+					s.GameName, s.SaveName, s.TeamCount, s.SavedAt.Format(domain.TimeFormatShort)))
+			}
+			lines = append(lines, "Usage: /game resume <gameName/saveName>")
+			ctx.Reply(strings.Join(lines, "\n"))
+			return
+		}
+		ref := args[1]
+		parts := strings.SplitN(ref, "/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			ctx.Reply("Usage: /game resume <gameName/saveName>")
+			return
+		}
+		if err := a.resumeGame(parts[0], parts[1]); err != nil {
+			ctx.Reply(fmt.Sprintf("Failed to resume: %v", err))
+			return
+		}
+	default:
+		ctx.Reply(fmt.Sprintf("Unknown subcommand '%s'. Use: list, load, unload, suspend, resume", args[0]))
+	}
 }
 
 // formatGameList builds the game list output with team range info and compatibility markers.

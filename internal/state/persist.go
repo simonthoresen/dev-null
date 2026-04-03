@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -12,9 +13,31 @@ import (
 	"null-space/internal/domain"
 )
 
+// validNameRe matches names that are safe for use in file paths:
+// alphanumeric, hyphens, underscores, and dots (no path separators or ..).
+var validNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+
+// ValidateName checks that a name is safe for use in file paths.
+// Rejects empty strings, path traversal (.. or separators), and non-alphanumeric starts.
+func ValidateName(name string) error {
+	if name == "" {
+		return fmt.Errorf("name must not be empty")
+	}
+	if strings.Contains(name, "..") {
+		return fmt.Errorf("name must not contain '..'")
+	}
+	if !validNameRe.MatchString(name) {
+		return fmt.Errorf("name %q contains invalid characters (allowed: a-z, 0-9, '-', '_', '.')", name)
+	}
+	return nil
+}
+
 // LoadGameState reads the saved state for a game from dist/state/<gameName>.json.
 // Returns nil (no error) if the file does not exist.
 func LoadGameState(dataDir, gameName string) (any, error) {
+	if err := ValidateName(gameName); err != nil {
+		return nil, fmt.Errorf("invalid game name: %w", err)
+	}
 	path := filepath.Join(dataDir, "state", gameName+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -62,6 +85,12 @@ func suspendPath(dataDir, gameName, saveName string) string {
 
 // SaveSuspend writes a suspend save to disk.
 func SaveSuspend(dataDir string, save *SuspendSave) error {
+	if err := ValidateName(save.GameName); err != nil {
+		return fmt.Errorf("invalid game name: %w", err)
+	}
+	if err := ValidateName(save.SaveName); err != nil {
+		return fmt.Errorf("invalid save name: %w", err)
+	}
 	dir := suspendDir(dataDir, save.GameName)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create suspend dir: %w", err)
@@ -75,6 +104,12 @@ func SaveSuspend(dataDir string, save *SuspendSave) error {
 
 // LoadSuspend reads a suspend save from disk.
 func LoadSuspend(dataDir, gameName, saveName string) (*SuspendSave, error) {
+	if err := ValidateName(gameName); err != nil {
+		return nil, fmt.Errorf("invalid game name: %w", err)
+	}
+	if err := ValidateName(saveName); err != nil {
+		return nil, fmt.Errorf("invalid save name: %w", err)
+	}
 	data, err := os.ReadFile(suspendPath(dataDir, gameName, saveName))
 	if err != nil {
 		return nil, err
@@ -88,6 +123,12 @@ func LoadSuspend(dataDir, gameName, saveName string) (*SuspendSave, error) {
 
 // DeleteSuspend removes a suspend save from disk.
 func DeleteSuspend(dataDir, gameName, saveName string) error {
+	if err := ValidateName(gameName); err != nil {
+		return fmt.Errorf("invalid game name: %w", err)
+	}
+	if err := ValidateName(saveName); err != nil {
+		return fmt.Errorf("invalid save name: %w", err)
+	}
 	return os.Remove(suspendPath(dataDir, gameName, saveName))
 }
 
@@ -155,6 +196,9 @@ func ListSuspendNames(dataDir string) []string {
 func SaveGameState(dataDir, gameName string, s any) error {
 	if s == nil {
 		return nil
+	}
+	if err := ValidateName(gameName); err != nil {
+		return fmt.Errorf("invalid game name: %w", err)
 	}
 	dir := filepath.Join(dataDir, "state")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

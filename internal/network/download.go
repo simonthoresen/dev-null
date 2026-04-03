@@ -143,11 +143,22 @@ func DownloadAndExtractZip(rawURL, gamesDir string) (string, error) {
 		return "", fmt.Errorf("clean dest: %w", err)
 	}
 
+	const maxUncompressed = 100 << 20 // 100 MB uncompressed limit
+	const maxFiles = 10_000           // max number of files in archive
+	var totalBytes int64
+	var fileCount int
+
 	for _, f := range reader.File {
 		// Security: skip entries with path traversal.
 		if strings.Contains(f.Name, "..") {
 			continue
 		}
+
+		fileCount++
+		if fileCount > maxFiles {
+			return "", fmt.Errorf("zip contains too many files (max %d)", maxFiles)
+		}
+
 		target := filepath.Join(destDir, filepath.FromSlash(f.Name))
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(target, 0o755)
@@ -160,10 +171,14 @@ func DownloadAndExtractZip(rawURL, gamesDir string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("open %s: %w", f.Name, err)
 		}
-		data, err := io.ReadAll(rc)
+		data, err := io.ReadAll(io.LimitReader(rc, maxUncompressed-totalBytes+1))
 		rc.Close()
 		if err != nil {
 			return "", fmt.Errorf("read %s: %w", f.Name, err)
+		}
+		totalBytes += int64(len(data))
+		if totalBytes > maxUncompressed {
+			return "", fmt.Errorf("zip uncompressed content too large (max %d MB)", maxUncompressed>>20)
 		}
 		if err := os.WriteFile(target, data, 0o644); err != nil {
 			return "", fmt.Errorf("write %s: %w", f.Name, err)

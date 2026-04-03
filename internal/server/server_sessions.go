@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -97,6 +98,19 @@ var romanNumerals = []string{
 // --- Player registration and lifecycle ---
 
 func (a *Server) registerSession(sess ssh.Session) *domain.Player {
+	// Enforce connection limit.
+	if a.maxPlayers > 0 {
+		a.programsMu.Lock()
+		count := len(a.programs)
+		a.programsMu.Unlock()
+		if count >= a.maxPlayers {
+			slog.Warn("connection rejected: server full", "max", a.maxPlayers)
+			fmt.Fprintf(sess, "Server full (%d/%d players). Try again later.\n", count, a.maxPlayers)
+			sess.Close()
+			return &domain.Player{ID: sess.Context().SessionID(), Name: "rejected"}
+		}
+	}
+
 	player := &domain.Player{
 		ID:   sess.Context().SessionID(),
 		Name: a.uniqueName(sess.User()),
@@ -183,8 +197,30 @@ func (a *Server) kickPlayer(playerID string) error {
 	return sess.Close()
 }
 
+// sanitizePlayerName strips ANSI escapes, non-printable characters, and
+// truncates to MaxPlayerNameLen. Returns a safe display name.
+func sanitizePlayerName(raw string) string {
+	// Strip ANSI escape sequences (\x1b[...m, \x1b]...\x07, etc.)
+	cleaned := ansiEscapeRe.ReplaceAllString(raw, "")
+	// Keep only printable ASCII and common Unicode letters/digits.
+	var b strings.Builder
+	for _, r := range cleaned {
+		if r >= ' ' && r != 0x7f { // printable, non-DEL
+			b.WriteRune(r)
+		}
+	}
+	name := strings.TrimSpace(b.String())
+	if len(name) > domain.MaxPlayerNameLen {
+		name = name[:domain.MaxPlayerNameLen]
+	}
+	return name
+}
+
+// ansiEscapeRe matches ANSI escape sequences (CSI, OSC, and simple escapes).
+var ansiEscapeRe = regexp.MustCompile(`\x1b(?:\[[0-9;]*[a-zA-Z]|\][^\x07]*\x07|[^[\]])`)
+
 func (a *Server) uniqueName(raw string) string {
-	base := strings.TrimSpace(raw)
+	base := sanitizePlayerName(raw)
 	if base == "" {
 		base = "pilot"
 	}

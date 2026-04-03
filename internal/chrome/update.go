@@ -104,8 +104,8 @@ func (m Model) handleChat(msg domain.ChatMsg) (tea.Model, tea.Cmd) {
 	for _, l := range strings.Split(line, "\n") {
 		m.chatLines = append(m.chatLines, l)
 	}
-	if len(m.chatLines) > 200 {
-		m.chatLines = m.chatLines[len(m.chatLines)-200:]
+	if len(m.chatLines) > domain.MaxChatDisplayLines {
+		m.chatLines = m.chatLines[len(m.chatLines)-domain.MaxChatDisplayLines:]
 	}
 
 	// Run per-player plugins on this message.

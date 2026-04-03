@@ -107,6 +107,9 @@ func (a *Server) loadGame(path string) error {
 	if name == "main" {
 		name = filepath.Base(filepath.Dir(path))
 	}
+	if err := state.ValidateName(name); err != nil {
+		return fmt.Errorf("invalid game name %q: %w", name, err)
+	}
 
 	// Create a buffered channel for JS→server chat; drained by a goroutine below.
 	gameChatCh := make(chan domain.Message, 64)
@@ -194,7 +197,9 @@ func (a *Server) splashTimer() {
 	game := a.state.ActiveGame
 	a.state.Unlock()
 
+	a.lastUpdateMu.Lock()
 	a.lastUpdate = a.clock.Now()
+	a.lastUpdateMu.Unlock()
 	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhasePlaying})
 	a.serverLog("game started (playing)")
 
@@ -373,7 +378,9 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 		a.state.GamePhase = domain.PhasePlaying
 		a.state.Unlock()
 
+		a.lastUpdateMu.Lock()
 		a.lastUpdate = a.clock.Now()
+		a.lastUpdateMu.Unlock()
 		a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhasePlaying})
 		a.broadcastMsg(domain.GameResumedMsg{Name: gameName})
 		a.broadcastChat(domain.Message{Text: fmt.Sprintf("Game resumed: %s", gameName)})
@@ -457,7 +464,9 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 		a.registry.Register(cmd)
 	}
 
+	a.lastUpdateMu.Lock()
 	a.lastUpdate = a.clock.Now()
+	a.lastUpdateMu.Unlock()
 	a.broadcastMsg(domain.GameLoadedMsg{Name: gameName})
 	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhasePlaying})
 	a.broadcastMsg(domain.GameResumedMsg{Name: gameName})
