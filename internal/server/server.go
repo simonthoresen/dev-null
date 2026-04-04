@@ -331,18 +331,6 @@ func (a *Server) LogInviteCommand() {
 	a.serverLog("Invite:\n" + a.inviteCommand())
 }
 
-// LogGameList broadcasts the available game list to chat.
-func (a *Server) LogGameList() {
-	gamesDir := filepath.Join(a.dataDir, "games")
-	available := engine.ListGames(gamesDir)
-	if len(available) == 0 {
-		a.broadcastChat(domain.Message{Text: "No games found in games/"})
-		return
-	}
-	a.broadcastChat(domain.Message{Text: a.formatGameList(gamesDir, available)})
-}
-
-
 func (a *Server) runTicker(ctx context.Context) {
 	ticker := time.NewTicker(a.tickInterval)
 	defer ticker.Stop()

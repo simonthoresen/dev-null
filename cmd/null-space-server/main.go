@@ -195,7 +195,6 @@ func main() {
 	}()
 
 	finishBootStep("DONE")
-	go app.LogGameList()
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "console error: %v\n", err)
 	}

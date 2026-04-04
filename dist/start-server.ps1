@@ -79,20 +79,24 @@ function Write-BootStepEnd {
     param([string]$Status)
     $label = $script:bootStepLabel
     $width = $script:bootStepWidth
-    $token = Get-StatusToken $Status
     $dots  = $width - $label.Length - 2 - 8
     if ($dots -lt 1) { $dots = 1 }
-    $color = switch ($Status) {
-        'DONE' { 'Green'  }
-        'FAIL' { 'Red'    }
-        'SKIP' { 'Yellow' }
-        default { 'White' }
-    }
     $paddedStatus = Get-StatusToken $Status
     $inner = $paddedStatus.Substring(2, $paddedStatus.Length - 4)
-    Write-Host -NoNewline ("`r" + $label + ' ' + ('.' * $dots) + ' [ ')
-    Write-Host -NoNewline $inner -ForegroundColor $color
-    Write-Host ' ]'
+    $noColor = $Term -in @('none', 'ascii', 'no-color')
+    if ($noColor) {
+        Write-Host ("`r" + $label + ' ' + ('.' * $dots) + ' [ ' + $inner + ' ]')
+    } else {
+        $color = switch ($Status) {
+            'DONE' { 'Green'  }
+            'FAIL' { 'Red'    }
+            'SKIP' { 'Yellow' }
+            default { 'White' }
+        }
+        Write-Host -NoNewline ("`r" + $label + ' ' + ('.' * $dots) + ' [ ')
+        Write-Host -NoNewline $inner -ForegroundColor $color
+        Write-Host ' ]'
+    }
 }
 
 # ── logging ──────────────────────────────────────────────────────────────────
