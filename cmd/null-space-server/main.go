@@ -111,10 +111,6 @@ func main() {
 		return
 	}
 
-	if password == "" {
-		fmt.Fprintln(os.Stderr, "No admin password set — players cannot elevate to admin. Set one with --password or /password at runtime.")
-	}
-
 	// Determine port from address
 	port := "23234"
 	if idx := strings.LastIndex(address, ":"); idx >= 0 {
