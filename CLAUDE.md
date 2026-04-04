@@ -138,7 +138,7 @@ Other mutexes (`programsMu`, `sessionsMu`, `consoleProgramMu`, `commandRegistry.
 
 ## Render Tests — Golden Files
 
-`internal/rendertest/` contains full-frame render tests for both the server console and the player chrome view. All golden files live flat in `internal/rendertest/testdata/golden/` as `<scenario>_console.txt` and `<scenario>_chrome.txt`.
+`internal/rendertest/` contains full-frame render tests for both the server console and the player chrome view. All golden files live flat in `internal/rendertest/testdata/` as `<scenario>_console.txt` and `<scenario>_chrome.txt`.
 
 - **Curated eval set**: edit `scenarios_test.go` to add/change test states.
 - **Regenerate golden files** after a layout or content change:
