@@ -3,6 +3,7 @@ package rendertest
 import (
 	"testing"
 
+	"null-space/internal/domain"
 	"null-space/internal/state"
 )
 
@@ -26,6 +27,23 @@ func TestConsoleRenders(t *testing.T) {
 				t.Run(cv.name, func(t *testing.T) {
 					st := state.New("")
 					sc.setup(st)
+
+					// Mirror renderChrome's auto-join: the console sees all
+					// connected players, including the scenario's playerID.
+					playerID := sc.playerID
+					if playerID == "" {
+						playerID = "alice"
+					}
+					st.Lock()
+					if _, exists := st.Players[playerID]; !exists {
+						st.Players[playerID] = &domain.Player{
+							ID:         playerID,
+							Name:       playerID,
+							TermWidth:  termW,
+							TermHeight: termH,
+						}
+					}
+					st.Unlock()
 
 					api := newMockConsoleAPI(st)
 					got := renderConsole(api, sc.keys, cv.profile, termW, termH)
