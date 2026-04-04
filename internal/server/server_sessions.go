@@ -86,8 +86,15 @@ func (a *Server) sessionProgramOptions(sess ssh.Session) ([]tea.ProgramOption, c
 		envs = append(envs, "COLORTERM=truecolor")
 	}
 	cp := colorprofile.Env(envs)
-	if a.termOverride >= 0 {
-		cp = colorprofile.Profile(a.termOverride)
+	// NULL_SPACE_TERM allows the connecting client to request a specific color
+	// depth for this session (used by --local --term on the server/client side).
+	for _, e := range envs {
+		if strings.HasPrefix(e, "NULL_SPACE_TERM=") {
+			if p, ok := parseNullSpaceTerm(strings.TrimPrefix(e, "NULL_SPACE_TERM=")); ok {
+				cp = p
+			}
+			break
+		}
 	}
 	slog.Info("SSH session color profile", "profile", cp.String(), "envs_count", len(envs))
 	opts := wishbubbletea.MakeOptions(sess)
@@ -98,6 +105,21 @@ func (a *Server) sessionProgramOptions(sess ssh.Session) ([]tea.ProgramOption, c
 		tea.WithOutput(network.NewKittyStripWriter(sess)),
 	)
 	return opts, cp
+}
+
+// parseNullSpaceTerm maps a NULL_SPACE_TERM env value to a colorprofile.Profile.
+func parseNullSpaceTerm(s string) (colorprofile.Profile, bool) {
+	switch s {
+	case "truecolor":
+		return colorprofile.TrueColor, true
+	case "256color":
+		return colorprofile.ANSI256, true
+	case "ansi":
+		return colorprofile.ANSI, true
+	case "ascii":
+		return colorprofile.ASCII, true
+	}
+	return 0, false
 }
 
 var romanNumerals = []string{

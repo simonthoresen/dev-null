@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	xterm "github.com/charmbracelet/x/term"
-
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/ssh"
+	xterm "github.com/charmbracelet/x/term"
 
 	"null-space/internal/console"
 	"null-space/internal/runlog"
@@ -65,9 +65,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		if termFlag != "" {
-			app.SetTermOverride(parseTermFlag(termFlag))
-		}
 		app.InstallConsoleSlogHandler()
 
 		// Preload or resume a game before the client connects.
@@ -98,7 +95,7 @@ func main() {
 			}
 		}
 
-		if err := app.RunLocalSSH(ctx, localPlayer, sshPort); err != nil {
+		if err := app.RunLocalSSH(ctx, localPlayer, sshPort, termFlag); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
@@ -126,9 +123,6 @@ func main() {
 		os.Exit(1)
 	}
 	app.SetPort(port)
-	if termFlag != "" {
-		app.SetTermOverride(parseTermFlag(termFlag))
-	}
 	app.InstallConsoleSlogHandler()
 	app.OpenChatLog()
 	defer app.CloseChatLog()
@@ -173,8 +167,9 @@ func main() {
 	}
 
 	startBootStep("Starting console")
-	consoleModel := console.NewModel(app, stop)
-	program := tea.NewProgram(consoleModel, tea.WithFPS(60))
+	consoleProfile := detectConsoleProfile(termFlag)
+	consoleModel := console.NewModel(app, stop, consoleProfile)
+	program := tea.NewProgram(consoleModel, tea.WithFPS(60), tea.WithColorProfile(consoleProfile))
 	app.SetConsoleProgram(program)
 
 	// Start server in background
@@ -310,22 +305,24 @@ func finishBootStep(status string) {
 	fmt.Printf("\r%s %s %s\n", currentBootLabel, strings.Repeat(".", dots), colorizedToken(token, status))
 }
 
-// parseTermFlag maps a --term string to a colorprofile.Profile int value.
-// Returns -1 (auto-detect) for unknown values.
-func parseTermFlag(s string) int {
-	switch strings.ToLower(s) {
-	case "truecolor", "24bit":
-		return 0 // colorprofile.TrueColor
-	case "256color", "256":
-		return 1 // colorprofile.ANSI256
-	case "ansi", "16color", "16":
-		return 2 // colorprofile.ANSI
-	case "ascii", "none", "no-color":
-		return 3 // colorprofile.ASCII
-	default:
-		fmt.Fprintf(os.Stderr, "unknown --term value %q (valid: truecolor, 256color, ansi, ascii)\n", s)
-		return -1
+// detectConsoleProfile returns the color profile for the server console.
+// It auto-detects from the operator's terminal env, then applies the --term override.
+func detectConsoleProfile(termFlag string) colorprofile.Profile {
+	if termFlag != "" {
+		switch strings.ToLower(termFlag) {
+		case "truecolor", "24bit":
+			return colorprofile.TrueColor
+		case "256color", "256":
+			return colorprofile.ANSI256
+		case "ansi", "16color", "16":
+			return colorprofile.ANSI
+		case "ascii", "none", "no-color":
+			return colorprofile.ASCII
+		default:
+			fmt.Fprintf(os.Stderr, "unknown --term value %q (valid: truecolor, 256color, ansi, ascii)\n", termFlag)
+		}
 	}
+	return colorprofile.Detect(os.Stderr, os.Environ())
 }
 
 // defaultDataDir returns the directory of the running executable.

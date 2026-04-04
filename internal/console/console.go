@@ -88,6 +88,10 @@ type Model struct {
 
 	// Reusable render buffer — cleared and resized each frame instead of allocated.
 	renderBuf *render.ImageBuffer
+
+	// profile is the color depth for the console's own terminal.
+	// Set from the operator's terminal environment, overridden by --term.
+	profile colorprofile.Profile
 }
 
 // tea.Msg types for channel-based updates.
@@ -111,7 +115,7 @@ func listenForEvents(chatCh <-chan domain.Message, slogCh <-chan SlogLine) tea.C
 	}
 }
 
-func NewModel(api ServerAPI, cancel context.CancelFunc) *Model {
+func NewModel(api ServerAPI, cancel context.CancelFunc, profile colorprofile.Profile) *Model {
 	input := new(textinput.Model)
 	*input = textinput.New()
 	input.Prompt = ""
@@ -157,6 +161,7 @@ func NewModel(api ServerAPI, cancel context.CancelFunc) *Model {
 		},
 		theme:   theme.Default(),
 		overlay: widget.OverlayState{OpenMenu: -1},
+		profile: profile,
 	}
 
 	// Wire the menu bar to share the model's overlay state.
@@ -546,7 +551,7 @@ func (m *Model) View() tea.View {
 		}
 	}
 
-	view.SetContent(buf.ToString(colorprofile.TrueColor))
+	view.SetContent(buf.ToString(m.profile))
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
 

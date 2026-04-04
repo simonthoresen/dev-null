@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/colorprofile"
 	xterm "github.com/charmbracelet/x/term"
+	"github.com/charmbracelet/colorprofile"
 
 	"null-space/internal/render"
 	"null-space/internal/theme"
@@ -25,6 +25,7 @@ type TerminalRunner struct {
 	renderer *LocalRenderer
 	screen   *ClientScreen
 	playerID string
+	profile  colorprofile.Profile
 
 	gameSrcFiles  []GameSrcFile
 	gameStateJSON []byte
@@ -37,7 +38,8 @@ type TerminalRunner struct {
 
 // RunTerminal is the entry point for terminal mode. It blocks until the
 // connection is closed or the user presses Ctrl-C.
-func RunTerminal(conn *SSHConn, playerID string) error {
+// profile controls the color depth used when rendering to the local terminal.
+func RunTerminal(conn *SSHConn, playerID string, profile colorprofile.Profile) error {
 	// Get terminal size.
 	w, h, err := xterm.GetSize(os.Stdout.Fd())
 	if err != nil {
@@ -55,6 +57,7 @@ func RunTerminal(conn *SSHConn, playerID string) error {
 		renderer: NewLocalRenderer(),
 		screen:   NewClientScreen(t),
 		playerID: playerID,
+		profile:  profile,
 		width:    w,
 		height:   h,
 		done:     make(chan struct{}),
@@ -220,7 +223,7 @@ func (tr *TerminalRunner) render() string {
 
 		buf := tr.screen.RenderPlaying(w, h, nil, "Terminal", renderFn)
 		if buf != nil {
-			return buf.ToString(colorprofile.TrueColor)
+			return buf.ToString(tr.profile)
 		}
 	}
 
@@ -235,5 +238,5 @@ func (tr *TerminalRunner) render() string {
 			buf.SetChar(cx, cy, cell.Char, cell.Fg, cell.Bg, cell.Attr)
 		}
 	}
-	return buf.ToString(colorprofile.TrueColor)
+	return buf.ToString(tr.profile)
 }

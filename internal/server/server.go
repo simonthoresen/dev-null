@@ -65,10 +65,6 @@ type Server struct {
 	lastUpdate    time.Time      // last time Update() was called on the active game
 	splashDone    chan struct{}   // closed to end splash phase early
 	gameOverTimer chan struct{}   // closed to end game-over phase early
-
-	// termOverride forces a specific color profile for all SSH sessions.
-	// -1 means auto-detect from the client environment (default).
-	termOverride int
 }
 
 func New(address, password, dataDir string, tickInterval time.Duration) (*Server, error) {
@@ -87,7 +83,6 @@ func New(address, password, dataDir string, tickInterval time.Duration) (*Server
 		logCh:        make(chan string, 256),
 		chatCh:       make(chan domain.Message, 256),
 		slogCh:       make(chan console.SlogLine, 256),
-		termOverride: -1, // -1 = auto-detect from client env
 	}
 
 	app.registerBuiltins()
@@ -113,12 +108,6 @@ func New(address, password, dataDir string, tickInterval time.Duration) (*Server
 
 func (a *Server) SetShutdownFunc(fn func()) {
 	a.shutdownFn = fn
-}
-
-// SetTermOverride forces a specific color profile for all SSH sessions.
-// profile is a colorprofile.Profile value; pass -1 to restore auto-detection.
-func (a *Server) SetTermOverride(profile int) {
-	a.termOverride = profile
 }
 
 func (a *Server) LogCh() <-chan string {

@@ -36,7 +36,9 @@ func (a *Server) PreloadResume(gameName, saveName string) error {
 // what a remote player would see when running `ssh -p <port> localhost`.
 // This exercises the entire network pipeline (SSH transport, session middleware,
 // PTY, KittyStripWriter, etc.) without needing a separate SSH client.
-func (a *Server) RunLocalSSH(ctx context.Context, playerName string, port int) error {
+// termOverride, if non-empty, requests a specific color profile for this session
+// (values: truecolor, 256color, ansi, ascii).
+func (a *Server) RunLocalSSH(ctx context.Context, playerName string, port int, termOverride string) error {
 	// Start SSH server and wait for it to be ready.
 	ready := make(chan struct{})
 	serverErr := make(chan error, 1)
@@ -60,7 +62,7 @@ func (a *Server) RunLocalSSH(ctx context.Context, playerName string, port int) e
 	}
 
 	// Connect via SSH.
-	conn, err := client.Dial("127.0.0.1", port, playerName, false)
+	conn, err := client.Dial("127.0.0.1", port, playerName, false, termOverride)
 	if err != nil {
 		return fmt.Errorf("local SSH dial: %w", err)
 	}

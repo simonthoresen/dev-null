@@ -23,7 +23,9 @@ type SSHConn struct {
 // It sends NULL_SPACE_CLIENT=enhanced so the server knows we support charmaps.
 // If terminalMode is true, it sends NULL_SPACE_CLIENT=terminal instead (local
 // rendering in a terminal, no charmap/canvas support).
-func Dial(host string, port int, player string, terminalMode bool) (*SSHConn, error) {
+// termOverride, if non-empty, is sent as NULL_SPACE_TERM to request a specific
+// color profile for this session (values: truecolor, 256color, ansi, ascii).
+func Dial(host string, port int, player string, terminalMode bool, termOverride string) (*SSHConn, error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
 
 	config := &ssh.ClientConfig{
@@ -61,6 +63,9 @@ func Dial(host string, port int, player string, terminalMode bool) (*SSHConn, er
 		// Setenv may fail if the server doesn't accept this env var.
 		// Fall back silently — we'll still work, just without charmap support.
 		_ = err
+	}
+	if termOverride != "" {
+		_ = session.Setenv("NULL_SPACE_TERM", termOverride)
 	}
 
 	// Request a PTY.

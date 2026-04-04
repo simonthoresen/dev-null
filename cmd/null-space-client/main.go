@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/colorprofile"
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"null-space/internal/client"
@@ -48,14 +49,15 @@ func main() {
 
 	fmt.Printf("Connecting to %s:%d as %s...\n", *host, *port, *player)
 
-	conn, err := client.Dial(*host, *port, *player, *terminal)
+	conn, err := client.Dial(*host, *port, *player, *terminal, *termFlag)
 	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
 	defer conn.Close()
 
 	if *terminal {
-		if err := client.RunTerminal(conn, *player); err != nil {
+		profile := detectClientProfile(*termFlag)
+		if err := client.RunTerminal(conn, *player, profile); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -85,9 +87,6 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating server: %v\n", err)
 		os.Exit(1)
-	}
-	if termFlag != "" {
-		app.SetTermOverride(parseTermFlag(termFlag))
 	}
 	app.InstallConsoleSlogHandler()
 
@@ -138,7 +137,7 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	}
 
 	// Connect via SSH using the full client stack (graphical mode).
-	conn, err := client.Dial("127.0.0.1", sshPort, playerName, false)
+	conn, err := client.Dial("127.0.0.1", sshPort, playerName, false, termFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local SSH dial: %v\n", err)
 		os.Exit(1)
@@ -161,22 +160,24 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	stop()
 }
 
-// parseTermFlag maps a --term string to a colorprofile.Profile int value.
-// Returns -1 (auto-detect) for unknown values.
-func parseTermFlag(s string) int {
-	switch strings.ToLower(s) {
-	case "truecolor", "24bit":
-		return 0 // colorprofile.TrueColor
-	case "256color", "256":
-		return 1 // colorprofile.ANSI256
-	case "ansi", "16color", "16":
-		return 2 // colorprofile.ANSI
-	case "ascii", "none", "no-color":
-		return 3 // colorprofile.ASCII
-	default:
-		fmt.Fprintf(os.Stderr, "unknown --term value %q (valid: truecolor, 256color, ansi, ascii)\n", s)
-		return -1
+// detectClientProfile returns the color profile for client-side terminal rendering.
+// It auto-detects from the local terminal env, then applies the --term override.
+func detectClientProfile(termFlag string) colorprofile.Profile {
+	if termFlag != "" {
+		switch strings.ToLower(termFlag) {
+		case "truecolor", "24bit":
+			return colorprofile.TrueColor
+		case "256color", "256":
+			return colorprofile.ANSI256
+		case "ansi", "16color", "16":
+			return colorprofile.ANSI
+		case "ascii", "none", "no-color":
+			return colorprofile.ASCII
+		default:
+			fmt.Fprintf(os.Stderr, "unknown --term value %q (valid: truecolor, 256color, ansi, ascii)\n", termFlag)
+		}
 	}
+	return colorprofile.Detect(os.Stderr, os.Environ())
 }
 
 func defaultPlayer() string {
