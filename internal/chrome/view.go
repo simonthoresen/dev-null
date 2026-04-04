@@ -232,7 +232,7 @@ func (m Model) renderLobby(buf *render.ImageBuffer, menus []domain.MenuDef) {
 		statusLeft += fmt.Sprintf(" | suspended: %s", suspName)
 	}
 	m.lobbyStatusBar.LeftText = statusLeft
-	m.lobbyStatusBar.RightText = m.api.Clock().Now().Format(domain.TimeFormatDateTime)
+	m.lobbyStatusBar.RightText = m.api.Clock().Now().Format(domain.TimeFormatDateTime) + " "
 
 	// Render the full screen: menu bar + window + status bar.
 	m.lobbyScreen.RenderToBuf(buf, 0, 0, m.width, m.height, m.theme)

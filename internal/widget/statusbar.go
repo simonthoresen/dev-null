@@ -35,9 +35,9 @@ func (s *StatusBar) Render(buf *render.ImageBuffer, x, y, width, height int, _ b
 		buf.WriteString(x, y, s.LeftText, fg, bg, render.AttrNone)
 	}
 
-	// Right-aligned text, inset 1 column from the right edge.
+	// Right-aligned text.
 	if s.RightText != "" {
-		rightX := x + width - len(s.RightText) - 1
+		rightX := x + width - len(s.RightText)
 		if rightX > x+len(s.LeftText) {
 			buf.WriteString(rightX, y, s.RightText, fg, bg, render.AttrNone)
 		}
