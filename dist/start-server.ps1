@@ -312,7 +312,10 @@ if ($Local) {
     Push-Location $root
     try {
         Write-RunLogLine "starting in local single-player mode"
-        & (Join-Path $root "null-space-server.exe") --local @positionals
+        $localArgs = @("--local")
+        if ($Term) { $localArgs += "--term"; $localArgs += $Term }
+        $localArgs += $positionals
+        & (Join-Path $root "null-space-server.exe") @localArgs
         if ($LASTEXITCODE) { exit $LASTEXITCODE }
     } finally {
         Pop-Location
