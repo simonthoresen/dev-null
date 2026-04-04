@@ -25,7 +25,10 @@ type SSHConn struct {
 // rendering in a terminal, no charmap/canvas support).
 // termOverride, if non-empty, is sent as NULL_SPACE_TERM to request a specific
 // color profile for this session (values: truecolor, 256color, ansi, ascii).
-func Dial(host string, port int, player string, terminalMode bool, termOverride string) (*SSHConn, error) {
+// ptyW and ptyH set the initial PTY dimensions; pass 0 for each to use the
+// default (120×50). Callers should pass the actual terminal size to avoid a
+// race where the first frame is rendered at the wrong dimensions.
+func Dial(host string, port int, player string, terminalMode bool, termOverride string, ptyW, ptyH int) (*SSHConn, error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
 
 	config := &ssh.ClientConfig{
@@ -73,7 +76,13 @@ func Dial(host string, port int, player string, terminalMode bool, termOverride 
 		ssh.ECHO:  0,
 		ssh.IGNCR: 1,
 	}
-	if err := session.RequestPty("xterm-256color", 50, 120, modes); err != nil {
+	if ptyW <= 0 {
+		ptyW = 120
+	}
+	if ptyH <= 0 {
+		ptyH = 50
+	}
+	if err := session.RequestPty("xterm-256color", ptyH, ptyW, modes); err != nil {
 		session.Close()
 		client.Close()
 		return nil, fmt.Errorf("request PTY: %w", err)

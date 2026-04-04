@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/colorprofile"
+	xterm "github.com/charmbracelet/x/term"
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"null-space/internal/client"
@@ -49,7 +50,11 @@ func main() {
 
 	fmt.Printf("Connecting to %s:%d as %s...\n", *host, *port, *player)
 
-	conn, err := client.Dial(*host, *port, *player, *terminal, *termFlag)
+	ptyW, ptyH := 0, 0
+	if *terminal {
+		ptyW, ptyH, _ = xterm.GetSize(os.Stdin.Fd())
+	}
+	conn, err := client.Dial(*host, *port, *player, *terminal, *termFlag, ptyW, ptyH)
 	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
@@ -137,7 +142,7 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	}
 
 	// Connect via SSH using the full client stack (graphical mode).
-	conn, err := client.Dial("127.0.0.1", sshPort, playerName, false, termFlag)
+	conn, err := client.Dial("127.0.0.1", sshPort, playerName, false, termFlag, 0, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local SSH dial: %v\n", err)
 		os.Exit(1)

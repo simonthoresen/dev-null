@@ -61,8 +61,10 @@ func (a *Server) RunLocalSSH(ctx context.Context, playerName string, port int, t
 		w, h = 120, 50
 	}
 
-	// Connect via SSH.
-	conn, err := client.Dial("127.0.0.1", port, playerName, false, termOverride)
+	// Connect via SSH with the actual terminal dimensions so the first frame
+	// is rendered at the correct size (avoids orphaned characters from a
+	// mis-sized initial render that the diff renderer can't clean up).
+	conn, err := client.Dial("127.0.0.1", port, playerName, false, termOverride, w, h)
 	if err != nil {
 		return fmt.Errorf("local SSH dial: %w", err)
 	}

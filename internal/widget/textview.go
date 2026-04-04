@@ -3,8 +3,6 @@ package widget
 import (
 	"image/color"
 
-	"github.com/charmbracelet/x/ansi"
-
 	tea "charm.land/bubbletea/v2"
 
 	"null-space/internal/render"
@@ -28,17 +26,11 @@ func (v *TextView) TabWant() (bool, bool) { return v.WantTab, v.WantBackTab }
 
 func (v *TextView) Focusable() bool     { return v.Scrollable }
 func (v *TextView) MinSize() (int, int) {
-	w := 1
-	for _, line := range v.Lines {
-		if lw := ansi.StringWidth(line); lw > w {
-			w = lw
-		}
-	}
-	h := len(v.Lines)
-	if h < 1 {
-		h = 1
-	}
-	return w, h
+	// TextView wraps at whatever width it's given, so its minimum is 1×1.
+	// Returning content dimensions here would cause computeGrid to set the
+	// column wider than the available space when long lines are present,
+	// overflowing into the window border.
+	return 1, 1
 }
 
 // SetHeight sets the internal height (used for scroll clamping in tests).
