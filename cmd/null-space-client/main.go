@@ -38,10 +38,11 @@ func main() {
 	gameName := flag.String("game", "", "game to preload (local mode)")
 	resumeName := flag.String("resume", "", "game/save to resume, e.g. orbits/autosave (local mode)")
 	tickInterval := flag.Duration("tick-interval", 100*time.Millisecond, "server tick interval (local mode)")
+	termFlag := flag.String("term", "", "force terminal color profile for local-mode sessions: truecolor, 256color, ansi, ascii")
 	flag.Parse()
 
 	if *localMode {
-		runLocal(*address, *dataDir, *player, *port, *tickInterval, *gameName, *resumeName)
+		runLocal(*address, *dataDir, *player, *port, *tickInterval, *gameName, *resumeName, *termFlag)
 		return
 	}
 
@@ -79,11 +80,14 @@ func main() {
 // runLocal starts a headless SSH server in-process, then connects the
 // graphical Ebitengine client to it. This exercises the full network pipeline
 // (SSH transport, session middleware, PTY, etc.) in a single process.
-func runLocal(address, dataDir, playerName string, port int, tickInterval time.Duration, gameName, resumeName string) {
+func runLocal(address, dataDir, playerName string, port int, tickInterval time.Duration, gameName, resumeName, termFlag string) {
 	app, err := server.New(address, "", dataDir, tickInterval)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating server: %v\n", err)
 		os.Exit(1)
+	}
+	if termFlag != "" {
+		app.SetTermOverride(parseTermFlag(termFlag))
 	}
 	app.InstallConsoleSlogHandler()
 
@@ -155,6 +159,24 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	}
 
 	stop()
+}
+
+// parseTermFlag maps a --term string to a colorprofile.Profile int value.
+// Returns -1 (auto-detect) for unknown values.
+func parseTermFlag(s string) int {
+	switch strings.ToLower(s) {
+	case "truecolor", "24bit":
+		return 0 // colorprofile.TrueColor
+	case "256color", "256":
+		return 1 // colorprofile.ANSI256
+	case "ansi", "16color", "16":
+		return 2 // colorprofile.ANSI
+	case "ascii", "none", "no-color":
+		return 3 // colorprofile.ASCII
+	default:
+		fmt.Fprintf(os.Stderr, "unknown --term value %q (valid: truecolor, 256color, ansi, ascii)\n", s)
+		return -1
+	}
 }
 
 func defaultPlayer() string {

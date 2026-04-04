@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"null-space/internal/domain"
 	"null-space/internal/engine"
@@ -160,6 +161,10 @@ type Model struct {
 
 	// Reusable render buffer — cleared and resized each frame instead of allocated.
 	renderBuf *render.ImageBuffer
+
+	// ColorProfile is the terminal's color depth, used when serialising the
+	// render buffer. Defaults to TrueColor; set by the server from the SSH env.
+	ColorProfile colorprofile.Profile
 }
 
 func NewModel(api ServerAPI, playerID string) Model {
@@ -256,6 +261,7 @@ func NewModel(api ServerAPI, playerID string) Model {
 		playerID:      playerID,
 		teamEditInput: teamInput,
 		theme:         theme.Default(),
+		ColorProfile:  colorprofile.TrueColor,
 		overlay:        widget.OverlayState{OpenMenu: -1},
 		lobbyWindow:    lobbyWindow,
 		lobbyChatView:  lobbyChatView,

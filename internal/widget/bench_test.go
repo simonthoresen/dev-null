@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
+	"github.com/charmbracelet/colorprofile"
 
 	"null-space/internal/render"
 	"null-space/internal/theme"
@@ -39,7 +40,7 @@ func BenchmarkComplexNCRender(b *testing.B) {
 
 	// Sanity check: render once to make sure it doesn't panic.
 	window.RenderToBuf(buf, 0, 0, w, h, layer)
-	output := buf.ToString()
+	output := buf.ToString(colorprofile.TrueColor)
 	if len(output) == 0 {
 		b.Fatal("expected non-empty render output")
 	}
@@ -50,7 +51,7 @@ func BenchmarkComplexNCRender(b *testing.B) {
 	for time.Now().Before(deadline) {
 		buf.Clear()
 		window.RenderToBuf(buf, 0, 0, w, h, layer)
-		_ = buf.ToString()
+		_ = buf.ToString(colorprofile.TrueColor)
 		iterations++
 	}
 	b.StopTimer()

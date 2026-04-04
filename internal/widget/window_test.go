@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"null-space/internal/domain"
 	"null-space/internal/theme"
@@ -193,7 +194,7 @@ func TestDialogBordersASCIITheme(t *testing.T) {
 	if buf == nil {
 		t.Fatal("expected non-nil buffer")
 	}
-	s := newScreen(buf.ToString())
+	s := newScreen(buf.ToString(colorprofile.TrueColor))
 
 	if !strings.HasPrefix(s.lines[0], "+") || !strings.HasSuffix(s.lines[0], "+") {
 		t.Errorf("expected ASCII top border, got %q", s.lines[0])
@@ -350,7 +351,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	if dlgBuf == nil {
 		t.Fatal("expected non-nil buffer for layer 2 dialog")
 	}
-	dlg := dlgBuf.ToString()
+	dlg := dlgBuf.ToString(colorprofile.TrueColor)
 	assertHasANSI(t, dlg, "#000033", "layer 2 dialog (Tertiary)")
 
 	layer2 := PlaceOverlay(dlgCol, dlgRow, dlg, layer1)
@@ -365,7 +366,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	if dlg3Buf == nil {
 		t.Fatal("expected non-nil buffer for layer 3 dialog")
 	}
-	dlg3 := dlg3Buf.ToString()
+	dlg3 := dlg3Buf.ToString(colorprofile.TrueColor)
 	assertHasANSI(t, dlg3, "#002200", "layer 3 nested dialog (Secondary again)")
 
 	layer3 := PlaceOverlay(dlg3Col, dlg3Row, dlg3, layer2)
@@ -388,7 +389,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	if dlg4Buf == nil {
 		t.Fatal("expected non-nil buffer for layer 4 dialog")
 	}
-	dlg4 := dlg4Buf.ToString()
+	dlg4 := dlg4Buf.ToString(colorprofile.TrueColor)
 	assertHasANSI(t, dlg4, "#000033", "layer 4 (Tertiary again)")
 }
 
@@ -401,7 +402,7 @@ func TestPaletteDepthWarningBypassesCycle(t *testing.T) {
 	if dlgBuf == nil {
 		t.Fatal("expected non-nil buffer for warning dialog")
 	}
-	dlgStr := dlgBuf.ToString()
+	dlgStr := dlgBuf.ToString(colorprofile.TrueColor)
 	assertHasANSI(t, dlgStr, "#330000", "warning dialog")
 
 	// Title should appear somewhere in the rendered dialog (may be in border row).
@@ -550,7 +551,7 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 	if dlg2Buf == nil {
 		t.Fatal("expected non-nil buffer for depth 2 dialog")
 	}
-	s2 := newScreen(dlg2Buf.ToString())
+	s2 := newScreen(dlg2Buf.ToString(colorprofile.TrueColor))
 	if !strings.HasPrefix(s2.lines[0], "+") || !strings.HasSuffix(s2.lines[0], "+") {
 		t.Errorf("depth 2 dialog: expected ASCII top, got %q", s2.lines[0])
 	}
@@ -567,7 +568,7 @@ func TestPerLayerBordersOnDialog(t *testing.T) {
 	if dlg1Buf == nil {
 		t.Fatal("expected non-nil buffer for depth 1 dialog")
 	}
-	s1 := newScreen(dlg1Buf.ToString())
+	s1 := newScreen(dlg1Buf.ToString(colorprofile.TrueColor))
 	if !strings.HasPrefix(s1.lines[0], "┌") || !strings.HasSuffix(s1.lines[0], "┐") {
 		t.Errorf("depth 1 dialog: expected single-line top, got %q", s1.lines[0])
 	}

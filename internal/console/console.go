@@ -10,6 +10,7 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"null-space/internal/domain"
 	"null-space/internal/render"
@@ -545,7 +546,7 @@ func (m *Model) View() tea.View {
 		}
 	}
 
-	view.SetContent(buf.ToString())
+	view.SetContent(buf.ToString(colorprofile.TrueColor))
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
 

@@ -4,6 +4,8 @@ import (
 	"image/color"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/colorprofile"
 )
 
 var red = color.RGBA{R: 255, A: 255}
@@ -34,7 +36,7 @@ func TestNewImageBufferZero(t *testing.T) {
 	if buf.Width != 0 || buf.Height != 0 {
 		t.Fatalf("expected 0x0")
 	}
-	if buf.ToString() != "" {
+	if buf.ToString(colorprofile.TrueColor) != "" {
 		t.Errorf("expected empty string from 0x0 buffer")
 	}
 }
@@ -248,7 +250,7 @@ func TestToStringPlain(t *testing.T) {
 	buf := NewImageBuffer(3, 2)
 	buf.WriteString(0, 0, "ABC", nil, nil, AttrNone)
 	buf.WriteString(0, 1, "DEF", nil, nil, AttrNone)
-	s := buf.ToString()
+	s := buf.ToString(colorprofile.TrueColor)
 	// Should contain the characters on two lines.
 	lines := strings.Split(s, "\n")
 	if len(lines) != 2 {
@@ -270,7 +272,7 @@ func TestToStringRLE(t *testing.T) {
 	buf.SetChar(2, 0, 'C', green, nil, AttrNone)
 	buf.SetChar(3, 0, 'D', green, nil, AttrNone)
 
-	s := buf.ToString()
+	s := buf.ToString(colorprofile.TrueColor)
 	// There should be exactly 3 SGR sequences: reset at row start, one for red, one for green.
 	// Plus the final reset.
 	count := strings.Count(s, "\x1b[")

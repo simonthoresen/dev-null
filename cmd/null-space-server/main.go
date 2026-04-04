@@ -41,6 +41,7 @@ func main() {
 	var localResume string
 	var lanMode bool
 	var tickInterval time.Duration
+	var termFlag string
 	flag.StringVar(&password, "password", "", "admin password (optional, can be set at runtime via /password)")
 	flag.StringVar(&address, "address", ":23234", "listen address")
 	flag.StringVar(&portOverride, "port", "", "SSH listen port (overrides --address port, default 23234)")
@@ -51,6 +52,7 @@ func main() {
 	flag.StringVar(&localGame, "game", "", "game to preload (local mode)")
 	flag.StringVar(&localResume, "resume", "", "game/save to resume, e.g. orbits/autosave (local mode)")
 	flag.DurationVar(&tickInterval, "tick-interval", 100*time.Millisecond, "server tick interval (e.g. 100ms, 50ms)")
+	flag.StringVar(&termFlag, "term", "", "force terminal color profile for all sessions: truecolor, 256color, ansi, ascii")
 	flag.Parse()
 
 	if portOverride != "" {
@@ -62,6 +64,9 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
+		}
+		if termFlag != "" {
+			app.SetTermOverride(parseTermFlag(termFlag))
 		}
 		app.InstallConsoleSlogHandler()
 
@@ -121,6 +126,9 @@ func main() {
 		os.Exit(1)
 	}
 	app.SetPort(port)
+	if termFlag != "" {
+		app.SetTermOverride(parseTermFlag(termFlag))
+	}
 	app.InstallConsoleSlogHandler()
 	app.OpenChatLog()
 	defer app.CloseChatLog()
@@ -300,6 +308,24 @@ func finishBootStep(status string) {
 	token := statusToken(status)
 	dots := bootDots(currentBootLabel, w)
 	fmt.Printf("\r%s %s %s\n", currentBootLabel, strings.Repeat(".", dots), colorizedToken(token, status))
+}
+
+// parseTermFlag maps a --term string to a colorprofile.Profile int value.
+// Returns -1 (auto-detect) for unknown values.
+func parseTermFlag(s string) int {
+	switch strings.ToLower(s) {
+	case "truecolor", "24bit":
+		return 0 // colorprofile.TrueColor
+	case "256color", "256":
+		return 1 // colorprofile.ANSI256
+	case "ansi", "16color", "16":
+		return 2 // colorprofile.ANSI
+	case "ascii", "none", "no-color":
+		return 3 // colorprofile.ASCII
+	default:
+		fmt.Fprintf(os.Stderr, "unknown --term value %q (valid: truecolor, 256color, ansi, ascii)\n", s)
+		return -1
+	}
 }
 
 // defaultDataDir returns the directory of the running executable.

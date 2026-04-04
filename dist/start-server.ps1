@@ -10,6 +10,7 @@ $Lan = $false
 $NoUpdate = $false
 $LogLevel = ""
 $Port = "23234"
+$Term = ""
 
 $positionals = @()
 for ($i = 0; $i -lt $CliArgs.Count; $i++) {
@@ -25,6 +26,8 @@ for ($i = 0; $i -lt $CliArgs.Count; $i++) {
         '^--?debug$'         { $LogLevel = "debug"; continue }
         '^--?port$'          { $i++; if ($i -lt $CliArgs.Count) { $Port = $CliArgs[$i] }; continue }
         '^--?port=(.+)$'     { $Port = $Matches[1]; continue }
+        '^--?term$'          { $i++; if ($i -lt $CliArgs.Count) { $Term = $CliArgs[$i] }; continue }
+        '^--?term=(.+)$'     { $Term = $Matches[1]; continue }
         default              { $positionals += $arg }
     }
 }
@@ -347,6 +350,7 @@ Write-BootStepStart "Setting up network"
 Write-BootStepEnd "DONE"
 
 $serverArgs = @("--password", $Password, "--port", $Port)
+if ($Term) { $serverArgs += "--term"; $serverArgs += $Term }
 
 if ($Lan) {
     Write-BootStepStart "Pinggy helper"

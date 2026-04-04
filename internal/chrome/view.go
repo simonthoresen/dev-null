@@ -133,7 +133,7 @@ func (m Model) View() tea.View {
 		}
 	}
 
-	view.SetContent(oscPrefix + buf.ToString())
+	view.SetContent(oscPrefix + buf.ToString(m.ColorProfile))
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
 

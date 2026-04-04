@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"null-space/internal/domain"
 	"null-space/internal/render"
@@ -210,7 +211,7 @@ func TestTeamPanelRender(t *testing.T) {
 	}
 	buf := render.NewImageBuffer(30, 10)
 	tp.Render(buf, 0, 0, 30, 10, true, testLayer())
-	out := buf.ToString()
+	out := buf.ToString(colorprofile.TrueColor)
 	stripped := stripANSI(out)
 	if !strings.Contains(stripped, "Unassigned") {
 		t.Errorf("expected 'Unassigned' header, got %q", stripped)
@@ -240,7 +241,7 @@ func TestTeamPanelRenderEditing(t *testing.T) {
 	}
 	buf := render.NewImageBuffer(30, 10)
 	tp.Render(buf, 0, 0, 30, 10, true, testLayer())
-	stripped := stripANSI(buf.ToString())
+	stripped := stripANSI(buf.ToString(colorprofile.TrueColor))
 	if !strings.Contains(stripped, "Blue Team") {
 		t.Errorf("expected edit value 'Blue Team', got %q", stripped)
 	}
@@ -253,7 +254,7 @@ func TestTeamPanelRenderWithCreate(t *testing.T) {
 	}
 	buf := render.NewImageBuffer(30, 10)
 	tp.Render(buf, 0, 0, 30, 10, false, testLayer())
-	stripped := stripANSI(buf.ToString())
+	stripped := stripANSI(buf.ToString(colorprofile.TrueColor))
 	if !strings.Contains(stripped, "Create Team") {
 		t.Errorf("expected '[+ Create Team]' button, got %q", stripped)
 	}
@@ -311,7 +312,7 @@ func TestScreenRenderToBuf(t *testing.T) {
 	buf := render.NewImageBuffer(40, 10)
 	screen.RenderToBuf(buf, 0, 0, 40, 10, testTheme())
 
-	out := buf.ToString()
+	out := buf.ToString(colorprofile.TrueColor)
 	stripped := stripANSI(out)
 	if !strings.Contains(stripped, "File") {
 		t.Errorf("expected 'File' in menu bar, got %q", stripped)
@@ -543,7 +544,7 @@ func TestTextAreaRender(t *testing.T) {
 	ta := &TextArea{Lines: []string{"hello", "world"}}
 	buf := render.NewImageBuffer(20, 3)
 	ta.Render(buf, 0, 0, 20, 3, true, testLayer())
-	out := buf.ToString()
+	out := buf.ToString(colorprofile.TrueColor)
 	stripped := stripANSI(out)
 	if !strings.Contains(stripped, "hello") {
 		t.Errorf("expected 'hello' in output, got %q", stripped)
@@ -561,7 +562,7 @@ func TestTextAreaRenderEmpty(t *testing.T) {
 	ta := &TextArea{}
 	buf := render.NewImageBuffer(20, 2)
 	ta.Render(buf, 0, 0, 20, 2, false, testLayer())
-	stripped := stripANSI(buf.ToString())
+	stripped := stripANSI(buf.ToString(colorprofile.TrueColor))
 	// Should show dots for empty lines.
 	if !strings.Contains(stripped, "·") {
 		t.Errorf("expected dots in empty textarea, got %q", stripped)

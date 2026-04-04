@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/internal/domain"
@@ -335,7 +336,7 @@ func TestRenderDialogBasic(t *testing.T) {
 	}
 
 	// Content should contain title, body, and button.
-	content := stripANSI(buf.ToString())
+	content := stripANSI(buf.ToString(colorprofile.TrueColor))
 	if !strings.Contains(content, "Confirm") {
 		t.Errorf("expected title 'Confirm' in buffer content")
 	}
@@ -361,7 +362,7 @@ func TestRenderDialogMultipleButtons(t *testing.T) {
 	}
 
 	// Buttons that fit within the dialog width should be present.
-	content := stripANSI(buf.ToString())
+	content := stripANSI(buf.ToString(colorprofile.TrueColor))
 	if !strings.Contains(content, "Yes") {
 		t.Errorf("expected 'Yes' button in content")
 	}
@@ -385,7 +386,7 @@ func TestRenderDialogMultilineBody(t *testing.T) {
 	}
 
 	// Buffer should contain all three body lines.
-	content := stripANSI(buf.ToString())
+	content := stripANSI(buf.ToString(colorprofile.TrueColor))
 	if !strings.Contains(content, "Line one") {
 		t.Errorf("expected 'Line one' in content")
 	}
@@ -436,7 +437,7 @@ func TestShutdownDialogRendersFullBody(t *testing.T) {
 	if buf == nil {
 		t.Fatal("expected non-nil buffer")
 	}
-	content := stripANSI(buf.ToString())
+	content := stripANSI(buf.ToString(colorprofile.TrueColor))
 	if !strings.Contains(content, "Are you sure you want to shut down the server?") {
 		t.Errorf("full body text not visible in dialog.\nDialog size: %dx%d\nContent:\n%s", w, h, content)
 	}
@@ -509,7 +510,7 @@ func TestDialogOnBackground(t *testing.T) {
 	}
 
 	// Buffer content should contain the dialog title.
-	content := stripANSI(buf.ToString())
+	content := stripANSI(buf.ToString(colorprofile.TrueColor))
 	if !strings.Contains(content, "OK?") {
 		t.Errorf("dialog title 'OK?' not found in buffer content")
 	}

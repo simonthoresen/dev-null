@@ -6,6 +6,7 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/internal/render"
@@ -27,14 +28,14 @@ func newTestTextInput() *textinput.Model {
 func renderControl(ctrl Control, w, h int, focused bool, layer *theme.Layer) string {
 	buf := render.NewImageBuffer(w, h)
 	ctrl.Render(buf, 0, 0, w, h, focused, layer)
-	return buf.ToString()
+	return buf.ToString(colorprofile.TrueColor)
 }
 
 // renderWindow is a test helper that renders a window to a string.
 func renderWindow(w *Window, x, y, width, height int, layer *theme.Layer) string {
 	buf := render.NewImageBuffer(width, height)
 	w.RenderToBuf(buf, x, y, width, height, layer)
-	return buf.ToString()
+	return buf.ToString(colorprofile.TrueColor)
 }
 
 // ─── TextInput tests ─────────────────────────────────────────────────────────

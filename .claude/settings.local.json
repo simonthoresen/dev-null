@@ -19,7 +19,8 @@
       "Bash(grep -n \"func.*\\\\*App\\\\\\)\" /c/Users/simonhul/Source/null-space/server/*.go)",
       "Bash(grep -n \"func.*\\\\*App\" /c/Users/simonhul/Source/null-space/server/*.go)",
       "Bash(grep:*)",
-      "Bash(ls -lh dist/*.exe)"
+      "Bash(ls -lh dist/*.exe)",
+      "Bash(go test:*)"
     ]
   }
 }

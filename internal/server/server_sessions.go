@@ -57,14 +57,17 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 		}
 	}
 
-	program := tea.NewProgram(model, a.sessionProgramOptions(sess)...)
+	opts, cp := a.sessionProgramOptions(sess)
+	model.ColorProfile = cp
+
+	program := tea.NewProgram(model, opts...)
 	a.programsMu.Lock()
 	a.programs[playerID] = program
 	a.programsMu.Unlock()
 	return program
 }
 
-func (a *Server) sessionProgramOptions(sess ssh.Session) []tea.ProgramOption {
+func (a *Server) sessionProgramOptions(sess ssh.Session) ([]tea.ProgramOption, colorprofile.Profile) {
 	envs := sess.Environ()
 	if pty, _, ok := sess.Pty(); ok && pty.Term != "" {
 		envs = append(envs, "TERM="+pty.Term)
@@ -83,6 +86,9 @@ func (a *Server) sessionProgramOptions(sess ssh.Session) []tea.ProgramOption {
 		envs = append(envs, "COLORTERM=truecolor")
 	}
 	cp := colorprofile.Env(envs)
+	if a.termOverride >= 0 {
+		cp = colorprofile.Profile(a.termOverride)
+	}
 	slog.Info("SSH session color profile", "profile", cp.String(), "envs_count", len(envs))
 	opts := wishbubbletea.MakeOptions(sess)
 	opts = append(opts,
@@ -91,7 +97,7 @@ func (a *Server) sessionProgramOptions(sess ssh.Session) []tea.ProgramOption {
 		tea.WithColorProfile(cp),
 		tea.WithOutput(network.NewKittyStripWriter(sess)),
 	)
-	return opts
+	return opts, cp
 }
 
 var romanNumerals = []string{

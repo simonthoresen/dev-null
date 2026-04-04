@@ -10,6 +10,7 @@ $Port     = "23234"
 $Player   = ""
 $Local    = $false
 $Terminal = $false
+$Term     = ""
 
 $positionals = @()
 for ($i = 0; $i -lt $CliArgs.Count; $i++) {
@@ -27,6 +28,8 @@ for ($i = 0; $i -lt $CliArgs.Count; $i++) {
         '^--?port=(.+)$'     { $Port = $Matches[1]; continue }
         '^--?player$'        { $i++; if ($i -lt $CliArgs.Count) { $Player = $CliArgs[$i] }; continue }
         '^--?player=(.+)$'   { $Player = $Matches[1]; continue }
+        '^--?term$'          { $i++; if ($i -lt $CliArgs.Count) { $Term = $CliArgs[$i] }; continue }
+        '^--?term=(.+)$'     { $Term = $Matches[1]; continue }
         default              { $positionals += $arg }
     }
 }
@@ -182,6 +185,7 @@ if ($Terminal) { $clientArgs += "--terminal" }
 if ($Host_ -and -not $Local) { $clientArgs += "--host"; $clientArgs += $Host_ }
 if ($Port)     { $clientArgs += "--port";   $clientArgs += $Port }
 if ($Player)   { $clientArgs += "--player"; $clientArgs += $Player }
+if ($Term)     { $clientArgs += "--term";   $clientArgs += $Term }
 $clientArgs += $positionals
 
 # ── launch client ────────────────────────────────────────────────────────────

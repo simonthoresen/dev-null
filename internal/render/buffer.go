@@ -4,6 +4,9 @@ import (
 	"image/color"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ─── Pixel attributes ─────────────────────────────────────────────────────────
@@ -504,9 +507,10 @@ func cubeVal(i int) int {
 // ─── Serialization ───────────────────────────────────────────────────────────
 
 // ToString serializes the buffer to a string with ANSI escape codes.
-// Uses RLE-style optimization: only emits SGR codes when the style changes
-// from the previous cell (or at the start of each row).
-func (b *ImageBuffer) ToString() string {
+// profile controls color depth: TrueColor emits 24-bit RGB, ANSI256 downgrades
+// to 256 colours, ANSI to 16, and ASCII/NoTTY strips all colour codes.
+// Uses RLE-style optimisation: only emits SGR codes when the style changes.
+func (b *ImageBuffer) ToString(profile colorprofile.Profile) string {
 	if b.Width == 0 || b.Height == 0 {
 		return ""
 	}
@@ -537,7 +541,7 @@ func (b *ImageBuffer) ToString() string {
 
 			// Emit SGR if style changed.
 			if first || !ColorEq(c.Fg, curFg) || !ColorEq(c.Bg, curBg) || c.Attr != curAttr {
-				buf = appendSGR(buf, c.Fg, c.Bg, c.Attr)
+				buf = appendSGR(buf, c.Fg, c.Bg, c.Attr, profile)
 				curFg = c.Fg
 				curBg = c.Bg
 				curAttr = c.Attr
@@ -568,9 +572,9 @@ func ColorEq(a, b color.Color) bool {
 	return ar == br && ag == bg && ab == bb && aa == ba
 }
 
-// appendSGR appends an SGR escape sequence to buf.
-// Zero allocations — all formatting is done with append.
-func appendSGR(buf []byte, fg, bg color.Color, attr PixelAttr) []byte {
+// appendSGR appends an SGR escape sequence to buf, downconverting colors to
+// what the terminal profile supports. Zero allocations.
+func appendSGR(buf []byte, fg, bg color.Color, attr PixelAttr, profile colorprofile.Profile) []byte {
 	buf = append(buf, "\x1b[0"...)
 
 	if attr&AttrBold != 0 {
@@ -590,25 +594,63 @@ func appendSGR(buf []byte, fg, bg color.Color, attr PixelAttr) []byte {
 	}
 
 	if fg != nil {
-		r, g, b, _ := fg.RGBA()
-		buf = append(buf, ";38;2;"...)
-		buf = appendUint8(buf, uint8(r>>8))
-		buf = append(buf, ';')
-		buf = appendUint8(buf, uint8(g>>8))
-		buf = append(buf, ';')
-		buf = appendUint8(buf, uint8(b>>8))
+		buf = appendColorCode(buf, profile.Convert(fg), false)
 	}
 	if bg != nil {
-		r, g, b, _ := bg.RGBA()
-		buf = append(buf, ";48;2;"...)
-		buf = appendUint8(buf, uint8(r>>8))
-		buf = append(buf, ';')
-		buf = appendUint8(buf, uint8(g>>8))
-		buf = append(buf, ';')
-		buf = appendUint8(buf, uint8(b>>8))
+		buf = appendColorCode(buf, profile.Convert(bg), true)
 	}
 
 	return append(buf, 'm')
+}
+
+// appendColorCode appends the SGR color escape for c (already profile-converted).
+// isBg selects background (48/40/100) vs foreground (38/30/90) codes.
+// A nil c means the profile strips all colour — nothing is emitted.
+func appendColorCode(buf []byte, c color.Color, isBg bool) []byte {
+	if c == nil {
+		return buf
+	}
+	switch v := c.(type) {
+	case ansi.BasicColor:
+		n := uint8(v)
+		if isBg {
+			if n < 8 {
+				buf = append(buf, ';')
+				buf = appendUint8(buf, 40+n)
+			} else {
+				buf = append(buf, ';')
+				buf = appendUint8(buf, 100+(n-8))
+			}
+		} else {
+			if n < 8 {
+				buf = append(buf, ';')
+				buf = appendUint8(buf, 30+n)
+			} else {
+				buf = append(buf, ';')
+				buf = appendUint8(buf, 90+(n-8))
+			}
+		}
+	case ansi.IndexedColor:
+		if isBg {
+			buf = append(buf, ";48;5;"...)
+		} else {
+			buf = append(buf, ";38;5;"...)
+		}
+		buf = appendUint8(buf, uint8(v))
+	default:
+		r, g, b, _ := c.RGBA()
+		if isBg {
+			buf = append(buf, ";48;2;"...)
+		} else {
+			buf = append(buf, ";38;2;"...)
+		}
+		buf = appendUint8(buf, uint8(r>>8))
+		buf = append(buf, ';')
+		buf = appendUint8(buf, uint8(g>>8))
+		buf = append(buf, ';')
+		buf = appendUint8(buf, uint8(b>>8))
+	}
+	return buf
 }
 
 // appendUint8 appends a uint8 as decimal digits without allocating.

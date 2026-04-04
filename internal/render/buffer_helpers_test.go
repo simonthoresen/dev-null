@@ -3,6 +3,8 @@ package render
 import (
 	"image/color"
 	"testing"
+
+	"github.com/charmbracelet/colorprofile"
 )
 
 func TestBlitShadow(t *testing.T) {
@@ -169,7 +171,7 @@ func TestToStringRoundTrip(t *testing.T) {
 	buf.WriteString(0, 0, "Hello", color.RGBA{R: 255, A: 255}, nil, AttrNone)
 	buf.WriteString(0, 1, "World", nil, color.RGBA{B: 255, A: 255}, AttrNone)
 
-	s := buf.ToString()
+	s := buf.ToString(colorprofile.TrueColor)
 	if len(s) == 0 {
 		t.Fatal("expected non-empty string")
 	}

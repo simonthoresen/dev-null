@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/colorprofile"
 	xterm "github.com/charmbracelet/x/term"
 
 	"null-space/internal/render"
@@ -219,7 +220,7 @@ func (tr *TerminalRunner) render() string {
 
 		buf := tr.screen.RenderPlaying(w, h, nil, "Terminal", renderFn)
 		if buf != nil {
-			return buf.ToString()
+			return buf.ToString(colorprofile.TrueColor)
 		}
 	}
 
@@ -234,5 +235,5 @@ func (tr *TerminalRunner) render() string {
 			buf.SetChar(cx, cy, cell.Char, cell.Fg, cell.Bg, cell.Attr)
 		}
 	}
-	return buf.ToString()
+	return buf.ToString(colorprofile.TrueColor)
 }
