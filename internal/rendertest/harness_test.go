@@ -140,7 +140,7 @@ func (g *mockGame) Start()                                                      
 func (g *mockGame) Update(float64)                                                {}
 func (g *mockGame) OnPlayerLeave(string)                                          {}
 func (g *mockGame) OnInput(string, string)                                        {}
-func (g *mockGame) StatusBar(string) string                                       { return "" }
+func (g *mockGame) StatusBar(string) string                                       { return "score: 42 | level: 3" }
 func (g *mockGame) CommandBar(string) string                                      { return "" }
 func (g *mockGame) Commands() []domain.Command                                    { return nil }
 func (g *mockGame) Menus() []domain.MenuDef                                       { return nil }
