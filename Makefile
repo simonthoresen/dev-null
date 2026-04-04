@@ -1,10 +1,13 @@
 .PHONY: build build-server build-client run-server run-server-lan run-server-local run-client run-client-local test clean
 
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
+BUILD_DATE  := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo unknown)
+
 # Build all binaries into dist/ (strip debug info for smaller binaries)
 build: build-server build-client
 
 build-server:
-	go build -ldflags="-s -w" -o dist/null-space-server.exe ./cmd/null-space-server
+	go build -ldflags="-s -w -X 'main.buildCommit=$(GIT_COMMIT)' -X 'main.buildDate=$(BUILD_DATE)'" -o dist/null-space-server.exe ./cmd/null-space-server
 	go build -ldflags="-s -w" -o dist/pinggy-helper.exe ./cmd/pinggy-helper
 
 build-client:

@@ -16,11 +16,17 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/ssh"
 	xterm "github.com/charmbracelet/x/term"
+	"log/slog"
 
 	"null-space/internal/console"
 	"null-space/internal/runlog"
 	"null-space/internal/server"
 )
+
+// buildCommit and buildDate are injected at build time via -ldflags.
+// They default to "dev" / "unknown" for local go run / unbuilt binaries.
+var buildCommit = "dev"
+var buildDate = "unknown"
 
 func main() {
 	cleanupLog, err := runlog.ConfigureFromEnv("server")
@@ -29,6 +35,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer cleanupLog() //nolint:errcheck
+	slog.Info("null-space server", "commit", buildCommit, "built", buildDate)
 	initBootTermWidth()
 
 	var password string
