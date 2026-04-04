@@ -348,7 +348,7 @@ func (m Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, ga
 	default:
 		m.playingStatusBar.LeftText = " " + game.StatusBar(m.playerID)
 	}
-	m.playingStatusBar.RightText = m.api.Clock().Now().Format(domain.TimeFormatDateTime) + " "
+	m.playingStatusBar.RightText = ""
 
 	// Capture viewport bounds for enhanced/terminal client OSC (wraps the render function).
 	if m.IsEnhancedClient && m.playingGameView.RenderFn != nil {
