@@ -45,6 +45,11 @@ func (a *Server) broadcastChat(msg domain.Message) {
 	if msg.Text != "" {
 		a.state.AddChat(msg)
 
+		// Log system messages so they appear in the server log and console slog view.
+		if msg.Author == "" {
+			slog.Info(msg.Text)
+		}
+
 		// Write to chat log file.
 		if a.chatLogFile != nil {
 			ts := time.Now().Format(domain.TimeFormatDateTime)
