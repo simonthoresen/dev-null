@@ -20,6 +20,9 @@ import (
 //	d) client_remote   — server + client.exe (enhanced graphical client)
 func TestChromeRenders(t *testing.T) {
 	for _, sc := range scenarios {
+		if sc.consoleOnly {
+			continue
+		}
 		t.Run(sc.name, func(t *testing.T) {
 			for _, variant := range chromeVariants {
 				t.Run(variant.name, func(t *testing.T) {

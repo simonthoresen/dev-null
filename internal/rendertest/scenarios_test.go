@@ -33,6 +33,9 @@ type renderScenario struct {
 	// playing/splash (late joiners stay in lobby) and menu/dialog scenarios
 	// (the integration harness does not send keyboard input).
 	noIntegration bool
+	// consoleOnly skips this scenario in TestChromeRenders. Use for scenarios
+	// that exercise console-specific UI (e.g. the shutdown confirmation dialog).
+	consoleOnly bool
 }
 
 // scenarios is the curated eval set. Edit this list to add, remove, or tweak
@@ -152,5 +155,16 @@ var scenarios = []renderScenario{
 			st.GameName = "testgame"
 			st.GamePhase = domain.PhaseSplash
 		},
+	},
+
+	// ── Console-only ───────────────────────────────────────────────────────────
+	{
+		// Ctrl+Q triggers the shutdown confirmation dialog in the console.
+		name:          "console_shutdown_dialog",
+		playerID:      "alice",
+		setup:         func(st *state.CentralState) {},
+		keys:          []string{"ctrl+q"},
+		noIntegration: true,
+		consoleOnly:   true,
 	},
 }

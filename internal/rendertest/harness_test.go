@@ -313,6 +313,9 @@ func parseKey(s string) tea.KeyPressMsg {
 	if strings.HasPrefix(s, "alt+") && len(s) == 5 {
 		return tea.KeyPressMsg{Mod: tea.ModAlt, Code: rune(s[4])}
 	}
+	if strings.HasPrefix(s, "ctrl+") && len(s) == 6 {
+		return tea.KeyPressMsg{Mod: tea.ModCtrl, Code: rune(s[5])}
+	}
 	if len(s) == 1 {
 		return tea.KeyPressMsg{Code: rune(s[0])}
 	}
