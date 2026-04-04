@@ -8,9 +8,9 @@ import (
 
 // TestChromeRenders runs each scenario through all four chrome execution
 // contexts, each with two color modes (ascii / ansi). All eight sub-tests
-// compare against the same golden file at
-// testdata/renders/<scenario>/chrome.txt because stripping ANSI/OSC produces
-// identical plain text regardless of the execution context or color profile.
+// compare against the same golden file at testdata/golden/<scenario>_chrome.txt
+// because stripping ANSI/OSC produces identical plain text regardless of the
+// execution context or color profile.
 //
 // The four execution contexts mirror the real deployment paths:
 //
@@ -38,6 +38,7 @@ func TestChromeRenders(t *testing.T) {
 								playerID,
 								sc.inActiveGame,
 								sc.gameName,
+								sc.chromeKeys,
 								variant,
 								cv.profile,
 								termW, termH,

@@ -8,7 +8,7 @@ import (
 
 // TestConsoleRenders runs each scenario through the server console view and
 // compares the stripped output against the golden file at
-// testdata/renders/<scenario>/console.txt.
+// testdata/golden/<scenario>_console.txt.
 //
 // Two color-mode subtests are run per scenario:
 //   - ascii  — NoTTY profile: no escape codes in the output at all.

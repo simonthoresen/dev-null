@@ -4,18 +4,12 @@ import (
 	"bytes"
 	"context"
 	"net"
-	"regexp"
 	"testing"
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
 
 	"null-space/internal/server"
-)
-
-var (
-	tsPattern     = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}`)
-	uptimePattern = regexp.MustCompile(`uptime \S+`)
 )
 
 // ─── Integration test helpers ────────────────────────────────────────────────
@@ -167,35 +161,32 @@ var integrationVariants = []integrationVariant{
 	},
 }
 
-// sanitizeIntegration replaces values that change between runs (real-time clock,
-// uptime counter) with fixed placeholders so the golden file stays stable.
-func sanitizeIntegration(s string) string {
-	// Timestamp "2006-01-02 15:04:05" → fixed placeholder.
-	out := tsPattern.ReplaceAllString(s, "XXXX-XX-XX XX:XX:XX")
-	// Uptime like "uptime 00:00" or "uptime 1s" → fixed placeholder.
-	out = uptimePattern.ReplaceAllString(out, "uptime XX")
-	return out
-}
-
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-// TestChromeRendersIntegration runs each scenario through all four real SSH
-// execution paths and compares the reconstructed screen against integration-
-// specific golden files (testdata/renders/<scenario>/chrome_integration.txt).
+// TestChromeRendersIntegration runs each lobby scenario through all four real
+// SSH execution paths and compares the reconstructed screen against the same
+// golden file as the unit tests (testdata/golden/<scenario>_chrome.txt).
 //
-// Unlike the unit tests which compare against chrome.txt using a mock clock
-// and pre-wired model, these tests start a real SSH server, connect a real
-// SSH client, capture the raw byte stream, reconstruct the final screen state
-// via the mini VT100 emulator, and compare after sanitising dynamic fields
-// (wall-clock timestamp, uptime).
+// Scenarios marked noIntegration are skipped because they cannot be faithfully
+// reproduced over a real SSH connection:
+//   - playing/splash: late joiners stay in the lobby, not the game view.
+//   - menu/dialog: the integration harness does not send keyboard input.
 //
-// All four variants compare against the SAME golden file because they all
-// produce visually identical content (the enhanced-client variants add OSC
-// sequences that are transparent to the VT100 screen).
+// The setup() function must not pre-add the playerID player. The SSH client
+// connects as playerID, and the server adds the player naturally — producing
+// the same state as renderChrome's auto-join logic in the unit tests.
+//
+// sanitize() is applied to both unit and integration output before golden-file
+// comparison, so dynamic values (wall-clock timestamp, uptime) match.
 func TestChromeRendersIntegration(t *testing.T) {
 	for _, sc := range scenarios {
+		sc := sc
+		if sc.noIntegration {
+			continue
+		}
 		t.Run(sc.name, func(t *testing.T) {
 			for _, variant := range integrationVariants {
+				variant := variant
 				t.Run(variant.name, func(t *testing.T) {
 					addr, cancel := startTestServer(t, sc)
 					defer cancel()
@@ -206,9 +197,9 @@ func TestChromeRendersIntegration(t *testing.T) {
 					}
 
 					raw := sshCapture(t, addr, playerName, variant.envVars, 300)
-					got := sanitizeIntegration(raw)
+					got := sanitize(raw)
 
-					path := goldenPath(sc.name, "chrome_integration")
+					path := goldenPath(sc.name, "chrome")
 					checkOrUpdate(t, path, got)
 				})
 			}

@@ -1,8 +1,7 @@
  File │ View │ Help
 ╔═════════════════════════════════════════════╤════════════════════════════════╗
 ║                                             │    Unassigned                  ║
-║                                             │    Alice                       ║
-║                                             │    alice-II                    ║
+║                                             │    alice                       ║
 ║                                             │                                ║
 ║                                             │ [+ Create Team]                ║
 ║                                             │                                ║
@@ -12,13 +11,14 @@
 ║                                             │                                ║
 ║                                             │                                ║
 ║                                             │                                ║
-║[system] Server started.                     │                                ║
-║<Alice> hello world                          │                                ║
-║<Alice> /help                                │                                ║
-║Available commands: /help /plugin /theme /sha│                                ║
-║der                                          │                                ║
-║[system] alice-II joined.                    │                                ║
+║                                             │                                ║
+║                                             │                                ║
+║                                             │                                ║
+║                                             │                                ║
+║                                             │                                ║
+║                                             │                                ║
+║[system] alice joined.                       │                                ║
 ╟─────────────────────────────────────────────┴────────────────────────────────╢
 ║[············································································]║
 ╚══════════════════════════════════════════════════════════════════════════════╝
- null-space | 2 players | uptime XX                      XXXX-XX-XX XX:XX:XX
+ null-space | 1 players | uptime XX                          XXXX-XX-XX XX:XX:XX

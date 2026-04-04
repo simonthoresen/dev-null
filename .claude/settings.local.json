@@ -20,7 +20,9 @@
       "Bash(grep -n \"func.*\\\\*App\" /c/Users/simonhul/Source/null-space/server/*.go)",
       "Bash(grep:*)",
       "Bash(ls -lh dist/*.exe)",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(go env:*)",
+      "Read(//c/Users/simonhul/Source/null-space/$\\(go env GOPATH\\)/pkg/mod/charm.land/bubbletea/v2@v2.0.2/**)"
     ]
   }
 }

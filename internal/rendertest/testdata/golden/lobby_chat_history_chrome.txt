@@ -1,12 +1,9 @@
- File │ View │ Help                                                             
+ File │ View │ Help
 ╔═════════════════════════════════════════════╤════════════════════════════════╗
 ║                                             │    Unassigned                  ║
+║                                             │    alice                       ║
 ║                                             │                                ║
-║                                             │    Red                         ║
-║                                             │    Alice                       ║
-║                                             │                                ║
-║                                             │    Blue                        ║
-║                                             │    Bob                         ║
+║                                             │ [+ Create Team]                ║
 ║                                             │                                ║
 ║                                             │                                ║
 ║                                             │                                ║
@@ -15,10 +12,13 @@
 ║                                             │                                ║
 ║                                             │                                ║
 ║                                             │                                ║
-║                                             │                                ║
-║                                             │                                ║
-║                                             │                                ║
+║[system] Server started.                     │                                ║
+║<alice> hello world                          │                                ║
+║<alice> /help                                │                                ║
+║Available commands: /help /plugin /theme /sha│                                ║
+║der                                          │                                ║
+║[system] alice joined.                       │                                ║
 ╟─────────────────────────────────────────────┴────────────────────────────────╢
 ║[············································································]║
 ╚══════════════════════════════════════════════════════════════════════════════╝
- null-space | 2 players | uptime 0s                         2026-04-04 12:00:00 
+ null-space | 1 players | uptime XX                          XXXX-XX-XX XX:XX:XX

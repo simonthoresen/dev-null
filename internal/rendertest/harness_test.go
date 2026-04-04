@@ -6,9 +6,11 @@ package rendertest
 
 import (
 	"flag"
+	"fmt"
 	"image"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +31,42 @@ var update = flag.Bool("update", false, "regenerate golden files instead of comp
 // fixedTime is the deterministic wall-clock value used across all render tests.
 var fixedTime = time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC)
 
+// Dynamic-value patterns shared by both unit and integration sanitisation.
+var (
+	tsPattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}`)
+
+	// lobbyStatusBarPattern matches the entire lobby status bar line.
+	// The line is: " null-space | N players | uptime T   DATE"
+	// T and DATE have variable widths / values.
+	lobbyStatusBarPattern = regexp.MustCompile(` null-space \| (\d+) players \| uptime \S+ +\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} *`)
+)
+
+// sanitize replaces wall-clock timestamps and uptime values with fixed
+// placeholders so golden files remain stable across runs. Applied to both
+// unit chrome output (where MockClock gives a known value) and integration
+// output (where real time is used), making their golden files identical.
+//
+// The lobby status bar line is replaced atomically (including its interior
+// padding) so that changes in uptime string length don't shift the timestamp.
+// The playing view's timestamp-only status bar is handled by tsPattern.
+func sanitize(s string) string {
+	const fixedTimestamp = "XXXX-XX-XX XX:XX:XX" // 19 chars
+	// Normalise the lobby status bar line atomically.
+	out := lobbyStatusBarPattern.ReplaceAllStringFunc(s, func(match string) string {
+		sub := lobbyStatusBarPattern.FindStringSubmatch(match)
+		players := sub[1]
+		left := fmt.Sprintf(" null-space | %s players | uptime XX", players)
+		pad := termW - len(left) - len(fixedTimestamp)
+		if pad < 1 {
+			pad = 1
+		}
+		return left + strings.Repeat(" ", pad) + fixedTimestamp
+	})
+	// Replace any remaining datetime stamps (e.g. playing view's status bar).
+	out = tsPattern.ReplaceAllString(out, fixedTimestamp)
+	return out
+}
+
 // ─── Mock console API ────────────────────────────────────────────────────────
 
 type mockConsoleAPI struct {
@@ -47,16 +85,16 @@ func newMockConsoleAPI(st *state.CentralState) *mockConsoleAPI {
 	}
 }
 
-func (a *mockConsoleAPI) State() *state.CentralState                                      { return a.st }
-func (a *mockConsoleAPI) Clock() domain.Clock                                              { return a.clock }
-func (a *mockConsoleAPI) DataDir() string                                                  { return "" }
-func (a *mockConsoleAPI) Uptime() string                                                   { return "0s" }
-func (a *mockConsoleAPI) BroadcastChat(msg domain.Message)                                 {}
-func (a *mockConsoleAPI) ChatCh() <-chan domain.Message                                    { return a.chatCh }
-func (a *mockConsoleAPI) SlogCh() <-chan console.SlogLine                                  { return a.slogCh }
-func (a *mockConsoleAPI) TabCandidates(string, []string) (string, []string)               { return "", nil }
-func (a *mockConsoleAPI) DispatchCommand(string, domain.CommandContext)                    {}
-func (a *mockConsoleAPI) SetConsoleWidth(int)                                              {}
+func (a *mockConsoleAPI) State() *state.CentralState                        { return a.st }
+func (a *mockConsoleAPI) Clock() domain.Clock                                { return a.clock }
+func (a *mockConsoleAPI) DataDir() string                                    { return "" }
+func (a *mockConsoleAPI) Uptime() string                                     { return "0s" }
+func (a *mockConsoleAPI) BroadcastChat(msg domain.Message)                   {}
+func (a *mockConsoleAPI) ChatCh() <-chan domain.Message                      { return a.chatCh }
+func (a *mockConsoleAPI) SlogCh() <-chan console.SlogLine                    { return a.slogCh }
+func (a *mockConsoleAPI) TabCandidates(string, []string) (string, []string) { return "", nil }
+func (a *mockConsoleAPI) DispatchCommand(string, domain.CommandContext)      {}
+func (a *mockConsoleAPI) SetConsoleWidth(int)                                {}
 
 // ─── Mock chrome API ─────────────────────────────────────────────────────────
 
@@ -72,22 +110,22 @@ func newMockChromeAPI(st *state.CentralState) *mockChromeAPI {
 	}
 }
 
-func (a *mockChromeAPI) State() *state.CentralState                                      { return a.st }
-func (a *mockChromeAPI) Clock() domain.Clock                                              { return a.clock }
-func (a *mockChromeAPI) DataDir() string                                                  { return "" }
-func (a *mockChromeAPI) Uptime() string                                                   { return "0s" }
-func (a *mockChromeAPI) BroadcastChat(domain.Message)                                     {}
-func (a *mockChromeAPI) BroadcastMsg(tea.Msg)                                             {}
-func (a *mockChromeAPI) SendToPlayer(string, tea.Msg)                                     {}
-func (a *mockChromeAPI) ServerLog(string)                                                 {}
-func (a *mockChromeAPI) TabCandidates(string, []string) (string, []string)               { return "", nil }
-func (a *mockChromeAPI) DispatchCommand(string, domain.CommandContext)                    {}
-func (a *mockChromeAPI) StartGame()                                                       {}
-func (a *mockChromeAPI) AcknowledgeGameOver(string)                                       {}
-func (a *mockChromeAPI) SuspendGame(string) error                                         { return nil }
-func (a *mockChromeAPI) ResumeGame(string, string) error                                  { return nil }
-func (a *mockChromeAPI) ListSuspends() []state.SuspendInfo                                { return nil }
-func (a *mockChromeAPI) KickPlayer(string) error                                          { return nil }
+func (a *mockChromeAPI) State() *state.CentralState                        { return a.st }
+func (a *mockChromeAPI) Clock() domain.Clock                                { return a.clock }
+func (a *mockChromeAPI) DataDir() string                                    { return "" }
+func (a *mockChromeAPI) Uptime() string                                     { return "0s" }
+func (a *mockChromeAPI) BroadcastChat(domain.Message)                       {}
+func (a *mockChromeAPI) BroadcastMsg(tea.Msg)                               {}
+func (a *mockChromeAPI) SendToPlayer(string, tea.Msg)                       {}
+func (a *mockChromeAPI) ServerLog(string)                                   {}
+func (a *mockChromeAPI) TabCandidates(string, []string) (string, []string) { return "", nil }
+func (a *mockChromeAPI) DispatchCommand(string, domain.CommandContext)      {}
+func (a *mockChromeAPI) StartGame()                                         {}
+func (a *mockChromeAPI) AcknowledgeGameOver(string)                         {}
+func (a *mockChromeAPI) SuspendGame(string) error                           { return nil }
+func (a *mockChromeAPI) ResumeGame(string, string) error                    { return nil }
+func (a *mockChromeAPI) ListSuspends() []state.SuspendInfo                  { return nil }
+func (a *mockChromeAPI) KickPlayer(string) error                            { return nil }
 
 // ─── Mock game ───────────────────────────────────────────────────────────────
 
@@ -95,27 +133,27 @@ func (a *mockChromeAPI) KickPlayer(string) error                                
 // render tests don't depend on a real JS runtime.
 type mockGame struct{}
 
-func (g *mockGame) GameName() string                      { return "Test Game" }
-func (g *mockGame) TeamRange() domain.TeamRange           { return domain.TeamRange{} }
-func (g *mockGame) Init(any)                              {}
-func (g *mockGame) Start()                                {}
-func (g *mockGame) Update(float64)                        {}
-func (g *mockGame) OnPlayerLeave(string)                  {}
-func (g *mockGame) OnInput(string, string)                {}
-func (g *mockGame) StatusBar(string) string               { return "" }
-func (g *mockGame) CommandBar(string) string              { return "" }
-func (g *mockGame) Commands() []domain.Command            { return nil }
-func (g *mockGame) Menus() []domain.MenuDef               { return nil }
-func (g *mockGame) CharMap() *render.CharMapDef           { return nil }
-func (g *mockGame) RenderCanvas(string, int, int) []byte  { return nil }
-func (g *mockGame) RenderCanvasImage(string, int, int) *image.RGBA { return nil }
-func (g *mockGame) HasCanvasMode() bool                   { return false }
-func (g *mockGame) Unload()                               {}
-func (g *mockGame) State() any                            { return nil }
-func (g *mockGame) SetState(any)                          {}
-func (g *mockGame) GameSource() []domain.GameSourceFile   { return nil }
-func (g *mockGame) GameAssets() []domain.GameAsset        { return nil }
-func (g *mockGame) Layout(string, int, int) *domain.WidgetNode { return nil }
+func (g *mockGame) GameName() string                                              { return "Test Game" }
+func (g *mockGame) TeamRange() domain.TeamRange                                  { return domain.TeamRange{} }
+func (g *mockGame) Init(any)                                                      {}
+func (g *mockGame) Start()                                                        {}
+func (g *mockGame) Update(float64)                                                {}
+func (g *mockGame) OnPlayerLeave(string)                                          {}
+func (g *mockGame) OnInput(string, string)                                        {}
+func (g *mockGame) StatusBar(string) string                                       { return "" }
+func (g *mockGame) CommandBar(string) string                                      { return "" }
+func (g *mockGame) Commands() []domain.Command                                    { return nil }
+func (g *mockGame) Menus() []domain.MenuDef                                       { return nil }
+func (g *mockGame) CharMap() *render.CharMapDef                                   { return nil }
+func (g *mockGame) RenderCanvas(string, int, int) []byte                          { return nil }
+func (g *mockGame) RenderCanvasImage(string, int, int) *image.RGBA                { return nil }
+func (g *mockGame) HasCanvasMode() bool                                           { return false }
+func (g *mockGame) Unload()                                                       {}
+func (g *mockGame) State() any                                                    { return nil }
+func (g *mockGame) SetState(any)                                                  {}
+func (g *mockGame) GameSource() []domain.GameSourceFile                           { return nil }
+func (g *mockGame) GameAssets() []domain.GameAsset                                { return nil }
+func (g *mockGame) Layout(string, int, int) *domain.WidgetNode                   { return nil }
 
 func (g *mockGame) Render(buf *render.ImageBuffer, _ string, x, y, w, h int) {
 	// Draw a simple bordered box with fixed content.
@@ -139,9 +177,10 @@ func (g *mockGame) RenderGameOver(_ *render.ImageBuffer, _ string, _, _, _, _ in
 
 // ─── Golden file helpers ─────────────────────────────────────────────────────
 
-// goldenPath returns the path for a golden file given scenario and variant names.
-func goldenPath(scenario, file string) string {
-	return filepath.Join("testdata", "renders", scenario, file+".txt")
+// goldenPath returns the path for a golden file.
+// All golden files live flat in testdata/golden/ as <scenario>_<kind>.txt.
+func goldenPath(scenario, kind string) string {
+	return filepath.Join("testdata", "golden", scenario+"_"+kind+".txt")
 }
 
 // checkOrUpdate either writes the golden file (when -update is set) or
@@ -174,36 +213,107 @@ func stripRender(s string) string {
 	return ansi.Strip(s)
 }
 
+// normalizeScreen trims trailing spaces from every line and drops trailing
+// blank lines — matching the output of vt100.String() used in integration
+// tests, so unit and integration golden files are directly comparable.
+func normalizeScreen(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " ")
+	}
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return strings.Join(lines, "\n")
+}
+
 // renderConsole creates a console model with the given API, sends a window-size
 // message, and returns the ANSI-stripped render content.
 func renderConsole(api console.ServerAPI, profile colorprofile.Profile, w, h int) string {
 	m := console.NewModel(api, func() {}, profile)
 	m2, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
-	return stripRender(m2.View().Content)
+	return normalizeScreen(stripRender(m2.View().Content))
 }
 
 // renderChrome creates a chrome model for the given player, applies variant
-// settings, optionally marks it as active in-game, then returns the
-// ANSI-stripped render content.
+// settings, optionally marks it as active in-game, sends any extra key
+// messages, then returns the sanitized ANSI-stripped render content.
+//
+// For lobby scenarios (inActiveGame=false), if playerID is not already in
+// state, it is added automatically with a corresponding "[playerID] joined."
+// system message — mirroring what the server does when an SSH client connects.
+// This keeps unit and integration golden files identical.
 func renderChrome(
 	api chrome.ServerAPI,
 	playerID string,
 	inActiveGame bool,
 	gameName string,
+	chromeKeys []string,
 	variant chromeVariant,
 	profile colorprofile.Profile,
 	w, h int,
 ) string {
+	// Auto-join: simulate the player connecting if they're not yet in state.
+	// Only for lobby scenarios; playing scenarios pre-populate state manually.
+	if !inActiveGame {
+		st := api.State()
+		st.Lock()
+		if _, exists := st.Players[playerID]; !exists {
+			st.Players[playerID] = &domain.Player{
+				ID:         playerID,
+				Name:       playerID,
+				TermWidth:  w,
+				TermHeight: h,
+			}
+			st.ChatHistory = append(st.ChatHistory, domain.Message{
+				Author: "",
+				Text:   playerID + " joined.",
+			})
+		}
+		st.Unlock()
+	}
+
 	m := chrome.NewModel(api, playerID)
 	m.IsEnhancedClient = variant.isEnhancedClient
 	m.IsTerminalClient = variant.isTerminalClient
 	m.ColorProfile = profile
 
-	m2, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	cur, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	if inActiveGame {
-		m2, _ = m2.Update(domain.GameLoadedMsg{Name: gameName})
+		cur, _ = cur.Update(domain.GameLoadedMsg{Name: gameName})
 	}
-	return stripRender(m2.View().Content)
+	for _, k := range chromeKeys {
+		cur, _ = cur.Update(parseKey(k))
+	}
+	return sanitize(normalizeScreen(stripRender(cur.View().Content)))
+}
+
+// parseKey converts a human-readable key name (e.g. "f10", "alt+h", "enter")
+// into a tea.KeyPressMsg that the chrome model's Update method understands.
+func parseKey(s string) tea.KeyPressMsg {
+	switch s {
+	case "f10":
+		return tea.KeyPressMsg{Code: tea.KeyF10}
+	case "enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "right":
+		return tea.KeyPressMsg{Code: tea.KeyRight}
+	case "up":
+		return tea.KeyPressMsg{Code: tea.KeyUp}
+	case "down":
+		return tea.KeyPressMsg{Code: tea.KeyDown}
+	}
+	if strings.HasPrefix(s, "alt+") && len(s) == 5 {
+		return tea.KeyPressMsg{Mod: tea.ModAlt, Code: rune(s[4])}
+	}
+	if len(s) == 1 {
+		return tea.KeyPressMsg{Code: rune(s[0])}
+	}
+	return tea.KeyPressMsg{Text: s}
 }
 
 // ─── Chrome variant definitions ──────────────────────────────────────────────

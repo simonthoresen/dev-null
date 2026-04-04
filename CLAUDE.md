@@ -138,16 +138,19 @@ Other mutexes (`programsMu`, `sessionsMu`, `consoleProgramMu`, `commandRegistry.
 
 ## Render Tests — Golden Files
 
-`internal/rendertest/` contains full-frame render tests for both the server console and the player chrome view. Tests compare ANSI-stripped output against golden `.txt` files in `internal/rendertest/testdata/renders/`.
+`internal/rendertest/` contains full-frame render tests for both the server console and the player chrome view. All golden files live flat in `internal/rendertest/testdata/golden/` as `<scenario>_console.txt` and `<scenario>_chrome.txt`.
 
 - **Curated eval set**: edit `scenarios_test.go` to add/change test states.
 - **Regenerate golden files** after a layout or content change:
   ```bash
   go test ./internal/rendertest/ -update
   ```
-- Each scenario produces two golden files (`console.txt`, `chrome.txt`).
-- `chrome.txt` is verified against **8 sub-tests** (4 execution contexts × 2 color modes) that all strip to the same plain text.
+- Each scenario produces two golden files (`<name>_console.txt`, `<name>_chrome.txt`).
+- `<name>_chrome.txt` is verified against **8 unit sub-tests** (4 execution contexts × 2 color modes) and **4 integration sub-tests** (real SSH connections) — all compared against the same golden file.
+- Chrome output is normalized before comparison: ANSI stripped, trailing spaces trimmed per line, trailing blank lines dropped, and the lobby status bar line (timestamp + uptime) replaced with fixed placeholders so golden files are stable across runs.
 - `time.Now()` in View() methods uses `m.api.Clock().Now()` so tests inject a fixed time via `domain.MockClock`.
+- Scenarios marked `noIntegration: true` are only tested by unit tests. Use this for: playing/splash (late joiners stay in lobby) and menu/dialog scenarios (integration harness can't send keystrokes).
+- `setup()` must **never** add the scenario's `playerID` to state. `renderChrome` adds them automatically (simulating the server's player-join path), keeping unit and integration outputs identical.
 
 ## Slog Feedback Loop Guard
 
