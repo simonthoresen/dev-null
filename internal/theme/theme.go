@@ -61,12 +61,16 @@ type BorderSet struct {
 	OuterV  string
 	InnerH  string
 	InnerV  string
-	CrossL  string
-	CrossR  string
-	CrossT  string
-	CrossB  string
-	CrossX  string
-	BarSep  string
+	CrossL      string
+	CrossR      string
+	CrossT      string
+	CrossB      string
+	CrossX      string
+	InnerCrossT string // VDivider starts below an inner HDivider (┬, all thin)
+	InnerCrossB string // VDivider ends above an inner HDivider (┴, all thin)
+	InnerCrossL string // HDivider starts right of an inner VDivider (├, all thin)
+	InnerCrossR string // HDivider ends left of an inner VDivider (┤, all thin)
+	BarSep      string
 }
 
 // ─── Layer ───────────────────────────────────────────────────────────────────
@@ -149,6 +153,18 @@ func (l *Layer) fillDefaults() {
 	if l.CrossX == "" {
 		l.CrossX = "┼"
 	}
+	if l.InnerCrossT == "" {
+		l.InnerCrossT = "┬"
+	}
+	if l.InnerCrossB == "" {
+		l.InnerCrossB = "┴"
+	}
+	if l.InnerCrossL == "" {
+		l.InnerCrossL = "├"
+	}
+	if l.InnerCrossR == "" {
+		l.InnerCrossR = "┤"
+	}
 	if l.BarSep == "" {
 		l.BarSep = "│"
 	}
@@ -180,6 +196,10 @@ func (l *Layer) UnmarshalJSON(data []byte) error {
 		CrossT      string `json:"crossT"`
 		CrossB      string `json:"crossB"`
 		CrossX      string `json:"crossX"`
+		InnerCrossT string `json:"innerCrossT"`
+		InnerCrossB string `json:"innerCrossB"`
+		InnerCrossL string `json:"innerCrossL"`
+		InnerCrossR string `json:"innerCrossR"`
 		BarSep      string `json:"barSep"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -230,6 +250,10 @@ func (l *Layer) UnmarshalJSON(data []byte) error {
 	l.CrossT = raw.CrossT
 	l.CrossB = raw.CrossB
 	l.CrossX = raw.CrossX
+	l.InnerCrossT = raw.InnerCrossT
+	l.InnerCrossB = raw.InnerCrossB
+	l.InnerCrossL = raw.InnerCrossL
+	l.InnerCrossR = raw.InnerCrossR
 	l.BarSep = raw.BarSep
 	l.fillDefaults()
 	return nil

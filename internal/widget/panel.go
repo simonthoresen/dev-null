@@ -98,13 +98,33 @@ func (p *Panel) Render(buf *render.ImageBuffer, x, y, width, height int, focused
 		switch child.Control.(type) {
 		case *HDivider:
 			if child.Control.(*HDivider).Connected {
-				buf.SetChar(x, cy, render.RuneOf(layer.CrossL), fg, bg, render.AttrNone)
-				buf.SetChar(x+width-1, cy, render.RuneOf(layer.CrossR), fg, bg, render.AttrNone)
+				// Left junction: outer border or inner VDivider?
+				if cx == x+1 {
+					buf.SetChar(x, cy, render.RuneOf(layer.CrossL), fg, bg, render.AttrNone)
+				} else {
+					buf.SetChar(cx-1, cy, render.RuneOf(layer.InnerCrossL), fg, bg, render.AttrNone)
+				}
+				// Right junction: outer border or inner VDivider?
+				if cx+cw == x+width-1 {
+					buf.SetChar(x+width-1, cy, render.RuneOf(layer.CrossR), fg, bg, render.AttrNone)
+				} else {
+					buf.SetChar(cx+cw, cy, render.RuneOf(layer.InnerCrossR), fg, bg, render.AttrNone)
+				}
 			}
 		case *VDivider:
 			if child.Control.(*VDivider).Connected {
-				buf.SetChar(cx, y, render.RuneOf(layer.CrossT), fg, bg, render.AttrNone)
-				buf.SetChar(cx, boty, render.RuneOf(layer.CrossB), fg, bg, render.AttrNone)
+				// Top junction: outer border or inner HDivider?
+				if cy == y+1 {
+					buf.SetChar(cx, y, render.RuneOf(layer.CrossT), fg, bg, render.AttrNone)
+				} else {
+					buf.SetChar(cx, cy-1, render.RuneOf(layer.InnerCrossT), fg, bg, render.AttrNone)
+				}
+				// Bottom junction: outer border or inner HDivider?
+				if cy+ch >= boty {
+					buf.SetChar(cx, boty, render.RuneOf(layer.CrossB), fg, bg, render.AttrNone)
+				} else {
+					buf.SetChar(cx, cy+ch, render.RuneOf(layer.InnerCrossB), fg, bg, render.AttrNone)
+				}
 			}
 		}
 	}

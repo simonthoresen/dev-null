@@ -115,6 +115,8 @@ go run ./cmd/null-space-client --local --data-dir dist --player alice --game orb
 
 **Theme layer depth:** Layer 0 = main window (lobby/playing). Menus can only open from layer 0, so they always render at layer 1. Dialogs render at `1 + stackIndex` — the first dialog is layer 1 (same as menus, which close when a dialog opens), a dialog opened from a dialog is layer 2, etc. Use `OverlayState.DialogLayer()` to get the current layer.
 
+**Theme junction characters:** `BorderSet` has a complete set of junction characters for every combination of inner divider (`─`/`│`) meeting outer border (`═`/`║`) or another inner divider. The outer-to-inner junctions (`CrossL/R/T/B`) use mixed double/single characters (e.g. `╟`, `╧`). The inner-to-inner T-junctions use all-thin characters: `InnerCrossT` (`┬`), `InnerCrossB` (`┴`), `InnerCrossL` (`├`), `InnerCrossR` (`┤`). The inner cross is `CrossX` (`┼`). The post-processing in `Window.RenderToBuf` and `Panel.Render` automatically selects the right character based on whether each divider edge touches the outer border or an interior divider.
+
 ## Concurrency — Lock Ordering
 
 Two primary mutexes protect shared state:
