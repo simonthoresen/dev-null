@@ -19,7 +19,7 @@ func watchTerminalResize(conn *client.SSHConn) func() {
 	signal.Notify(sigwinch, syscall.SIGWINCH)
 	go func() {
 		for range sigwinch {
-			if w, h, err := xterm.GetSize(os.Stdin.Fd()); err == nil {
+			if w, h, err := xterm.GetSize(os.Stdout.Fd()); err == nil {
 				conn.SendWindowChange(w, h)
 			}
 		}

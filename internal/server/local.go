@@ -55,8 +55,10 @@ func (a *Server) RunLocalSSH(ctx context.Context, playerName string, port int, t
 		return ctx.Err()
 	}
 
-	// Get initial terminal size.
-	w, h, err := xterm.GetSize(os.Stdin.Fd())
+	// Get initial terminal size from stdout (the screen buffer handle on Windows).
+	// Using Stdin.Fd() is wrong on Windows: GetConsoleScreenBufferInfo requires a
+	// screen buffer handle (stdout/stderr), not the console input handle (stdin).
+	w, h, err := xterm.GetSize(os.Stdout.Fd())
 	if err != nil {
 		w, h = 120, 50
 	}

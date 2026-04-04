@@ -16,7 +16,7 @@ import (
 func watchTerminalResize(conn *client.SSHConn) func() {
 	done := make(chan struct{})
 	go func() {
-		lastW, lastH, _ := xterm.GetSize(os.Stdin.Fd())
+		lastW, lastH, _ := xterm.GetSize(os.Stdout.Fd())
 		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
 		for {
@@ -24,7 +24,7 @@ func watchTerminalResize(conn *client.SSHConn) func() {
 			case <-done:
 				return
 			case <-ticker.C:
-				if w, h, err := xterm.GetSize(os.Stdin.Fd()); err == nil && (w != lastW || h != lastH) {
+				if w, h, err := xterm.GetSize(os.Stdout.Fd()); err == nil && (w != lastW || h != lastH) {
 					lastW, lastH = w, h
 					conn.SendWindowChange(w, h)
 				}
