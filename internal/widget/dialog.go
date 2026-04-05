@@ -119,6 +119,12 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 		row++
 	}
 
+	// Build a set of button labels that require list navigation to be enabled.
+	requireNav := make(map[string]bool, len(d.RequireListNavigation))
+	for _, lbl := range d.RequireListNavigation {
+		requireNav[lbl] = true
+	}
+
 	// --- Button row: horizontal Container ---
 	var btnChildren []ContainerChild
 	for _, label := range btns {
@@ -129,6 +135,11 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 				entry.closed = true
 				o.fireDialogCloseEntry(entry, label)
 			},
+		}
+		if requireNav[label] {
+			btn.Disabled = func() bool {
+				return entry.listBox == nil || !entry.listBox.Navigated
+			}
 		}
 		btnChildren = append(btnChildren, ContainerChild{
 			Control: btn,

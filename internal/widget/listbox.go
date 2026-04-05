@@ -19,6 +19,7 @@ type ListBox struct {
 	Tags     []string // optional right-aligned tags (parallel to Items)
 	Cursor   int      // selected item index
 	ScrollOff int     // scroll offset (0 = first item at top)
+	Navigated bool    // true once the user has pressed a nav key or clicked an item
 
 	height int // computed during Render
 
@@ -31,7 +32,7 @@ func (lb *ListBox) TabWant() (bool, bool) { return lb.wantTab, lb.wantBackTab }
 func (lb *ListBox) MinSize() (int, int) {
 	w := 10
 	for i, item := range lb.Items {
-		iw := ansi.StringWidth(item) + 3 // " ► " prefix
+		iw := ansi.StringWidth(item) + 2 // "► " prefix (1 glyph + 1 space before tag)
 		if i < len(lb.Tags) && lb.Tags[i] != "" {
 			iw += 2 + ansi.StringWidth(lb.Tags[i])
 		}
@@ -63,31 +64,37 @@ func (lb *ListBox) Update(msg tea.Msg) {
 	}
 	switch km.String() {
 	case "up":
+		lb.Navigated = true
 		if lb.Cursor > 0 {
 			lb.Cursor--
 			lb.ensureVisible()
 		}
 	case "down":
+		lb.Navigated = true
 		if lb.Cursor < n-1 {
 			lb.Cursor++
 			lb.ensureVisible()
 		}
 	case "pgup":
+		lb.Navigated = true
 		lb.Cursor -= lb.visibleHeight()
 		if lb.Cursor < 0 {
 			lb.Cursor = 0
 		}
 		lb.ensureVisible()
 	case "pgdown":
+		lb.Navigated = true
 		lb.Cursor += lb.visibleHeight()
 		if lb.Cursor >= n {
 			lb.Cursor = n - 1
 		}
 		lb.ensureVisible()
 	case "home":
+		lb.Navigated = true
 		lb.Cursor = 0
 		lb.ensureVisible()
 	case "end":
+		lb.Navigated = true
 		lb.Cursor = n - 1
 		lb.ensureVisible()
 	case "tab":
@@ -101,6 +108,7 @@ func (lb *ListBox) HandleClick(rx, ry int) {
 	idx := lb.ScrollOff + ry
 	if idx >= 0 && idx < len(lb.Items) {
 		lb.Cursor = idx
+		lb.Navigated = true
 	}
 }
 
@@ -157,14 +165,16 @@ func (lb *ListBox) Render(buf *render.ImageBuffer, x, y, width, height int, focu
 		}
 
 		isCursor := idx == lb.Cursor
-		prefix := "  "
-		if isCursor && focused {
-			prefix = " ►"
-		} else if isCursor {
-			prefix = " ›"
+		// Single-char prefix: glyph in monochrome, space in color mode.
+		// Color terminals show selection via background highlight alone.
+		prefix := " "
+		if isCursor && focused && layer.Monochrome {
+			prefix = "►"
+		} else if isCursor && !focused && layer.Monochrome {
+			prefix = "›"
 		}
 
-		itemText := prefix + " " + item
+		itemText := prefix + item
 		if tag != "" {
 			padNeeded := contentW - ansi.StringWidth(itemText) - ansi.StringWidth(tag) - 1
 			if padNeeded < 1 {

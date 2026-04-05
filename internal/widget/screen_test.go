@@ -178,7 +178,11 @@ func hexToDec(h string) int {
 // ─── Shared test helpers ────────────────────────────────────────────────────
 
 func testTheme() *theme.Theme { return theme.Default() }
-func testLayer() *theme.Layer { return testTheme().LayerAt(0) }
+func testLayer() *theme.Layer {
+	l := testTheme().LayerAt(0)
+	l.Monochrome = true // widget tests simulate a monochrome terminal so cursor glyphs (►/›) appear
+	return l
+}
 
 // stripANSI removes all ANSI escape sequences for easier assertion.
 func stripANSI(s string) string {

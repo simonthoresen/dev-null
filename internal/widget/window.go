@@ -324,6 +324,9 @@ func (w *Window) cycleFocusDir(dir int) tea.Cmd {
 	}
 	if oldIdx != w.FocusIdx {
 		w.blurTextInput(oldIdx)
+		if fdr, ok := w.Children[w.FocusIdx].Control.(FocusDirReceiver); ok {
+			fdr.OnFocusDir(dir)
+		}
 		return w.activateTextInput(w.FocusIdx)
 	}
 	return nil

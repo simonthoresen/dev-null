@@ -104,7 +104,8 @@ type Model struct {
 	InitCommands []string
 
 	// Per-player theme
-	theme *theme.Theme
+	theme     *theme.Theme
+	themeName string // file stem used to load theme (empty = default)
 
 	// Per-player plugins
 	plugins     []engine.Plugin

@@ -7,10 +7,13 @@ import (
 )
 
 // TestChromeRenders runs each scenario through all four chrome execution
-// contexts, each with two color modes (ascii / ansi). All eight sub-tests
-// compare against the same golden file at testdata/golden/<scenario>_chrome.txt
-// because stripping ANSI/OSC produces identical plain text regardless of the
-// execution context or color profile.
+// contexts, each with two color modes (ascii / ansi). The four execution-context
+// sub-tests for a given color mode all compare against the same golden file
+// (testdata/<scenario>_chrome_<colorMode>.txt) because stripping ANSI/OSC
+// produces identical plain text regardless of execution context.
+//
+// ascii and ansi golden files differ: monochrome terminals show ► cursor glyphs
+// while color terminals rely on background highlight and use plain spaces.
 //
 // The four execution contexts mirror the real deployment paths:
 //
@@ -47,7 +50,7 @@ func TestChromeRenders(t *testing.T) {
 								termW, termH,
 							)
 
-							path := goldenPath(sc.name, "chrome")
+							path := goldenPath(sc.name, "chrome", cv.name)
 							checkOrUpdate(t, path, got)
 						})
 					}

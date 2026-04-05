@@ -121,19 +121,39 @@ func (c *Container) focusFirst() {
 	c.FocusIdx = -1
 }
 
+// focusLast sets FocusIdx to the last focusable child.
+func (c *Container) focusLast() {
+	for i := len(c.Children) - 1; i >= 0; i-- {
+		if c.Children[i].Control.Focusable() {
+			c.FocusIdx = i
+			return
+		}
+	}
+	c.FocusIdx = -1
+}
+
+// OnFocusDir resets internal focus to the first child when arriving via Tab
+// (+1) or to the last child when arriving via Shift+Tab (-1).
+func (c *Container) OnFocusDir(dir int) {
+	if dir >= 0 {
+		c.focusFirst()
+	} else {
+		c.focusLast()
+	}
+}
+
 // cycleFocus moves to the next/prev focusable child. Returns false if
-// it would wrap (caller should propagate Tab to parent).
+// the boundary is reached (caller should propagate Tab to parent).
 func (c *Container) cycleFocus(dir int) bool {
 	n := len(c.Children)
 	if n == 0 {
 		return false
 	}
-	start := c.FocusIdx
-	idx := start
+	idx := c.FocusIdx
 	for {
-		idx = (idx + dir + n) % n
-		if idx == start {
-			return false // wrapped around
+		idx += dir
+		if idx < 0 || idx >= n {
+			return false // boundary reached — let parent handle wrapping
 		}
 		if c.Children[idx].Control.Focusable() {
 			old := c.FocusIdx

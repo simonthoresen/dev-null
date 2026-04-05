@@ -178,9 +178,11 @@ func (g *mockGame) RenderGameOver(_ *render.ImageBuffer, _ string, _, _, _, _ in
 // ─── Golden file helpers ─────────────────────────────────────────────────────
 
 // goldenPath returns the path for a golden file.
-// All golden files live flat in testdata/golden/ as <scenario>_<kind>.txt.
-func goldenPath(scenario, kind string) string {
-	return filepath.Join("testdata", scenario+"_"+kind+".txt")
+// Files live flat in testdata/ as <scenario>_<kind>_<colorMode>.txt.
+// colorMode is "ascii" or "ansi" — the two outputs differ because monochrome
+// terminals show ► cursor glyphs while color terminals use background highlight.
+func goldenPath(scenario, kind, colorMode string) string {
+	return filepath.Join("testdata", scenario+"_"+kind+"_"+colorMode+".txt")
 }
 
 // checkOrUpdate either writes the golden file (when -update is set) or

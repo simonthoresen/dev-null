@@ -101,8 +101,10 @@ func (m *Model) handleThemeCommand(input string) {
 		return
 	}
 	m.theme = t
+	m.themeName = name
 	m.gameWindow = nil // force rebuild with new theme
 	m.pluginReply(fmt.Sprintf("Theme changed to: %s", t.Name))
+	m.persistClientConfig()
 }
 
 func (m *Model) pluginReply(text string) {
@@ -160,6 +162,7 @@ func (m *Model) handlePluginCommand(input string) {
 		m.plugins = append(m.plugins, pl)
 		m.pluginNames = append(m.pluginNames, name)
 		m.pluginReply(fmt.Sprintf("Plugin loaded: %s", name))
+		m.persistClientConfig()
 	case "unload":
 		if len(parts) < 3 {
 			m.pluginReply("Usage: /plugin unload <name>")
@@ -181,6 +184,7 @@ func (m *Model) handlePluginCommand(input string) {
 			return
 		}
 		m.pluginReply(fmt.Sprintf("Plugin unloaded: %s", target))
+		m.persistClientConfig()
 	case "list":
 		if len(m.pluginNames) == 0 {
 			m.pluginReply("No plugins currently loaded.")
@@ -276,6 +280,7 @@ func (m *Model) handleShaderCommand(input string) {
 		m.shaders = append(m.shaders, sh)
 		m.shaderNames = append(m.shaderNames, name)
 		m.pluginReply(fmt.Sprintf("Shader loaded: %s", name))
+		m.persistClientConfig()
 	case "unload":
 		if len(parts) < 3 {
 			m.pluginReply("Usage: /shader unload <name>")
@@ -297,6 +302,7 @@ func (m *Model) handleShaderCommand(input string) {
 			return
 		}
 		m.pluginReply(fmt.Sprintf("Shader unloaded: %s", target))
+		m.persistClientConfig()
 	case "list":
 		if len(m.shaderNames) == 0 {
 			m.pluginReply("No shaders currently loaded.")

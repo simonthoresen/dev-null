@@ -8,15 +8,13 @@ import (
 )
 
 // TestConsoleRenders runs each scenario through the server console view and
-// compares the stripped output against the golden file at
-// testdata/<scenario>_console.txt.
+// compares the stripped output against testdata/<scenario>_console_<colorMode>.txt.
 //
 // Two color-mode subtests are run per scenario:
-//   - ascii  — NoTTY profile: no escape codes in the output at all.
-//   - ansi   — TrueColor profile: full ANSI emitted then stripped before comparison.
+//   - ascii  — NoTTY profile: monochrome; cursor glyphs (►) are shown.
+//   - ansi   — TrueColor profile: color; background highlight replaces glyphs.
 //
-// Both subtests compare against the same golden file because stripping produces
-// identical plain text regardless of the color profile used.
+// The two files differ wherever a ► cursor glyph would appear.
 //
 // Scenarios with keys defined apply those key sequences to the console model
 // too, exercising the console's own overlay/menu system.
@@ -51,7 +49,7 @@ func TestConsoleRenders(t *testing.T) {
 					api := newMockConsoleAPI(st)
 					got := renderConsole(api, sc.consoleKeys, cv.profile, termW, termH)
 
-					path := goldenPath(sc.name, "console")
+					path := goldenPath(sc.name, "console", cv.name)
 					checkOrUpdate(t, path, got)
 				})
 			}

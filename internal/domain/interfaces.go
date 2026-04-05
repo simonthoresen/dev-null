@@ -64,7 +64,12 @@ type DialogRequest struct {
 	OnListAction func(button string, idx int)   // called instead of OnClose when ListItems is set
 	// OnListEnter is called when Enter is pressed on the focused list item,
 	// without closing the dialog. Use PopDialog+PushDialog inside to refresh.
-	OnListEnter  func(idx int)
+	OnListEnter func(idx int)
+
+	// RequireListNavigation is a list of button labels that are disabled until
+	// the user has navigated the list (pressed an arrow key or clicked an item).
+	// This prevents accidental actions on the default cursor position.
+	RequireListNavigation []string
 
 	// Input support — when InputPrompt is non-empty, the dialog shows a single-line
 	// text input field above the buttons. OnInputClose receives the button label

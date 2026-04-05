@@ -164,8 +164,10 @@ var integrationVariants = []integrationVariant{
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 // TestChromeRendersIntegration runs each lobby scenario through all four real
-// SSH execution paths and compares the reconstructed screen against the same
-// golden file as the unit tests (testdata/golden/<scenario>_chrome.txt).
+// SSH execution paths and compares the reconstructed screen against
+// testdata/<scenario>_chrome_ascii.txt. All integration variants use
+// NULL_SPACE_TERM=ascii (monochrome), so they always compare against the ascii
+// golden file.
 //
 // Scenarios marked noIntegration are skipped because they cannot be faithfully
 // reproduced over a real SSH connection:
@@ -199,7 +201,7 @@ func TestChromeRendersIntegration(t *testing.T) {
 					raw := sshCapture(t, addr, playerName, variant.envVars, 300)
 					got := sanitize(raw)
 
-					path := goldenPath(sc.name, "chrome")
+					path := goldenPath(sc.name, "chrome", "ascii")
 					checkOrUpdate(t, path, got)
 				})
 			}

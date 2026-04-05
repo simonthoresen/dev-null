@@ -68,6 +68,13 @@ type TabWanter interface {
 	TabWant() (wantTab, wantBackTab bool)
 }
 
+// FocusDirReceiver is optionally implemented by composite controls (e.g.
+// Container) that need to reset their internal focus position when the Window
+// delivers focus to them via Tab (+1) or Shift+Tab (-1).
+type FocusDirReceiver interface {
+	OnFocusDir(dir int)
+}
+
 // Clickable is optionally implemented by Controls that handle mouse clicks.
 // (rx, ry) are relative to the control's top-left corner.
 type Clickable interface {

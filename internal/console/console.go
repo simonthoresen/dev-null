@@ -69,7 +69,8 @@ type Model struct {
 	tabIndex      int
 
 	// Per-console theme
-	theme *theme.Theme
+	theme     *theme.Theme
+	themeName string // file stem used to load theme (empty = default)
 
 	// NC overlay (menus, dialogs)
 	overlay widget.OverlayState
@@ -322,10 +323,10 @@ func (m *Model) consoleMenus() []domain.MenuDef {
 				{Label: "&Plugins...", Handler: func(_ string) { m.pushConsolePluginDialog(0) }},
 				{Label: "&Shaders...", Handler: func(_ string) { m.pushConsoleShaderDialog(0) }},
 				{Label: "---"},
-				{Label: "S&hutdown", Hotkey: "ctrl+q", Handler: func(_ string) {
+				{Label: "E&xit", Hotkey: "ctrl+q", Handler: func(_ string) {
 					m.overlay.PushDialog(domain.DialogRequest{
-						Title:   "Shutdown",
-						Body:    "Are you sure you want to shut down the server?",
+						Title:   "Exit",
+						Body:    "Disconnect all players and shut down the server?",
 						Buttons: []string{"Yes", "No"},
 						Warning: true,
 						OnClose: func(btn string) {
@@ -415,6 +416,8 @@ func (m *Model) pushConsoleThemeDialog(cursor int) {
 				return
 			}
 			m.theme = t
+			m.themeName = name
+			m.persistServerConfig()
 			m.overlay.PopDialog()
 			m.pushConsoleThemeDialog(idx)
 		},
@@ -460,7 +463,8 @@ func (m *Model) showConsoleThemeRemoveConfirm(name string, returnCursor int) {
 }
 
 // pushConsolePluginDialog opens an interactive Plugins dialog for the server console.
-// Enter toggles a plugin loaded/unloaded. Remove deletes the plugin file from disk.
+// Loaded plugins are listed first (with order numbers), then unloaded ones.
+// Enter toggles load/unload. Remove deletes the plugin file from disk.
 func (m *Model) pushConsolePluginDialog(cursor int) {
 	available := engine.ListScripts(filepath.Join(m.api.DataDir(), "plugins"))
 	loadedSet := make(map[string]bool)
@@ -480,36 +484,79 @@ func (m *Model) pushConsolePluginDialog(cursor int) {
 		})
 		return
 	}
-	tags := make([]string, len(available))
-	for i, name := range available {
-		if loadedSet[name] {
-			tags[i] = "[✓]"
-		} else {
-			tags[i] = "[ ]"
+
+	activeCount := len(m.pluginNames)
+	numWidth := len(fmt.Sprintf("%d", max(activeCount, 1)))
+	inactivePad := strings.Repeat(" ", numWidth+2) // matches "N. " width
+
+	var items []string
+	var tags []string
+	for i, name := range m.pluginNames {
+		items = append(items, fmt.Sprintf("%*d. %s", numWidth, i+1, name))
+		tags = append(tags, "[✓]")
+	}
+	var inactive []string
+	for _, name := range available {
+		if !loadedSet[name] {
+			items = append(items, inactivePad+name)
+			tags = append(tags, "[ ]")
+			inactive = append(inactive, name)
 		}
 	}
+
 	m.overlay.PushDialog(domain.DialogRequest{
-		Title:      "Plugins",
-		ListItems:  available,
-		ListTags:   tags,
-		ListCursor: cursor,
-		Buttons:    []string{"Add", "Remove", "Close"},
+		Title:                 "Plugins",
+		ListItems:             items,
+		ListTags:              tags,
+		ListCursor:            cursor,
+		Buttons:               []string{"Add", "Remove", "Close"},
+		RequireListNavigation: []string{"Remove"},
 		OnListEnter: func(idx int) {
-			name := available[idx]
-			if loadedSet[name] {
-				m.handlePluginCommand("/plugin unload " + name)
+			var newCursor int
+			if idx < activeCount {
+				toggledName := m.pluginNames[idx]
+				m.handlePluginCommand("/plugin unload " + toggledName)
+				newActiveSet := make(map[string]bool)
+				for _, n := range m.pluginNames {
+					newActiveSet[n] = true
+				}
+				pos := 0
+				for _, n := range available {
+					if !newActiveSet[n] {
+						if strings.EqualFold(n, toggledName) {
+							break
+						}
+						pos++
+					}
+				}
+				newCursor = len(m.pluginNames) + pos
 			} else {
-				m.handlePluginCommand("/plugin load " + name)
+				inactiveIdx := idx - activeCount
+				if inactiveIdx < len(inactive) {
+					m.handlePluginCommand("/plugin load " + inactive[inactiveIdx])
+					newCursor = len(m.pluginNames) - 1
+				}
 			}
 			m.overlay.PopDialog()
-			m.pushConsolePluginDialog(idx)
+			m.pushConsolePluginDialog(newCursor)
 		},
 		OnListAction: func(btn string, idx int) {
 			switch btn {
 			case "Add":
 				m.showConsolePluginAddDialog(idx)
 			case "Remove":
-				m.showConsolePluginRemoveConfirm(available[idx], idx)
+				var name string
+				if idx < activeCount {
+					name = m.pluginNames[idx]
+				} else {
+					inactiveIdx := idx - activeCount
+					if inactiveIdx < len(inactive) {
+						name = inactive[inactiveIdx]
+					}
+				}
+				if name != "" {
+					m.showConsolePluginRemoveConfirm(name, idx)
+				}
 			}
 		},
 	})
@@ -560,16 +607,20 @@ func (m *Model) pushConsoleShaderDialog(cursor int) {
 		loadedSet[n] = true
 	}
 
+	activeCount := len(m.shaderNames)
+	numWidth := len(fmt.Sprintf("%d", max(activeCount, 1)))
+	inactivePad := strings.Repeat(" ", numWidth+2) // matches "N. " width
+
 	var items []string
 	var tags []string
 	for i, name := range m.shaderNames {
-		items = append(items, fmt.Sprintf("%d. %s", i+1, name))
+		items = append(items, fmt.Sprintf("%*d. %s", numWidth, i+1, name))
 		tags = append(tags, "[✓]")
 	}
 	var inactive []string
 	for _, name := range available {
 		if !loadedSet[name] {
-			items = append(items, name)
+			items = append(items, inactivePad+name)
 			tags = append(tags, "[ ]")
 			inactive = append(inactive, name)
 		}
@@ -589,43 +640,47 @@ func (m *Model) pushConsoleShaderDialog(cursor int) {
 		return
 	}
 
-	activeCount := len(m.shaderNames)
 	m.overlay.PushDialog(domain.DialogRequest{
-		Title:      "Shaders",
-		ListItems:  items,
-		ListTags:   tags,
-		ListCursor: cursor,
-		Buttons:    []string{"Add", "Up", "Down", "Remove", "Close"},
+		Title:                 "Shaders",
+		ListItems:             items,
+		ListTags:              tags,
+		ListCursor:            cursor,
+		Buttons:               []string{"Add", "Remove", "Close"},
+		RequireListNavigation: []string{"Remove"},
 		OnListEnter: func(idx int) {
+			var newCursor int
 			if idx < activeCount {
-				m.handleShaderCommand("/shader unload " + m.shaderNames[idx])
+				toggledName := m.shaderNames[idx]
+				m.handleShaderCommand("/shader unload " + toggledName)
+				// Find where the unloaded shader landed in the new inactive list.
+				newActiveSet := make(map[string]bool)
+				for _, n := range m.shaderNames {
+					newActiveSet[n] = true
+				}
+				pos := 0
+				for _, n := range available {
+					if !newActiveSet[n] {
+						if strings.EqualFold(n, toggledName) {
+							break
+						}
+						pos++
+					}
+				}
+				newCursor = len(m.shaderNames) + pos
 			} else {
 				inactiveIdx := idx - activeCount
 				if inactiveIdx < len(inactive) {
 					m.handleShaderCommand("/shader load " + inactive[inactiveIdx])
+					newCursor = len(m.shaderNames) - 1
 				}
 			}
 			m.overlay.PopDialog()
-			m.pushConsoleShaderDialog(idx)
+			m.pushConsoleShaderDialog(newCursor)
 		},
 		OnListAction: func(btn string, idx int) {
 			switch btn {
 			case "Add":
 				m.showConsoleShaderAddDialog(idx)
-			case "Up":
-				if idx > 0 && idx < activeCount {
-					m.moveShader(m.shaderNames[idx], -1)
-					m.pushConsoleShaderDialog(idx - 1)
-				} else {
-					m.pushConsoleShaderDialog(idx)
-				}
-			case "Down":
-				if idx >= 0 && idx < activeCount-1 {
-					m.moveShader(m.shaderNames[idx], +1)
-					m.pushConsoleShaderDialog(idx + 1)
-				} else {
-					m.pushConsoleShaderDialog(idx)
-				}
 			case "Remove":
 				var name string
 				if idx < activeCount {
@@ -691,6 +746,9 @@ func (m *Model) View() tea.View {
 	EnterRenderPath()
 	defer LeaveRenderPath()
 
+	// Set monochrome on all theme layers so widgets use text cursor glyphs.
+	m.theme.SetMonochrome(m.profile <= colorprofile.ASCII)
+
 	var view tea.View
 	if m.width == 0 || m.height == 0 {
 		view.SetContent("Loading server console...")
@@ -733,12 +791,6 @@ func (m *Model) View() tea.View {
 	// Render the full screen: menu bar + window + status bar.
 	m.screen.RenderToBuf(buf, 0, 0, m.width, m.height, t)
 
-	// Post-processing shaders: run in sequence on the fully-rendered buffer.
-	m.api.State().RLock()
-	shaderElapsed := m.api.State().ElapsedSec
-	m.api.State().RUnlock()
-	engine.ApplyShaders(m.shaders, buf, shaderElapsed)
-
 	// Overlay layers: render to sub-buffers, blit, then recolor for shadow.
 	shadowFg := t.ShadowFg
 	shadowBg := t.ShadowBg
@@ -760,6 +812,12 @@ func (m *Model) View() tea.View {
 			render.BlitShadow(buf, col, row, sub.Width, sub.Height, shadowFg, shadowBg)
 		}
 	}
+
+	// Post-processing shaders: run after all layers are composited.
+	m.api.State().RLock()
+	shaderElapsed := m.api.State().ElapsedSec
+	m.api.State().RUnlock()
+	engine.ApplyShaders(m.shaders, buf, shaderElapsed)
 
 	view.SetContent(buf.ToString(m.profile))
 	view.AltScreen = true

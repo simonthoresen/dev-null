@@ -35,9 +35,9 @@ func (o *OverlayState) RenderMenuBar(width int, menus []domain.MenuDef, layer *t
 		}
 		focused := (o.MenuFocused || o.OpenMenu >= 0) && i == o.MenuCursor
 		if focused {
-			// ► only when bar is focused with no open dropdown — once a
-			// dropdown is open the cursor lives there, not in the bar.
-			barCursor := o.OpenMenu < 0
+			// ► only when bar is focused with no open dropdown AND the terminal
+			// is monochrome; color terminals use background highlight alone.
+			barCursor := o.OpenMenu < 0 && layer.Monochrome
 			marker := " "
 			if barCursor {
 				marker = "►"
@@ -160,7 +160,11 @@ func (o *OverlayState) RenderDropdown(menus []domain.MenuDef, ncBarRow int, laye
 		case it.Disabled:
 			inner = disabledStyle.Width(innerW).Render(" " + check + clean + pad + hk + " ")
 		case i == o.DropCursor:
-			inner = activeStyle.Render("►"+check) + RenderLabel(it.Label, activeStyle, activeAccent) + activeStyle.Render(pad+hk+" ")
+			dropMarker := " "
+			if layer.Monochrome {
+				dropMarker = "►"
+			}
+			inner = activeStyle.Render(dropMarker+check) + RenderLabel(it.Label, activeStyle, activeAccent) + activeStyle.Render(pad+hk+" ")
 		default:
 			inner = menuStyle.Render(" "+check) + RenderLabel(it.Label, menuStyle, menuAccent) + menuStyle.Render(pad+hk+" ")
 		}

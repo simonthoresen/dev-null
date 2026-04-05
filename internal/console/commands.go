@@ -96,7 +96,9 @@ func (m *Model) handleThemeCommand(input string) {
 		return
 	}
 	m.theme = t
+	m.themeName = name
 	m.appendLog(fmt.Sprintf("Theme changed to: %s", t.Name))
+	m.persistServerConfig()
 }
 
 func (m *Model) handlePluginCommand(input string) {
@@ -147,6 +149,7 @@ func (m *Model) handlePluginCommand(input string) {
 		m.plugins = append(m.plugins, pl)
 		m.pluginNames = append(m.pluginNames, name)
 		m.appendLog(fmt.Sprintf("Plugin loaded: %s", name))
+		m.persistServerConfig()
 	case "unload":
 		if len(parts) < 3 {
 			m.appendLog("Usage: /plugin unload <name>")
@@ -168,6 +171,7 @@ func (m *Model) handlePluginCommand(input string) {
 			return
 		}
 		m.appendLog(fmt.Sprintf("Plugin unloaded: %s", target))
+		m.persistServerConfig()
 	case "list":
 		if len(m.pluginNames) == 0 {
 			m.appendLog("No plugins currently loaded.")
@@ -258,6 +262,7 @@ func (m *Model) handleShaderCommand(input string) {
 		m.shaders = append(m.shaders, sh)
 		m.shaderNames = append(m.shaderNames, name)
 		m.appendLog(fmt.Sprintf("Shader loaded: %s", name))
+		m.persistServerConfig()
 	case "unload":
 		if len(parts) < 3 {
 			m.appendLog("Usage: /shader unload <name>")
@@ -279,6 +284,7 @@ func (m *Model) handleShaderCommand(input string) {
 			return
 		}
 		m.appendLog(fmt.Sprintf("Shader unloaded: %s", target))
+		m.persistServerConfig()
 	case "list":
 		if len(m.shaderNames) == 0 {
 			m.appendLog("No shaders currently loaded.")

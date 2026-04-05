@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 
 	"null-space/internal/console"
@@ -19,6 +20,10 @@ import (
 func (m Model) View() tea.View {
 	console.EnterRenderPath()
 	defer console.LeaveRenderPath()
+
+	// Set monochrome on all theme layers so widgets use text cursor glyphs
+	// (►/›) instead of relying on background-color highlighting alone.
+	m.theme.SetMonochrome(m.ColorProfile <= colorprofile.ASCII)
 
 	var view tea.View
 	if m.width == 0 || m.height == 0 {
@@ -53,12 +58,6 @@ func (m Model) View() tea.View {
 		m.renderPlaying(buf, menus, game, gameName, phase)
 	}
 
-	// Post-processing shaders: run in sequence on the fully-rendered buffer.
-	m.api.State().RLock()
-	shaderElapsed := m.api.State().ElapsedSec
-	m.api.State().RUnlock()
-	engine.ApplyShaders(m.shaders, buf, shaderElapsed)
-
 	// Overlay layers: render to sub-buffers, blit, then shadow via RecolorRect.
 	shadowFg := m.theme.ShadowFg
 	shadowBg := m.theme.ShadowBg
@@ -81,6 +80,12 @@ func (m Model) View() tea.View {
 			render.BlitShadow(buf, col, row, sub.Width, sub.Height, shadowFg, shadowBg)
 		}
 	}
+
+	// Post-processing shaders: run after all layers are composited.
+	m.api.State().RLock()
+	shaderElapsed := m.api.State().ElapsedSec
+	m.api.State().RUnlock()
+	engine.ApplyShaders(m.shaders, buf, shaderElapsed)
 
 	// Enhanced client OSC protocol: send charmap data, game source, state, and viewport bounds.
 	var oscPrefix string

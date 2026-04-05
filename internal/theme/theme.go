@@ -79,6 +79,19 @@ type BorderSet struct {
 type Layer struct {
 	Palette   // embedded — promotes BaseStyle(), HighlightStyle(), etc.
 	BorderSet // embedded — border fields
+	// Monochrome is set at render time when the terminal has no color support.
+	// Widgets use it to show a text cursor glyph (►/›) instead of relying on
+	// background-color highlighting alone.
+	Monochrome bool
+}
+
+// SetMonochrome propagates the monochrome flag to all layers in the theme.
+// Call this once per View() render based on the terminal's color profile.
+func (t *Theme) SetMonochrome(mono bool) {
+	t.Primary.Monochrome = mono
+	t.Secondary.Monochrome = mono
+	t.Tertiary.Monochrome = mono
+	t.Warning.Monochrome = mono
 }
 
 // fillDefaults populates zero-value palette colors and empty border strings
