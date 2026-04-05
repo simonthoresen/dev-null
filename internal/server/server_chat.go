@@ -10,9 +10,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/internal/console"
-	"null-space/internal/domain"
-	"null-space/internal/widget"
+	"dev-null/internal/console"
+	"dev-null/internal/domain"
+	"dev-null/internal/widget"
 )
 
 // --- Broadcast and messaging ---
@@ -140,11 +140,11 @@ func (a *Server) InstallConsoleSlogHandler() {
 
 // --- Chat log ---
 
-// OpenChatLog derives the chat log path from NULL_SPACE_LOG_FILE by inserting
+// OpenChatLog derives the chat log path from DEV_NULL_LOG_FILE by inserting
 // "-chat" before the extension. E.g. "logs/20260401-152702.log" → "logs/20260401-152702-chat.log".
 // If no log file is configured, no chat log is created.
 func (a *Server) OpenChatLog() {
-	serverLog := os.Getenv("NULL_SPACE_LOG_FILE")
+	serverLog := os.Getenv("DEV_NULL_LOG_FILE")
 	if serverLog == "" {
 		return
 	}

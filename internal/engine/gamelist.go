@@ -9,7 +9,7 @@ import (
 
 	"github.com/dop251/goja"
 
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 )
 
 // TrimScriptExt removes the .js extension from a filename.

@@ -9,8 +9,8 @@ import (
 )
 
 func ConfigureFromEnv(component string) (func() error, error) {
-	logFilePath := strings.TrimSpace(os.Getenv("NULL_SPACE_LOG_FILE"))
-	level := parseLevel(strings.TrimSpace(os.Getenv("NULL_SPACE_LOG_LEVEL")))
+	logFilePath := strings.TrimSpace(os.Getenv("DEV_NULL_LOG_FILE"))
+	level := parseLevel(strings.TrimSpace(os.Getenv("DEV_NULL_LOG_LEVEL")))
 
 	var (
 		output io.Writer = io.Discard

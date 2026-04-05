@@ -9,7 +9,7 @@ import (
 
 	xterm "github.com/charmbracelet/x/term"
 
-	"null-space/internal/client"
+	"dev-null/internal/client"
 )
 
 // watchTerminalResize listens for SIGWINCH and forwards resize events to the

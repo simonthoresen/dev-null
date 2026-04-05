@@ -1,4 +1,4 @@
-// example.js — demonstrates the full null-space game lifecycle
+// example.js — demonstrates the full dev-null game lifecycle
 // Load with: /game load example
 
 var Game = {

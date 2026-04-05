@@ -1,21 +1,21 @@
-# null-space
+# dev-null
 
-null-space is a Windows server for hosting real-time multiplayer terminal games over SSH. You run it on your machine, share an invite command, and anyone can join instantly with a plain `ssh` command — no client software required. Games and plugins are single JavaScript files that you drop in a folder (or load directly from a URL), so creating and sharing new games is as simple as writing a `.js` file and pasting a GitHub link. The server handles everything else: player connections, a shared chat channel, synchronized rendering at 60 fps, and automatic tunnel setup via Pinggy so you can host from anywhere without touching your router.
+dev-null is a Windows server for hosting real-time multiplayer terminal games over SSH. You run it on your machine, share an invite command, and anyone can join instantly with a plain `ssh` command — no client software required. Games and plugins are single JavaScript files that you drop in a folder (or load directly from a URL), so creating and sharing new games is as simple as writing a `.js` file and pasting a GitHub link. The server handles everything else: player connections, a shared chat channel, synchronized rendering at 60 fps, and automatic tunnel setup via Pinggy so you can host from anywhere without touching your router.
 
 ## Install
 
 Paste this into a PowerShell window:
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/simonthoresen/null-space/main/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/simonthoresen/dev-null/main/install.ps1 | iex
 ```
 
-This creates a `NullSpace` folder in your current directory containing everything you need. No other dependencies required.
+This creates a `DevNull` folder in your current directory containing everything you need. No other dependencies required.
 
 ## Start the server
 
 ```powershell
-cd NullSpace
+cd DevNull
 .\start.ps1 --password yourpassword
 ```
 
@@ -32,9 +32,9 @@ Once the server is running, type into the server console:
 
 ## Auto-run commands on startup
 
-Create files in `~/.null-space/` to run commands automatically. One command per line; lines starting with `#` are comments.
+Create files in `~/.dev-null/` to run commands automatically. One command per line; lines starting with `#` are comments.
 
-### `~/.null-space/server.txt`
+### `~/.dev-null/server.txt`
 
 Runs when the server console starts. Useful for loading a default game, setting a theme, or loading server-side plugins.
 
@@ -45,7 +45,7 @@ Runs when the server console starts. Useful for loading a default game, setting 
 /game load invaders
 ```
 
-### `~/.null-space/client.txt`
+### `~/.dev-null/client.txt`
 
 Runs when you join a server (or start in `--local` mode). The join script reads this file and sends it to the server via SSH.
 

@@ -1,10 +1,10 @@
-// Package client implements the null-space graphical client.
+// Package client implements the dev-null graphical client.
 //
 // Architecture overview:
 //
 //   SSH connection (golang.org/x/crypto/ssh)
 //     ├── PTY channel        — standard terminal I/O
-//     └── ENV vars           — NULL_SPACE_CLIENT=enhanced
+//     └── ENV vars           — DEV_NULL_CLIENT=enhanced
 //
 //   ANSI parser
 //     ├── Cell grid          — parsed from ANSI stream (inverse of ImageBuffer.ToString)

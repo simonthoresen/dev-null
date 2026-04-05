@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wc -l /c/Users/simonhul/Source/null-space/server/*.go /c/Users/simonhul/Source/null-space/games/towerdefense/*.go)",
+      "Bash(wc -l /c/Users/simonhul/Source/dev-null/server/*.go /c/Users/simonhul/Source/dev-null/games/towerdefense/*.go)",
       "Bash(mkdir -p archive && git mv cmd archive/cmd && git mv server archive/server && git mv common archive/common && git mv games archive/games && git mv internal archive/internal && git mv scripts archive/scripts && git mv go.mod archive/go.mod && git mv go.sum archive/go.sum && echo \"done\")",
       "Bash(mkdir -p archive && cp -r cmd archive/cmd && cp -r server archive/server && cp -r common archive/common && cp -r games archive/games && cp -r internal archive/internal && cp -r scripts archive/scripts && cp go.mod archive/go.mod && cp go.sum archive/go.sum && echo \"done\")",
       "Bash(go build:*)",
@@ -15,14 +15,14 @@
       "Bash(git rm:*)",
       "Bash(make build:*)",
       "WebFetch(domain:code.claude.ai)",
-      "Bash(grep -r apps/ /c/Users/simonhul/Source/null-space --include=*.md --include=*.go)",
-      "Bash(grep -n \"func.*\\\\*App\\\\\\)\" /c/Users/simonhul/Source/null-space/server/*.go)",
-      "Bash(grep -n \"func.*\\\\*App\" /c/Users/simonhul/Source/null-space/server/*.go)",
+      "Bash(grep -r apps/ /c/Users/simonhul/Source/dev-null --include=*.md --include=*.go)",
+      "Bash(grep -n \"func.*\\\\*App\\\\\\)\" /c/Users/simonhul/Source/dev-null/server/*.go)",
+      "Bash(grep -n \"func.*\\\\*App\" /c/Users/simonhul/Source/dev-null/server/*.go)",
       "Bash(grep:*)",
       "Bash(ls -lh dist/*.exe)",
       "Bash(go test:*)",
       "Bash(go env:*)",
-      "Read(//c/Users/simonhul/Source/null-space/$\\(go env GOPATH\\)/pkg/mod/charm.land/bubbletea/v2@v2.0.2/**)"
+      "Read(//c/Users/simonhul/Source/dev-null/$\\(go env GOPATH\\)/pkg/mod/charm.land/bubbletea/v2@v2.0.2/**)"
     ]
   }
 }

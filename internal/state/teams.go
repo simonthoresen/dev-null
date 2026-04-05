@@ -1,7 +1,7 @@
 package state
 
 import (
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 	"sort"
 	"strings"
 )

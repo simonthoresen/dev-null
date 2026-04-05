@@ -22,12 +22,12 @@ import (
 	wishbubbletea "charm.land/wish/v2/bubbletea"
 	"github.com/charmbracelet/ssh"
 
-	"null-space/internal/console"
-	"null-space/internal/domain"
-	"null-space/internal/render"
-	"null-space/internal/engine"
-	"null-space/internal/network"
-	"null-space/internal/state"
+	"dev-null/internal/console"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
+	"dev-null/internal/engine"
+	"dev-null/internal/network"
+	"dev-null/internal/state"
 )
 
 type Server struct {
@@ -93,7 +93,7 @@ func New(address, password, dataDir string, tickInterval time.Duration) (*Server
 	server, err := wish.NewServer(
 		ssh.EmulatePty(),
 		wish.WithAddress(address),
-		wish.WithHostKeyPath(filepath.Join(dataDir, "null-space_ed25519")),
+		wish.WithHostKeyPath(filepath.Join(dataDir, "dev-null_ed25519")),
 		wish.WithMiddleware(
 			wishbubbletea.MiddlewareWithProgramHandler(app.programHandler),
 			app.sessionMiddleware(),
@@ -318,7 +318,7 @@ func (a *Server) inviteToken() string {
 	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
-const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/null-space/main/join.ps1"
+const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/dev-null/main/join.ps1"
 
 // inviteCommand returns the invite command formatted for terminal display.
 // The command is raw PowerShell — paste directly into a PowerShell window.

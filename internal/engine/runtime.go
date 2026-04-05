@@ -12,8 +12,8 @@ import (
 
 	"github.com/dop251/goja"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
 )
 
 // JSCallTimeout is how long a JS method can run before being interrupted.

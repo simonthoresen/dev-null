@@ -19,11 +19,11 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/internal/chrome"
-	"null-space/internal/console"
-	"null-space/internal/domain"
-	"null-space/internal/render"
-	"null-space/internal/state"
+	"dev-null/internal/chrome"
+	"dev-null/internal/console"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
+	"dev-null/internal/state"
 )
 
 var update = flag.Bool("update", false, "regenerate golden files instead of comparing")
@@ -36,9 +36,9 @@ var (
 	tsPattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}`)
 
 	// lobbyStatusBarPattern matches the entire lobby status bar line.
-	// The line is: " null-space | N players | uptime T   DATE"
+	// The line is: " dev-null | N players | uptime T   DATE"
 	// T and DATE have variable widths / values.
-	lobbyStatusBarPattern = regexp.MustCompile(` null-space \| (\d+) players \| uptime \S+ +\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} *`)
+	lobbyStatusBarPattern = regexp.MustCompile(` dev-null \| (\d+) players \| uptime \S+ +\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} *`)
 )
 
 // sanitize replaces wall-clock timestamps and uptime values with fixed
@@ -55,7 +55,7 @@ func sanitize(s string) string {
 	out := lobbyStatusBarPattern.ReplaceAllStringFunc(s, func(match string) string {
 		sub := lobbyStatusBarPattern.FindStringSubmatch(match)
 		players := sub[1]
-		left := fmt.Sprintf(" null-space | %s players | uptime XX", players)
+		left := fmt.Sprintf(" dev-null | %s players | uptime XX", players)
 		pad := termW - len(left) - len(fixedTimestamp) - 1
 		if pad < 1 {
 			pad = 1

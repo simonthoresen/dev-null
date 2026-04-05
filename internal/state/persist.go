@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 )
 
 // validNameRe matches names that are safe for use in file paths:

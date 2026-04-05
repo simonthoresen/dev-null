@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
-	"null-space/internal/widget"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
+	"dev-null/internal/widget"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

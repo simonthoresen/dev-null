@@ -12,31 +12,31 @@ endif
 build: build-server build-client
 
 build-server:
-	go build -ldflags="-s -w -X 'main.buildCommit=$(GIT_COMMIT)' -X 'main.buildDate=$(BUILD_DATE)'" -o dist/null-space-server.exe ./cmd/null-space-server
+	go build -ldflags="-s -w -X 'main.buildCommit=$(GIT_COMMIT)' -X 'main.buildDate=$(BUILD_DATE)'" -o dist/dev-null-server.exe ./cmd/dev-null-server
 	go build -ldflags="-s -w" -o dist/pinggy-helper.exe ./cmd/pinggy-helper
 
 build-client:
-	go build -ldflags="-s -w -X 'main.buildCommit=$(GIT_COMMIT)' -X 'main.buildDate=$(BUILD_DATE)'" -o dist/null-space-client.exe ./cmd/null-space-client
+	go build -ldflags="-s -w -X 'main.buildCommit=$(GIT_COMMIT)' -X 'main.buildDate=$(BUILD_DATE)'" -o dist/dev-null-client.exe ./cmd/dev-null-client
 
 # Server: normal mode (SSH server + console TUI)
 run-server: build-server
-	./dist/null-space-server.exe --data-dir dist
+	./dist/dev-null-server.exe --data-dir dist
 
 # Server: LAN-only mode (no UPnP, no public IP, no Pinggy)
 run-server-lan: build-server
-	./dist/null-space-server.exe --data-dir dist --lan
+	./dist/dev-null-server.exe --data-dir dist --lan
 
 # Server: local mode (headless SSH server + terminal client)
 run-server-local: build-server
-	./dist/null-space-server.exe --data-dir dist --local
+	./dist/dev-null-server.exe --data-dir dist --local
 
 # Client: connect to a running server
 run-client: build-client
-	./dist/null-space-client.exe
+	./dist/dev-null-client.exe
 
 # Client: local mode (headless SSH server + graphical client)
 run-client-local: build-client
-	./dist/null-space-client.exe --data-dir dist --local
+	./dist/dev-null-client.exe --data-dir dist --local
 
 # Run all tests
 test:
@@ -44,4 +44,4 @@ test:
 
 # Remove build outputs from dist/ (keeps games/, fonts/, logs/)
 clean:
-	rm -f dist/null-space-server.exe dist/null-space-client.exe dist/pinggy-helper.exe
+	rm -f dist/dev-null-server.exe dist/dev-null-client.exe dist/pinggy-helper.exe

@@ -3,7 +3,7 @@ package rendertest
 import (
 	"testing"
 
-	"null-space/internal/state"
+	"dev-null/internal/state"
 )
 
 // TestChromeRenders runs each scenario through all four chrome execution

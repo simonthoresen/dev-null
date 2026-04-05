@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 # Localhost is always tried first (not encoded in the token).
 
 if (-not $env:NS) {
-    Write-Host "Error: NS not set. Use the invite command from a null-space server." -ForegroundColor Red
+    Write-Host "Error: NS not set. Use the invite command from a dev-null server." -ForegroundColor Red
     exit 1
 }
 
@@ -65,24 +65,24 @@ if ([string]::IsNullOrWhiteSpace($name)) {
     $name = $env:USERNAME
 }
 
-# Locate null-space-client.exe: check PATH first, then the desktop shortcut.
+# Locate dev-null-client.exe: check PATH first, then the desktop shortcut.
 $clientExe = $null
-$clientCmd = Get-Command "null-space-client.exe" -ErrorAction SilentlyContinue
+$clientCmd = Get-Command "dev-null-client.exe" -ErrorAction SilentlyContinue
 if ($clientCmd) {
     $clientExe = $clientCmd.Source
 } else {
-    $shortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "NullSpace Client.lnk"
+    $shortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "DevNull Client.lnk"
     if (Test-Path $shortcut) {
         $shell = New-Object -ComObject WScript.Shell
         $lnk   = $shell.CreateShortcut($shortcut)
         # Arguments looks like: -ExecutionPolicy Bypass -File "C:\...\start-client.ps1"
         if ($lnk.Arguments -match '-File\s+"([^"]+)"') {
-            $candidate = Join-Path (Split-Path $Matches[1] -Parent) "null-space-client.exe"
+            $candidate = Join-Path (Split-Path $Matches[1] -Parent) "dev-null-client.exe"
             if (Test-Path $candidate) { $clientExe = $candidate }
         }
     }
     if (-not $clientExe) {
-        $candidate = Join-Path $env:ProgramFiles "NullSpace" "null-space-client.exe"
+        $candidate = Join-Path $env:ProgramFiles "DevNull" "dev-null-client.exe"
         if (Test-Path $candidate) { $clientExe = $candidate }
     }
 }
@@ -98,12 +98,12 @@ foreach ($ep in $endpoints) {
         $env:LANG = "en_US.UTF-8"
         $env:COLORTERM = "truecolor"
 
-        # Read init commands from ~/.null-space/client.txt if it exists.
-        $initFile = Join-Path $HOME ".null-space" "client.txt"
+        # Read init commands from ~/.dev-null/client.txt if it exists.
+        $initFile = Join-Path $HOME ".dev-null" "client.txt"
         if (Test-Path $initFile) {
             $initContent = Get-Content $initFile -Raw -ErrorAction SilentlyContinue
             if ($initContent) {
-                $env:NULL_SPACE_INIT = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($initContent))
+                $env:DEV_NULL_INIT = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($initContent))
             }
         }
 
@@ -115,7 +115,7 @@ foreach ($ep in $endpoints) {
             "-o", "SendEnv=TERM",
             "-o", "SendEnv=LANG",
             "-o", "SendEnv=COLORTERM",
-            "-o", "SendEnv=NULL_SPACE_INIT"
+            "-o", "SendEnv=DEV_NULL_INIT"
         )
         ssh @sshOpts -p $ep.Port "${name}@$($ep.Host)"
     }

@@ -1,8 +1,8 @@
 package rendertest
 
 import (
-	"null-space/internal/domain"
-	"null-space/internal/state"
+	"dev-null/internal/domain"
+	"dev-null/internal/state"
 )
 
 // renderScenario describes a server state to render plus the chrome player context.

@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 )
 
 func TestRegisterAndGet(t *testing.T) {

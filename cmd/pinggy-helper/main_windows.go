@@ -24,7 +24,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/xpty"
 
-	"null-space/internal/runlog"
+	"dev-null/internal/runlog"
 )
 
 var tcpAddressPattern = regexp.MustCompile(`tcp://([A-Za-z0-9.-]+):(\d+)`)

@@ -1,4 +1,4 @@
-// main.js — First-person dungeon crawler for null-space
+// main.js — First-person dungeon crawler for dev-null
 // 3D ASCII raycasting with NC inventory panel
 
 include("maze");

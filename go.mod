@@ -1,4 +1,4 @@
-module null-space
+module dev-null
 
 go 1.25.8
 

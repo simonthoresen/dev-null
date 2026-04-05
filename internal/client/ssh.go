@@ -9,7 +9,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// SSHConn manages the SSH connection to a null-space server.
+// SSHConn manages the SSH connection to a dev-null server.
 type SSHConn struct {
 	client  *ssh.Client
 	session *ssh.Session
@@ -20,10 +20,10 @@ type SSHConn struct {
 }
 
 // Dial connects to the server and sets up a PTY session.
-// It sends NULL_SPACE_CLIENT=enhanced so the server knows we support charmaps.
-// If terminalMode is true, it sends NULL_SPACE_CLIENT=terminal instead (local
+// It sends DEV_NULL_CLIENT=enhanced so the server knows we support charmaps.
+// If terminalMode is true, it sends DEV_NULL_CLIENT=terminal instead (local
 // rendering in a terminal, no charmap/canvas support).
-// termOverride, if non-empty, is sent as NULL_SPACE_TERM to request a specific
+// termOverride, if non-empty, is sent as DEV_NULL_TERM to request a specific
 // color profile for this session (values: truecolor, 256color, ansi, ascii).
 // ptyW and ptyH set the initial PTY dimensions; pass 0 for each to use the
 // default (120×50). Callers should pass the actual terminal size to avoid a
@@ -34,7 +34,7 @@ func Dial(host string, port int, player string, terminalMode bool, termOverride 
 	config := &ssh.ClientConfig{
 		User: player,
 		Auth: []ssh.AuthMethod{
-			ssh.Password(""), // null-space uses passwordless SSH
+			ssh.Password(""), // dev-null uses passwordless SSH
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
@@ -62,13 +62,13 @@ func Dial(host string, port int, player string, terminalMode bool, termOverride 
 	if terminalMode {
 		clientType = "terminal"
 	}
-	if err := session.Setenv("NULL_SPACE_CLIENT", clientType); err != nil {
+	if err := session.Setenv("DEV_NULL_CLIENT", clientType); err != nil {
 		// Setenv may fail if the server doesn't accept this env var.
 		// Fall back silently — we'll still work, just without charmap support.
 		_ = err
 	}
 	if termOverride != "" {
-		_ = session.Setenv("NULL_SPACE_TERM", termOverride)
+		_ = session.Setenv("DEV_NULL_TERM", termOverride)
 	}
 
 	// Request a PTY.

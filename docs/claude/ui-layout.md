@@ -25,7 +25,7 @@ Row 2: StatusBar    (fixed 1)   <- left text + right-aligned time
 +---------------------+--------------+  [Tab] cycles: input -> chat -> teams
 | [.....]                            |  NCCommandInput: Enter=submit, Tab=cycle
 +====================================+
-| null-space (local) | 3 players | ..|  StatusBar (row 2)
+| dev-null (local) | 3 players | ..|  StatusBar (row 2)
 ```
 
 **Playing:**

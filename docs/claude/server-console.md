@@ -15,7 +15,7 @@ Status tokens are always **8 chars wide** with the text centered:
 [ SKIP ]   (SKIP = 4 chars, no padding)
 ```
 
-Implementation: `startBootStep(label)` / `finishBootStep(status)` in `cmd/null-space-server/main.go`. Terminal width via `github.com/charmbracelet/x/term`. The PS1 script has matching `Write-BootStepStart` / `Write-BootStepEnd` helpers.
+Implementation: `startBootStep(label)` / `finishBootStep(status)` in `cmd/dev-null-server/main.go`. Terminal width via `github.com/charmbracelet/x/term`. The PS1 script has matching `Write-BootStepStart` / `Write-BootStepEnd` helpers.
 
 Startup sequence (PS1 steps first, then Go binary):
 ```

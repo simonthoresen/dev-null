@@ -10,8 +10,8 @@ import (
 
 	xterm "github.com/charmbracelet/x/term"
 
-	"null-space/internal/client"
-	"null-space/internal/network"
+	"dev-null/internal/client"
+	"dev-null/internal/network"
 )
 
 // PreloadGame loads a game by name before any players connect.

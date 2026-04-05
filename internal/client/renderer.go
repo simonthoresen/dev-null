@@ -21,8 +21,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/hajimehoshi/bitmapfont/v4"
 
-	"null-space/internal/render"
-	"null-space/internal/theme"
+	"dev-null/internal/render"
+	"dev-null/internal/theme"
 )
 
 // sharedAudioCtx is the process-wide Ebitengine audio context (44100 Hz sample rate).
@@ -45,7 +45,7 @@ const (
 	cellH = 20
 )
 
-// Game implements ebiten.Game for the null-space client.
+// Game implements ebiten.Game for the dev-null client.
 type Game struct {
 	conn *SSHConn
 	grid *TerminalGrid

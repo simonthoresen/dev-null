@@ -4,9 +4,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
-	"null-space/internal/theme"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
+	"dev-null/internal/theme"
 )
 
 // TeamPanel renders the lobby team list: unassigned players, teams with color

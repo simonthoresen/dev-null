@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
-	"null-space/internal/theme"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
+	"dev-null/internal/theme"
 )
 
 func TestReconcileLabel(t *testing.T) {

@@ -1,4 +1,4 @@
-// main.js — Texas Hold'em for null-space (NC-panel UI, team-based)
+// main.js — Texas Hold'em for dev-null (NC-panel UI, team-based)
 // Each team shares one hand. First team member to act controls the decision.
 
 include("poker");

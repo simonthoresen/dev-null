@@ -2,7 +2,7 @@ package server
 
 import (
 	"fmt"
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 	"sort"
 	"strings"
 	"sync"

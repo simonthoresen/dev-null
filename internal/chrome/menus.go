@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"null-space/internal/domain"
-	"null-space/internal/engine"
-	"null-space/internal/theme"
+	"dev-null/internal/domain"
+	"dev-null/internal/engine"
+	"dev-null/internal/theme"
 )
 
 // invalidateMenuCache forces the next cachedMenus() call to rebuild.

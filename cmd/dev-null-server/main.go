@@ -18,9 +18,9 @@ import (
 	xterm "github.com/charmbracelet/x/term"
 	"log/slog"
 
-	"null-space/internal/console"
-	"null-space/internal/runlog"
-	"null-space/internal/server"
+	"dev-null/internal/console"
+	"dev-null/internal/runlog"
+	"dev-null/internal/server"
 )
 
 // buildCommit and buildDate are injected at build time via -ldflags.
@@ -29,14 +29,14 @@ var buildCommit = "dev"
 var buildDate = "unknown"
 
 func main() {
-	fmt.Printf("null-space-server %s (%s)\n", buildCommit, buildDate)
+	fmt.Printf("dev-null-server %s (%s)\n", buildCommit, buildDate)
 	cleanupLog, err := runlog.ConfigureFromEnv("server")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "could not configure logging: %v\n", err)
 		os.Exit(1)
 	}
 	defer cleanupLog() //nolint:errcheck
-	slog.Info("null-space server", "commit", buildCommit, "built", buildDate)
+	slog.Info("dev-null server", "commit", buildCommit, "built", buildDate)
 	initBootTermWidth()
 
 	var password string
@@ -162,7 +162,7 @@ func main() {
 	})
 
 	startBootStep("Pinggy tunnel")
-	pinggyStatusFile := os.Getenv("NULL_SPACE_PINGGY_STATUS_FILE")
+	pinggyStatusFile := os.Getenv("DEV_NULL_PINGGY_STATUS_FILE")
 	if lanMode || pinggyStatusFile == "" {
 		finishBootStep("SKIP")
 		go app.LogInviteCommand()
@@ -282,7 +282,7 @@ func bootTermWidth() int {
 func initBootTermWidth() {
 	// If the parent process (start.ps1) passed a width, use it for
 	// consistent alignment between PS1 and Go boot steps.
-	if s := os.Getenv("NULL_SPACE_TERM_WIDTH"); s != "" {
+	if s := os.Getenv("DEV_NULL_TERM_WIDTH"); s != "" {
 		if w, err := fmt.Sscanf(s, "%d", &cachedTermWidth); err != nil || w != 1 || cachedTermWidth < 40 {
 			cachedTermWidth = 0
 		}

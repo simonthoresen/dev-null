@@ -9,7 +9,7 @@ import (
 
 	gossh "golang.org/x/crypto/ssh"
 
-	"null-space/internal/server"
+	"dev-null/internal/server"
 )
 
 // ─── Integration test helpers ────────────────────────────────────────────────
@@ -84,11 +84,11 @@ func sshCapture(t *testing.T, addr, playerName string, envVars []string, capture
 	}
 	defer sess.Close()
 
-	// Set env vars (the SSH server reads NULL_SPACE_TERM, NULL_SPACE_CLIENT).
+	// Set env vars (the SSH server reads DEV_NULL_TERM, DEV_NULL_CLIENT).
 	for _, e := range envVars {
 		k, v, _ := splitEnv(e)
 		if err := sess.Setenv(k, v); err != nil {
-			// Some servers reject Setenv; the null-space server accepts it.
+			// Some servers reject Setenv; the dev-null server accepts it.
 			t.Logf("Setenv %s: %v (continuing)", e, err)
 		}
 	}
@@ -145,19 +145,19 @@ type integrationVariant struct {
 var integrationVariants = []integrationVariant{
 	{
 		name:    "server_local",
-		envVars: []string{"NULL_SPACE_TERM=ascii"},
+		envVars: []string{"DEV_NULL_TERM=ascii"},
 	},
 	{
 		name:    "server_ssh",
-		envVars: []string{"NULL_SPACE_TERM=ascii"},
+		envVars: []string{"DEV_NULL_TERM=ascii"},
 	},
 	{
 		name:    "client_local",
-		envVars: []string{"NULL_SPACE_TERM=ascii", "NULL_SPACE_CLIENT=terminal"},
+		envVars: []string{"DEV_NULL_TERM=ascii", "DEV_NULL_CLIENT=terminal"},
 	},
 	{
 		name:    "client_remote",
-		envVars: []string{"NULL_SPACE_TERM=ascii", "NULL_SPACE_CLIENT=enhanced"},
+		envVars: []string{"DEV_NULL_TERM=ascii", "DEV_NULL_CLIENT=enhanced"},
 	},
 }
 
@@ -166,7 +166,7 @@ var integrationVariants = []integrationVariant{
 // TestChromeRendersIntegration runs each lobby scenario through all four real
 // SSH execution paths and compares the reconstructed screen against
 // testdata/<scenario>_chrome_ascii.txt. All integration variants use
-// NULL_SPACE_TERM=ascii (monochrome), so they always compare against the ascii
+// DEV_NULL_TERM=ascii (monochrome), so they always compare against the ascii
 // golden file.
 //
 // Scenarios marked noIntegration are skipped because they cannot be faithfully

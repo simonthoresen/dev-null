@@ -2,7 +2,7 @@
 
 > Source: https://ilyabirman.net/meanwhile/all/ui-museum-norton-commander-5-0/
 >
-> This document captures Norton Commander's visual design language as inspiration for null-space's terminal UI. NC5 ran in 16-color EGA/VGA text mode at 80×25 characters.
+> This document captures Norton Commander's visual design language as inspiration for dev-null's terminal UI. NC5 ran in 16-color EGA/VGA text mode at 80×25 characters.
 
 ---
 

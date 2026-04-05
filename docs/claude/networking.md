@@ -4,8 +4,8 @@
 
 **Binaries are NOT checked into git.** They are built and published automatically by GitHub Actions on every push to `main`.
 
-- **GitHub Actions** (`.github/workflows/release.yml`): builds `null-space-server.exe` + `null-space-client.exe` + `pinggy-helper.exe`, packages the full `dist/` folder into `null-space.zip`, and publishes a rolling `latest` release.
-- **`install.ps1`** (repo root): one-liner installer for operators -- downloads and extracts the latest release zip, creates desktop shortcuts. Usage: `irm https://github.com/simonthoresen/null-space/raw/main/install.ps1 | iex`
+- **GitHub Actions** (`.github/workflows/release.yml`): builds `dev-null-server.exe` + `dev-null-client.exe` + `pinggy-helper.exe`, packages the full `dist/` folder into `dev-null.zip`, and publishes a rolling `latest` release.
+- **`install.ps1`** (repo root): one-liner installer for operators -- downloads and extracts the latest release zip, creates desktop shortcuts. Usage: `irm https://github.com/simonthoresen/dev-null/raw/main/install.ps1 | iex`
 - **`start.ps1`** (in `dist/`): auto-updates on each launch -- checks the GitHub release for a newer version and downloads the full zip (binaries, games, fonts) before starting.
 - **Version tracking**: `dist/.version` stores the commit SHA of the installed release. Not tracked in git.
 
@@ -37,22 +37,22 @@ On Windows, `AllocatePty` creates a real ConPTY. The `charmbracelet/ssh` library
 
 `EmulatePty` stores PTY metadata (term type, window size) without spawning a ConPTY, so there is only one reader. Search for `EmulatePty` in `internal/server/server.go` to find all three call sites.
 
-## Init Files (`~/.null-space/`)
+## Init Files (`~/.dev-null/`)
 
 Both files: one command per line; lines starting with `#` are comments. Dispatched on the first tick after the UI is running. Lives in the home directory so they survive reinstalls.
 
-**`~/.null-space/server.txt`** -- commands run automatically when the server console starts. Useful for loading a default game, setting a theme, or loading server-side plugins.
+**`~/.dev-null/server.txt`** -- commands run automatically when the server console starts. Useful for loading a default game, setting a theme, or loading server-side plugins.
 
-**`~/.null-space/client.txt`** -- commands run automatically when a player joins a server (or starts in `--local` mode). The join script reads this file, base64-encodes it, and sends it via the `NULL_SPACE_INIT` SSH environment variable.
+**`~/.dev-null/client.txt`** -- commands run automatically when a player joins a server (or starts in `--local` mode). The join script reads this file, base64-encodes it, and sends it via the `DEV_NULL_INIT` SSH environment variable.
 
-Example `~/.null-space/server.txt`:
+Example `~/.dev-null/server.txt`:
 ```
 # Server auto-setup
 /theme dark
 /game load invaders
 ```
 
-Example `~/.null-space/client.txt`:
+Example `~/.dev-null/client.txt`:
 ```
 # Client auto-setup
 /theme dark

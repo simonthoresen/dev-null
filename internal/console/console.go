@@ -11,12 +11,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
-	"null-space/internal/engine"
-	"null-space/internal/state"
-	"null-space/internal/theme"
-	"null-space/internal/widget"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
+	"dev-null/internal/engine"
+	"dev-null/internal/state"
+	"dev-null/internal/theme"
+	"dev-null/internal/widget"
 )
 
 // ServerAPI is the interface that the console model uses to interact with the server.
@@ -75,7 +75,7 @@ type Model struct {
 	// NC overlay (menus, dialogs)
 	overlay widget.OverlayState
 
-	// Init commands from ~/.null-space/server.txt (dispatched on first tick)
+	// Init commands from ~/.dev-null/server.txt (dispatched on first tick)
 	initCommands []string
 
 	// Per-console plugins
@@ -171,9 +171,9 @@ func NewModel(api ServerAPI, cancel context.CancelFunc, profile colorprofile.Pro
 	inputCtrl.OnSubmit = m.submitInput
 	inputCtrl.OnTab = m.tabComplete
 
-	// Load init commands from ~/.null-space/server.txt if it exists.
+	// Load init commands from ~/.dev-null/server.txt if it exists.
 	if home, err := os.UserHomeDir(); err == nil {
-		if data, err := os.ReadFile(filepath.Join(home, ".null-space", "server.txt")); err == nil {
+		if data, err := os.ReadFile(filepath.Join(home, ".dev-null", "server.txt")); err == nil {
 			for _, line := range strings.Split(string(data), "\n") {
 				line = strings.TrimSpace(line)
 				if line != "" && !strings.HasPrefix(line, "#") {
@@ -200,7 +200,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case domain.TickMsg:
-		// Dispatch init commands from ~/.null-space/server.txt on the first tick
+		// Dispatch init commands from ~/.dev-null/server.txt on the first tick
 		// (after the console UI is fully running).
 		if len(m.initCommands) > 0 {
 			for _, cmd := range m.initCommands {

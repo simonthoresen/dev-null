@@ -9,9 +9,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/ssh"
 
-	"null-space/internal/domain"
-	"null-space/internal/engine"
-	"null-space/internal/state"
+	"dev-null/internal/domain"
+	"dev-null/internal/engine"
+	"dev-null/internal/state"
 )
 
 // minimalGameJS is a tiny game script that exercises the full lifecycle.

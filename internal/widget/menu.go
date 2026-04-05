@@ -6,7 +6,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 )
 
 

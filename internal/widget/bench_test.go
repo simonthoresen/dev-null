@@ -9,8 +9,8 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"github.com/charmbracelet/colorprofile"
 
-	"null-space/internal/render"
-	"null-space/internal/theme"
+	"dev-null/internal/render"
+	"dev-null/internal/theme"
 )
 
 var benchDuration = flag.Duration("nc.benchtime", 10*time.Second, "how long to run NC render benchmark")
@@ -173,7 +173,7 @@ func buildComplexWindow() *Window {
 
 	// Assemble the full window
 	return &Window{
-		Title: "null-space",
+		Title: "dev-null",
 		Children: []GridChild{
 			// Row 0: header
 			{

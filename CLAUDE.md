@@ -15,7 +15,7 @@ Games are written in JavaScript (goja) and loaded at runtime from `dist/games/`.
 ## Commands
 
 ```bash
-make build              # compile to dist/null-space-{server,client}.exe + dist/pinggy-helper.exe
+make build              # compile to dist/dev-null-{server,client}.exe + dist/pinggy-helper.exe
 make run-server         # server: SSH server + console TUI
 make run-server-lan     # server: LAN-only (no UPnP, no public IP, no Pinggy)
 make run-server-local   # server: headless SSH server + terminal client
@@ -23,36 +23,36 @@ make run-client         # client: connect to a running server
 make run-client-local   # client: headless SSH server + graphical client
 make clean              # remove compiled binaries from dist/
 
-go run ./cmd/null-space-server --data-dir dist   # equivalent to make run, add --password etc.
+go run ./cmd/dev-null-server --data-dir dist   # equivalent to make run, add --password etc.
 go test ./...
 
 ssh -p 23234 localhost   # connect via plain SSH (host plays this way too)
 
 # Graphical client — SSH + sprite rendering for charmap games.
-go run ./cmd/null-space-client
-go run ./cmd/null-space-client --host example.com --port 23234 --player alice
+go run ./cmd/dev-null-client
+go run ./cmd/dev-null-client --host example.com --port 23234 --player alice
 
 # Local mode (server) — headless SSH server + terminal client in one process.
 # Exercises the full SSH pipeline; you see what `ssh -p 23234 localhost` would show.
-go run ./cmd/null-space-server --local --data-dir dist
-go run ./cmd/null-space-server --local --data-dir dist --player alice
-go run ./cmd/null-space-server --local --data-dir dist --game orbits
-go run ./cmd/null-space-server --local --data-dir dist --resume orbits/autosave
+go run ./cmd/dev-null-server --local --data-dir dist
+go run ./cmd/dev-null-server --local --data-dir dist --player alice
+go run ./cmd/dev-null-server --local --data-dir dist --game orbits
+go run ./cmd/dev-null-server --local --data-dir dist --resume orbits/autosave
 
 # Local mode (client) — headless SSH server + graphical client in one process.
 # Exercises the full SSH pipeline with the Ebitengine renderer.
-go run ./cmd/null-space-client --local --data-dir dist
-go run ./cmd/null-space-client --local --data-dir dist --player alice --game orbits
+go run ./cmd/dev-null-client --local --data-dir dist
+go run ./cmd/dev-null-client --local --data-dir dist --player alice --game orbits
 ```
 
 **Environment variables:**
-- `NULL_SPACE_LOG_FILE` — path to log file (default: discard)
-- `NULL_SPACE_LOG_LEVEL` — log level: debug/info/warn/error (default: info)
-- `NULL_SPACE_PINGGY_STATUS_FILE` — path to Pinggy status file (enables tunnel bridge UI)
+- `DEV_NULL_LOG_FILE` — path to log file (default: discard)
+- `DEV_NULL_LOG_LEVEL` — log level: debug/info/warn/error (default: info)
+- `DEV_NULL_PINGGY_STATUS_FILE` — path to Pinggy status file (enables tunnel bridge UI)
 
 ## Architecture
 
-**null-space** is a "Multitenant Singleton" server over SSH.
+**dev-null** is a "Multitenant Singleton" server over SSH.
 
 ### Core Pattern
 - **One game singleton** runs on the server (`CentralState.ActiveGame`)
@@ -100,13 +100,13 @@ go run ./cmd/null-space-client --local --data-dir dist --player alice --game orb
 | `internal/engine/figlet.go` | Figlet ASCII art rendering |
 | `internal/engine/gamelist.go` | Game discovery, path resolution, team range probing |
 | `internal/network/` | UPnP, Pinggy status, public IP detection, downloads |
-| `cmd/null-space-server/` | Server entry point: boot sequence, console setup, signal handling |
-| `cmd/null-space-client/` | Graphical client: SSH + Ebitengine sprite rendering for charmap games |
+| `cmd/dev-null-server/` | Server entry point: boot sequence, console setup, signal handling |
+| `cmd/dev-null-client/` | Graphical client: SSH + Ebitengine sprite rendering for charmap games |
 | `cmd/pinggy-helper/` | Standalone helper that runs the Pinggy SSH tunnel |
 | `internal/client/` | Client internals: SSH transport, ANSI parser, charmap atlas, Ebitengine renderer |
 | `dist/charmaps/` | Charmap assets: per-game subdirectories with charmap.json + atlas PNG |
-| `dist/start-server.ps1` | PowerShell launcher: auto-updates from GitHub Releases, starts pinggy-helper, then null-space-server.exe |
-| `dist/start-client.ps1` | PowerShell launcher: auto-updates from GitHub Releases, starts null-space-client.exe |
+| `dist/start-server.ps1` | PowerShell launcher: auto-updates from GitHub Releases, starts pinggy-helper, then dev-null-server.exe |
+| `dist/start-client.ps1` | PowerShell launcher: auto-updates from GitHub Releases, starts dev-null-client.exe |
 | `install.ps1` | One-liner installer: downloads latest release zip, extracts to a folder, creates desktop shortcuts |
 | `.github/workflows/release.yml` | CI: builds binaries and publishes rolling `latest` release on every push to main |
 

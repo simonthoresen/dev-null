@@ -10,8 +10,8 @@ import (
 	"github.com/dop251/goja"
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"null-space/internal/engine"
-	"null-space/internal/render"
+	"dev-null/internal/engine"
+	"dev-null/internal/render"
 )
 
 // LocalRenderer runs game JS locally on the client, rendering from

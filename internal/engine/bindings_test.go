@@ -6,7 +6,7 @@ import (
 
 	"github.com/dop251/goja"
 
-	"null-space/internal/render"
+	"dev-null/internal/render"
 )
 
 func TestParseJSColorValid(t *testing.T) {

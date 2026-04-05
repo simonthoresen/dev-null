@@ -1,6 +1,6 @@
 package engine
 
-import "null-space/internal/domain"
+import "dev-null/internal/domain"
 
 // ScriptRuntime extends domain.Game with lifecycle hooks used by the server that
 // sit outside the public Game interface (teams cache, game-over signalling, etc.).

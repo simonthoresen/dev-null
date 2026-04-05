@@ -36,7 +36,7 @@ for ($i = 0; $i -lt $CliArgs.Count; $i++) {
 
 $root = $PSScriptRoot
 $logsDir = Join-Path $root "logs"
-$repo = "simonthoresen/null-space"
+$repo = "simonthoresen/dev-null"
 $script:runLog = $null
 $script:bootStepLabel = $null
 $script:bootStepWidth = 80
@@ -98,13 +98,13 @@ function Write-RunLogLine {
     Add-Content -Path $script:runLog -Value ("time={0} level=INFO msg=`"{1}`" component=script pid={2}" -f $timestamp, $Message, $PID)
 }
 
-Write-RunLogLine "starting null-space client script"
+Write-RunLogLine "starting dev-null client script"
 
-$previousLogLevel  = $env:NULL_SPACE_LOG_LEVEL
-$previousTermWidth = $env:NULL_SPACE_TERM_WIDTH
-$env:NULL_SPACE_TERM_WIDTH = Get-TermWidth
-if ($LogLevel) { $env:NULL_SPACE_LOG_LEVEL = $LogLevel }
-elseif (-not $env:NULL_SPACE_LOG_LEVEL) { $env:NULL_SPACE_LOG_LEVEL = "info" }
+$previousLogLevel  = $env:DEV_NULL_LOG_LEVEL
+$previousTermWidth = $env:DEV_NULL_TERM_WIDTH
+$env:DEV_NULL_TERM_WIDTH = Get-TermWidth
+if ($LogLevel) { $env:DEV_NULL_LOG_LEVEL = $LogLevel }
+elseif (-not $env:DEV_NULL_LOG_LEVEL) { $env:DEV_NULL_LOG_LEVEL = "info" }
 
 # ── auto-update binary ───────────────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ function Update-FromRelease {
         }
 
         if ($localVersion -eq "") {
-            $localExe = Join-Path $root "null-space-client.exe"
+            $localExe = Join-Path $root "dev-null-client.exe"
             if (Test-Path $localExe) {
                 $localTime = (Get-Item $localExe).LastWriteTimeUtc
                 $releaseTime = [DateTimeOffset]::Parse($release.published_at).UtcDateTime
@@ -144,15 +144,15 @@ function Update-FromRelease {
 
         Write-BootStepEnd "DONE"
 
-        $zipAsset = $release.assets | Where-Object { $_.name -eq "null-space.zip" } | Select-Object -First 1
+        $zipAsset = $release.assets | Where-Object { $_.name -eq "dev-null.zip" } | Select-Object -First 1
         if (-not $zipAsset) {
-            Write-RunLogLine "no null-space.zip in release, skipping update"
+            Write-RunLogLine "no dev-null.zip in release, skipping update"
             return
         }
 
         Write-BootStepStart "Downloading update"
-        $tempZip = Join-Path ([System.IO.Path]::GetTempPath()) "null-space-update.zip"
-        $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "null-space-update"
+        $tempZip = Join-Path ([System.IO.Path]::GetTempPath()) "dev-null-update.zip"
+        $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "dev-null-update"
         Invoke-WebRequest -Uri $zipAsset.browser_download_url -OutFile $tempZip -TimeoutSec 120
 
         if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
@@ -192,14 +192,14 @@ $clientArgs += $positionals
 
 Push-Location $root
 try {
-    Write-RunLogLine "starting null-space client (host=$Host_ port=$Port local=$Local terminal=$Terminal)"
-    & (Join-Path $root "null-space-client.exe") @clientArgs
+    Write-RunLogLine "starting dev-null client (host=$Host_ port=$Port local=$Local terminal=$Terminal)"
+    & (Join-Path $root "dev-null-client.exe") @clientArgs
     if ($LASTEXITCODE) { exit $LASTEXITCODE }
 } finally {
     Pop-Location
     Write-RunLogLine "client process finished"
-    if ($null -eq $previousLogLevel)  { Remove-Item Env:NULL_SPACE_LOG_LEVEL  -ErrorAction SilentlyContinue }
-    else { $env:NULL_SPACE_LOG_LEVEL = $previousLogLevel }
-    if ($null -eq $previousTermWidth) { Remove-Item Env:NULL_SPACE_TERM_WIDTH -ErrorAction SilentlyContinue }
-    else { $env:NULL_SPACE_TERM_WIDTH = $previousTermWidth }
+    if ($null -eq $previousLogLevel)  { Remove-Item Env:DEV_NULL_LOG_LEVEL  -ErrorAction SilentlyContinue }
+    else { $env:DEV_NULL_LOG_LEVEL = $previousLogLevel }
+    if ($null -eq $previousTermWidth) { Remove-Item Env:DEV_NULL_TERM_WIDTH -ErrorAction SilentlyContinue }
+    else { $env:DEV_NULL_TERM_WIDTH = $previousTermWidth }
 }

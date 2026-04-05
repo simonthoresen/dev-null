@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"null-space/internal/render"
+	"dev-null/internal/render"
 )
 
 // GameSrcFile is a JS source file received from the server.
@@ -360,10 +360,10 @@ func (g *TerminalGrid) parseOSC(data []byte, start int) int {
 	return end + 2 // ESC + backslash
 }
 
-// handleOSC processes a null-space OSC payload.
+// handleOSC processes a dev-null OSC payload.
 func (g *TerminalGrid) handleOSC(payload string) {
 	if !strings.HasPrefix(payload, "ns;") {
-		return // not a null-space OSC
+		return // not a dev-null OSC
 	}
 
 	rest := payload[3:]

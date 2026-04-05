@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 )
 
 func TestIncludeSingleFile(t *testing.T) {

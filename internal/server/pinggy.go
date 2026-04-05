@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"null-space/internal/network"
+	"dev-null/internal/network"
 )
 
 // EnablePinggyLogBridge starts polling the Pinggy status file and updates

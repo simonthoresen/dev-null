@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 )
 
 // setupPlayingGame loads the minimal test game and advances it to PhasePlaying.

@@ -7,8 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
 )
 
 // ─── StatusBar ──────────────────────────────────────────────────────────────

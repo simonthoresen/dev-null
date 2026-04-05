@@ -12,8 +12,8 @@ import (
 	xterm "github.com/charmbracelet/x/term"
 	"github.com/charmbracelet/colorprofile"
 
-	"null-space/internal/render"
-	"null-space/internal/theme"
+	"dev-null/internal/render"
+	"dev-null/internal/theme"
 )
 
 // TerminalRunner runs the client in terminal mode: connects via SSH, receives

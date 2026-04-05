@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/internal/theme"
+	"dev-null/internal/theme"
 )
 
 // ─── Screen test harness ─────────────────────────────────────────────────────

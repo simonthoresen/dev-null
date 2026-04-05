@@ -1,6 +1,6 @@
-# null-space API Reference
+# dev-null API Reference
 
-This document explains how to write games for null-space. Games are plain JavaScript files (ES5-compatible, no modules). Drop your file in `dist/games/`, or share it via URL — no build step required.
+This document explains how to write games for dev-null. Games are plain JavaScript files (ES5-compatible, no modules). Drop your file in `dist/games/`, or share it via URL — no build step required.
 
 ---
 
@@ -30,8 +30,8 @@ This document explains how to write games for null-space. Games are plain JavaSc
 /game load https://example.com/mygame.zip
 
 # Local mode (no SSH server)
-null-space --local --game example
-null-space --local --game https://github.com/you/repo/blob/main/mygame.js
+dev-null --local --game example
+dev-null --local --game https://github.com/you/repo/blob/main/mygame.js
 ```
 
 URL-loaded `.js` files are cached in `dist/games/.cache/`. Re-loading the same URL always fetches the latest version. Zip files are extracted to `dist/games/<name>/` and must contain a `main.js` at the root.
@@ -542,7 +542,7 @@ render: function(buf, playerID, ox, oy, width, height) {
 
 ## Sharing your game
 
-Host your `.js` file anywhere publicly accessible over HTTPS — a GitHub repo is the simplest option. Anyone running null-space can then load it directly:
+Host your `.js` file anywhere publicly accessible over HTTPS — a GitHub repo is the simplest option. Anyone running dev-null can then load it directly:
 
 ```
 /game load https://github.com/you/your-repo/blob/main/mygame.js

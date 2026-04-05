@@ -3,8 +3,8 @@ package widget
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/internal/render"
-	"null-space/internal/theme"
+	"dev-null/internal/render"
+	"dev-null/internal/theme"
 )
 
 // TextArea is a multi-line editable text area with NC-style [·····] per line.

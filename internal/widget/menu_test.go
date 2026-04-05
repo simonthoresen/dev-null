@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 )
 
 // ─── Menu bar render tests ───────────────────────────────────────────────────

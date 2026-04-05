@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 )
 
 func TestSaveAndLoadGameState(t *testing.T) {

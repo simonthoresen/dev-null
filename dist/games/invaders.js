@@ -1,4 +1,4 @@
-// invaders.js — Multiplayer Space Invaders for null-space
+// invaders.js — Multiplayer Space Invaders for dev-null
 // Load with: /load invaders
 
 // ============================================================

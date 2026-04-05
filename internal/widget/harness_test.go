@@ -51,8 +51,8 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
 )
 
 var updateWidgets = flag.Bool("update-widgets", false, "regenerate widget eval file golden outputs")

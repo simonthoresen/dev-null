@@ -3,10 +3,10 @@ package client
 import (
 	"time"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
-	"null-space/internal/theme"
-	"null-space/internal/widget"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
+	"dev-null/internal/theme"
+	"dev-null/internal/widget"
 )
 
 // ClientScreen builds and renders the full NC-style UI locally on the client.

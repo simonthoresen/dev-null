@@ -25,10 +25,10 @@ func LoadFigletFonts(dataDir string) {
 	slog.Info("Loaded figlet fonts", "dir", dir)
 }
 
-// AboutLogo returns the null-space ASCII art logo for the About dialog.
+// AboutLogo returns the dev-null ASCII art logo for the About dialog.
 // Uses figlet if available, otherwise falls back to a hardcoded logo.
 func AboutLogo() string {
-	logo := Figlet("null-space", "")
+	logo := Figlet("dev-null", "")
 	if logo != "" {
 		// Strip ANSI codes and trim trailing whitespace.
 		var lines []string

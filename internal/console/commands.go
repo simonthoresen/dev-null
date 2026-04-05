@@ -3,8 +3,8 @@ package console
 import (
 	"strings"
 
-	"null-space/internal/domain"
-	"null-space/internal/localcmd"
+	"dev-null/internal/domain"
+	"dev-null/internal/localcmd"
 )
 
 // tabComplete handles tab completion for the input control.

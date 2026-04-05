@@ -3,8 +3,8 @@ package chrome
 import (
 	"strings"
 
-	"null-space/internal/domain"
-	"null-space/internal/localcmd"
+	"dev-null/internal/domain"
+	"dev-null/internal/localcmd"
 )
 
 // dispatchInput processes submitted text (commands, chat, plugins).

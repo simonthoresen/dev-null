@@ -3,8 +3,8 @@ package widget
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/internal/render"
-	"null-space/internal/theme"
+	"dev-null/internal/render"
+	"dev-null/internal/theme"
 )
 
 // RenderCached wraps a Control and caches its rendered pixels. If the hash

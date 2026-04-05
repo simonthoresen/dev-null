@@ -24,15 +24,15 @@ build/
 # dist: binaries are downloaded from GitHub Releases, not tracked in git
 dist/*.exe~
 dist/.version
-dist/null-space_ed25519
-dist/null-space_ed25519.pub
+dist/dev-null_ed25519
+dist/dev-null_ed25519.pub
 dist/logs/*
 !dist/logs/.gitkeep
 
 
 # SSH keys (host keys and any private keys)
-null-space_ed25519
-null-space_ed25519.pub
+dev-null_ed25519
+dev-null_ed25519.pub
 id_*
 
 # Go workspace files

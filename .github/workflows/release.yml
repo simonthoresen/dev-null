@@ -24,9 +24,9 @@ jobs:
         shell: bash
         run: |
           cd dist
-          7z a -tzip ../null-space.zip \
-            null-space-server.exe \
-            null-space-client.exe \
+          7z a -tzip ../dev-null.zip \
+            dev-null-server.exe \
+            dev-null-client.exe \
             pinggy-helper.exe \
             start-server.ps1 \
             start-client.ps1 \
@@ -54,13 +54,13 @@ jobs:
           git tag latest
           git push origin latest
           gh release create latest \
-            null-space.zip \
-            dist/null-space-server.exe \
-            dist/null-space-client.exe \
+            dev-null.zip \
+            dist/dev-null-server.exe \
+            dist/dev-null-client.exe \
             dist/pinggy-helper.exe \
             --title "Latest Build (${{ steps.sha.outputs.short }})" \
             --notes "Auto-built from main at ${{ github.sha }}.
 
-          **Fresh install:** save and run [install.ps1](https://github.com/simonthoresen/null-space/raw/main/install.ps1).
+          **Fresh install:** save and run [install.ps1](https://github.com/simonthoresen/dev-null/raw/main/install.ps1).
           **Existing install:** \`start-server.ps1\` / \`start-client.ps1\` auto-update binaries on each launch." \
             --latest

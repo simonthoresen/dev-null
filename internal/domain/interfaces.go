@@ -3,7 +3,7 @@ package domain
 import (
 	"image"
 
-	"null-space/internal/render"
+	"dev-null/internal/render"
 )
 
 // Command is a registered slash command.

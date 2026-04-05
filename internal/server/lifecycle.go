@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"null-space/internal/domain"
-	"null-space/internal/engine"
-	"null-space/internal/network"
-	"null-space/internal/state"
+	"dev-null/internal/domain"
+	"dev-null/internal/engine"
+	"dev-null/internal/network"
+	"dev-null/internal/state"
 )
 
 // checkGameOver detects if the JS runtime signaled game over and initiates the transition.

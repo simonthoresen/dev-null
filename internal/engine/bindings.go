@@ -10,8 +10,8 @@ import (
 
 	"github.com/dop251/goja"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
 )
 
 func (r *Runtime) registerGlobals() {

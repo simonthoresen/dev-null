@@ -6,8 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"null-space/internal/domain"
-	"null-space/internal/engine"
+	"dev-null/internal/domain"
+	"dev-null/internal/engine"
 )
 
 // ─── Overlay / Menu tests ────────────────────────────────────────────────────

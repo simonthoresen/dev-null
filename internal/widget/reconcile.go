@@ -5,8 +5,8 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
 )
 
 // GameWindow wraps a Window built from a WidgetNode tree.

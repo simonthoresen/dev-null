@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// persistServerConfig rewrites ~/.null-space/server.txt so that all
+// persistServerConfig rewrites ~/.dev-null/server.txt so that all
 // /theme, /plugin, and /shader lines are replaced by a leading block
 // that restores the current selections. All other lines are preserved.
 func (m *Model) persistServerConfig() {
@@ -14,7 +14,7 @@ func (m *Model) persistServerConfig() {
 	if err != nil {
 		return
 	}
-	path := filepath.Join(home, ".null-space", "server.txt")
+	path := filepath.Join(home, ".dev-null", "server.txt")
 	persistConfigFile(path, m.themeName, m.pluginNames, m.shaderNames)
 }
 

@@ -10,8 +10,8 @@ import (
 
 	"github.com/dop251/goja"
 
-	"null-space/internal/domain"
-	"null-space/internal/network"
+	"dev-null/internal/domain"
+	"dev-null/internal/network"
 )
 
 // jsPlugin wraps a goja JS runtime for a per-player or per-console plugin.

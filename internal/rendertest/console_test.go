@@ -3,8 +3,8 @@ package rendertest
 import (
 	"testing"
 
-	"null-space/internal/domain"
-	"null-space/internal/state"
+	"dev-null/internal/domain"
+	"dev-null/internal/state"
 )
 
 // TestConsoleRenders runs each scenario through the server console view and

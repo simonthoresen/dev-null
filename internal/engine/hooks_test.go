@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
 )
 
 // loadHookRuntime compiles js as a single-file game and returns the Runtime.

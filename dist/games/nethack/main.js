@@ -1,4 +1,4 @@
-// main.js — NetHack multiplayer roguelike for null-space
+// main.js — NetHack multiplayer roguelike for dev-null
 // All players share the same dungeon and can cooperate or compete.
 
 include("data");

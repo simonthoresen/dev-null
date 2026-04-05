@@ -59,10 +59,10 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
-	"null-space/internal/theme"
-	"null-space/internal/widget"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
+	"dev-null/internal/theme"
+	"dev-null/internal/widget"
 )
 
 var updateEngine = flag.Bool("update-engine", false, "regenerate game render eval file golden outputs")

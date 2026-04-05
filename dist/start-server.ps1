@@ -41,7 +41,7 @@ if (-not $Local -and $positionals.Count -ge 1 -and $positionals[0]) {
 
 $root = $PSScriptRoot
 $logsDir = Join-Path $root "logs"
-$repo = "simonthoresen/null-space"
+$repo = "simonthoresen/dev-null"
 $script:tunnelShell = $null
 $script:tunnelWatcher = $null
 $script:tunnelStatus = $null
@@ -112,15 +112,15 @@ function Write-RunLogLine {
     Add-Content -Path $script:runLog -Value ("time={0} level=INFO msg=`"{1}`" component=script pid={2}" -f $timestamp, $Message, $PID)
 }
 
-Write-RunLogLine "starting null-space start script"
+Write-RunLogLine "starting dev-null start script"
 
-$previousLogFile      = $env:NULL_SPACE_LOG_FILE
-$previousLogLevel     = $env:NULL_SPACE_LOG_LEVEL
-$previousTermWidth    = $env:NULL_SPACE_TERM_WIDTH
-$env:NULL_SPACE_LOG_FILE    = $script:runLog
-$env:NULL_SPACE_TERM_WIDTH  = Get-TermWidth
-if ($LogLevel) { $env:NULL_SPACE_LOG_LEVEL = $LogLevel }
-elseif (-not $env:NULL_SPACE_LOG_LEVEL) { $env:NULL_SPACE_LOG_LEVEL = "info" }
+$previousLogFile      = $env:DEV_NULL_LOG_FILE
+$previousLogLevel     = $env:DEV_NULL_LOG_LEVEL
+$previousTermWidth    = $env:DEV_NULL_TERM_WIDTH
+$env:DEV_NULL_LOG_FILE    = $script:runLog
+$env:DEV_NULL_TERM_WIDTH  = Get-TermWidth
+if ($LogLevel) { $env:DEV_NULL_LOG_LEVEL = $LogLevel }
+elseif (-not $env:DEV_NULL_LOG_LEVEL) { $env:DEV_NULL_LOG_LEVEL = "info" }
 
 # ── cleanup helpers ──────────────────────────────────────────────────────────
 
@@ -194,7 +194,7 @@ function Start-TunnelWatcher {
             Start-Sleep -Milliseconds 500
             if (-not (Get-Process -Id $TunnelPid -ErrorAction SilentlyContinue)) {
                 $targets = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-                    Where-Object { $_.ParentProcessId -eq $ConsolePid -and $_.Name -in @('null-space-server.exe') }
+                    Where-Object { $_.ParentProcessId -eq $ConsolePid -and $_.Name -in @('dev-null-server.exe') }
                 foreach ($t in $targets) {
                     Stop-Process -Id $t.ProcessId -Force -ErrorAction SilentlyContinue
                 }
@@ -252,7 +252,7 @@ function Update-FromRelease {
         # If no .version file, check whether the local exe is newer than the release.
         # This avoids overwriting a locally-built binary with an older release.
         if ($localVersion -eq "") {
-            $localExe = Join-Path $root "null-space-server.exe"
+            $localExe = Join-Path $root "dev-null-server.exe"
             if (Test-Path $localExe) {
                 $localTime = (Get-Item $localExe).LastWriteTimeUtc
                 $releaseTime = [DateTimeOffset]::Parse($release.published_at).UtcDateTime
@@ -267,15 +267,15 @@ function Update-FromRelease {
         Write-BootStepEnd "DONE"
 
         # Download the full release zip (includes binaries, games, fonts, etc.)
-        $zipAsset = $release.assets | Where-Object { $_.name -eq "null-space.zip" } | Select-Object -First 1
+        $zipAsset = $release.assets | Where-Object { $_.name -eq "dev-null.zip" } | Select-Object -First 1
         if (-not $zipAsset) {
-            Write-RunLogLine "no null-space.zip in release, skipping update"
+            Write-RunLogLine "no dev-null.zip in release, skipping update"
             return
         }
 
         Write-BootStepStart "Downloading update"
-        $tempZip = Join-Path ([System.IO.Path]::GetTempPath()) "null-space-update.zip"
-        $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "null-space-update"
+        $tempZip = Join-Path ([System.IO.Path]::GetTempPath()) "dev-null-update.zip"
+        $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "dev-null-update"
         Invoke-WebRequest -Uri $zipAsset.browser_download_url -OutFile $tempZip -TimeoutSec 120
 
         # Extract to temp folder, then merge into install dir (preserves user's custom files)
@@ -315,17 +315,17 @@ if ($Local) {
         $localArgs = @("--local")
         if ($Term) { $localArgs += "--term"; $localArgs += $Term }
         $localArgs += $positionals
-        & (Join-Path $root "null-space-server.exe") @localArgs
+        & (Join-Path $root "dev-null-server.exe") @localArgs
         if ($LASTEXITCODE) { exit $LASTEXITCODE }
     } finally {
         Pop-Location
         Write-RunLogLine "local session ended"
-        if ($null -eq $previousLogFile)    { Remove-Item Env:NULL_SPACE_LOG_FILE    -ErrorAction SilentlyContinue }
-        else { $env:NULL_SPACE_LOG_FILE = $previousLogFile }
-        if ($null -eq $previousLogLevel)  { Remove-Item Env:NULL_SPACE_LOG_LEVEL  -ErrorAction SilentlyContinue }
-        else { $env:NULL_SPACE_LOG_LEVEL = $previousLogLevel }
-        if ($null -eq $previousTermWidth) { Remove-Item Env:NULL_SPACE_TERM_WIDTH -ErrorAction SilentlyContinue }
-        else { $env:NULL_SPACE_TERM_WIDTH = $previousTermWidth }
+        if ($null -eq $previousLogFile)    { Remove-Item Env:DEV_NULL_LOG_FILE    -ErrorAction SilentlyContinue }
+        else { $env:DEV_NULL_LOG_FILE = $previousLogFile }
+        if ($null -eq $previousLogLevel)  { Remove-Item Env:DEV_NULL_LOG_LEVEL  -ErrorAction SilentlyContinue }
+        else { $env:DEV_NULL_LOG_LEVEL = $previousLogLevel }
+        if ($null -eq $previousTermWidth) { Remove-Item Env:DEV_NULL_TERM_WIDTH -ErrorAction SilentlyContinue }
+        else { $env:DEV_NULL_TERM_WIDTH = $previousTermWidth }
     }
     return
 }
@@ -365,7 +365,7 @@ if ($Lan) {
     Write-BootStepEnd "SKIP"
     $serverArgs += "--lan"
 } else {
-    $script:tunnelStatus = Join-Path ([System.IO.Path]::GetTempPath()) ("null-space-pinggy-{0}.status.log" -f ([guid]::NewGuid().ToString("N")))
+    $script:tunnelStatus = Join-Path ([System.IO.Path]::GetTempPath()) ("dev-null-pinggy-{0}.status.log" -f ([guid]::NewGuid().ToString("N")))
 
     Write-BootStepStart "Pinggy helper"
     Write-RunLogLine "starting pinggy helper"
@@ -391,8 +391,8 @@ if ($Lan) {
         exit 1
     }
 
-    $previousPinggyStatusFile       = $env:NULL_SPACE_PINGGY_STATUS_FILE
-    $env:NULL_SPACE_PINGGY_STATUS_FILE = $script:tunnelStatus
+    $previousPinggyStatusFile       = $env:DEV_NULL_PINGGY_STATUS_FILE
+    $env:DEV_NULL_PINGGY_STATUS_FILE = $script:tunnelStatus
 }
 
 # ── start server ─────────────────────────────────────────────────────────────
@@ -401,22 +401,22 @@ $serverExitCode = 0
 
 Push-Location $root
 try {
-    Write-RunLogLine "starting null-space server"
-    & (Join-Path $root "null-space-server.exe") @serverArgs
+    Write-RunLogLine "starting dev-null server"
+    & (Join-Path $root "dev-null-server.exe") @serverArgs
     if ($LASTEXITCODE) { $serverExitCode = $LASTEXITCODE }
 } finally {
     Pop-Location
     Write-RunLogLine "server process finished"
     if (-not $Lan) {
-        if ($null -eq $previousPinggyStatusFile) { Remove-Item Env:NULL_SPACE_PINGGY_STATUS_FILE -ErrorAction SilentlyContinue }
-        else { $env:NULL_SPACE_PINGGY_STATUS_FILE = $previousPinggyStatusFile }
+        if ($null -eq $previousPinggyStatusFile) { Remove-Item Env:DEV_NULL_PINGGY_STATUS_FILE -ErrorAction SilentlyContinue }
+        else { $env:DEV_NULL_PINGGY_STATUS_FILE = $previousPinggyStatusFile }
     }
-    if ($null -eq $previousLogFile)    { Remove-Item Env:NULL_SPACE_LOG_FILE    -ErrorAction SilentlyContinue }
-    else { $env:NULL_SPACE_LOG_FILE = $previousLogFile }
-    if ($null -eq $previousLogLevel)  { Remove-Item Env:NULL_SPACE_LOG_LEVEL  -ErrorAction SilentlyContinue }
-    else { $env:NULL_SPACE_LOG_LEVEL = $previousLogLevel }
-    if ($null -eq $previousTermWidth) { Remove-Item Env:NULL_SPACE_TERM_WIDTH -ErrorAction SilentlyContinue }
-    else { $env:NULL_SPACE_TERM_WIDTH = $previousTermWidth }
+    if ($null -eq $previousLogFile)    { Remove-Item Env:DEV_NULL_LOG_FILE    -ErrorAction SilentlyContinue }
+    else { $env:DEV_NULL_LOG_FILE = $previousLogFile }
+    if ($null -eq $previousLogLevel)  { Remove-Item Env:DEV_NULL_LOG_LEVEL  -ErrorAction SilentlyContinue }
+    else { $env:DEV_NULL_LOG_LEVEL = $previousLogLevel }
+    if ($null -eq $previousTermWidth) { Remove-Item Env:DEV_NULL_TERM_WIDTH -ErrorAction SilentlyContinue }
+    else { $env:DEV_NULL_TERM_WIDTH = $previousTermWidth }
 
     Write-BootStepStart "Shutting down network"
     Write-BootStepEnd "DONE"

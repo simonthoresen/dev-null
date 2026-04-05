@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 )
 
 // ─── helpers ────────────────────────────────────────────────────────────────

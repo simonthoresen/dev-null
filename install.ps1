@@ -1,36 +1,36 @@
-# null-space installer
-# Usage: irm https://github.com/simonthoresen/null-space/raw/main/install.ps1 | iex
+# dev-null installer
+# Usage: irm https://github.com/simonthoresen/dev-null/raw/main/install.ps1 | iex
 #    or: save this file and run it directly
 
 param(
-    [string]$InstallDir = (Join-Path $PWD "null-space")
+    [string]$InstallDir = (Join-Path $PWD "dev-null")
 )
 
-$repo = "simonthoresen/null-space"
+$repo = "simonthoresen/dev-null"
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "  null-space installer" -ForegroundColor Cyan
+Write-Host "  dev-null installer" -ForegroundColor Cyan
 Write-Host ""
 
 # Find the latest release
 Write-Host "  Fetching latest release..." -NoNewline
 $headers = @{ Accept = "application/vnd.github+json" }
 $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/latest" -Headers $headers -TimeoutSec 15
-$zipAsset = $release.assets | Where-Object { $_.name -eq "null-space.zip" } | Select-Object -First 1
-if (-not $zipAsset) { throw "No null-space.zip found in latest release." }
+$zipAsset = $release.assets | Where-Object { $_.name -eq "dev-null.zip" } | Select-Object -First 1
+if (-not $zipAsset) { throw "No dev-null.zip found in latest release." }
 Write-Host " OK" -ForegroundColor Green
 
 # Download the zip
-$tempZip = Join-Path ([System.IO.Path]::GetTempPath()) "null-space-install.zip"
-Write-Host "  Downloading null-space.zip..." -NoNewline
+$tempZip = Join-Path ([System.IO.Path]::GetTempPath()) "dev-null-install.zip"
+Write-Host "  Downloading dev-null.zip..." -NoNewline
 Invoke-WebRequest -Uri $zipAsset.browser_download_url -OutFile $tempZip -TimeoutSec 120
 Write-Host " OK" -ForegroundColor Green
 
 # Extract to temp folder, then merge into install dir (preserves user's custom files)
 Write-Host "  Installing to $InstallDir..." -NoNewline
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-$tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "null-space-install"
+$tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "dev-null-install"
 if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
 Expand-Archive -Path $tempZip -DestinationPath $tempDir -Force
 Get-ChildItem -Path $tempDir -Recurse -File | ForEach-Object {
@@ -57,25 +57,25 @@ $startServerPs1 = Join-Path $InstallDir "start-server.ps1"
 $startClientPs1 = Join-Path $InstallDir "start-client.ps1"
 $shell    = New-Object -ComObject WScript.Shell
 
-$public = $shell.CreateShortcut((Join-Path $desktop "NullSpace Server (public).lnk"))
+$public = $shell.CreateShortcut((Join-Path $desktop "DevNull Server (public).lnk"))
 $public.TargetPath       = "powershell.exe"
 $public.Arguments        = "-ExecutionPolicy Bypass -File `"$startServerPs1`""
 $public.WorkingDirectory = $InstallDir
-$public.Description      = "Start the null-space server (online multiplayer)"
+$public.Description      = "Start the dev-null server (online multiplayer)"
 $public.Save()
 
-$private = $shell.CreateShortcut((Join-Path $desktop "NullSpace Server (LAN).lnk"))
+$private = $shell.CreateShortcut((Join-Path $desktop "DevNull Server (LAN).lnk"))
 $private.TargetPath       = "powershell.exe"
 $private.Arguments        = "-ExecutionPolicy Bypass -File `"$startServerPs1`" --lan"
 $private.WorkingDirectory = $InstallDir
-$private.Description      = "Start the null-space server (LAN only, no Pinggy)"
+$private.Description      = "Start the dev-null server (LAN only, no Pinggy)"
 $private.Save()
 
-$client = $shell.CreateShortcut((Join-Path $desktop "NullSpace Client.lnk"))
+$client = $shell.CreateShortcut((Join-Path $desktop "DevNull Client.lnk"))
 $client.TargetPath       = "powershell.exe"
 $client.Arguments        = "-ExecutionPolicy Bypass -File `"$startClientPs1`""
 $client.WorkingDirectory = $InstallDir
-$client.Description      = "Start the null-space graphical client"
+$client.Description      = "Start the dev-null graphical client"
 $client.Save()
 
 Write-Host ""

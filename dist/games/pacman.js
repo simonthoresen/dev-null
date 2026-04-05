@@ -1,4 +1,4 @@
-// pacman.js — Multiplayer Pac-Man for null-space
+// pacman.js — Multiplayer Pac-Man for dev-null
 // Load with: /load pacman
 
 // ============================================================

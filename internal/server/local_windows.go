@@ -8,7 +8,7 @@ import (
 
 	xterm "github.com/charmbracelet/x/term"
 
-	"null-space/internal/client"
+	"dev-null/internal/client"
 )
 
 // watchTerminalResize polls for terminal size changes on Windows (no SIGWINCH).

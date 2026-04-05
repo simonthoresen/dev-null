@@ -3,7 +3,7 @@ package state
 import (
 	"testing"
 
-	"null-space/internal/domain"
+	"dev-null/internal/domain"
 )
 
 func TestAddRemovePlayer(t *testing.T) {

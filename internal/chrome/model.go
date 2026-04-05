@@ -11,12 +11,12 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 
-	"null-space/internal/domain"
-	"null-space/internal/engine"
-	"null-space/internal/render"
-	"null-space/internal/state"
-	"null-space/internal/theme"
-	"null-space/internal/widget"
+	"dev-null/internal/domain"
+	"dev-null/internal/engine"
+	"dev-null/internal/render"
+	"dev-null/internal/state"
+	"dev-null/internal/theme"
+	"dev-null/internal/widget"
 )
 
 // ServerAPI is the interface that the chrome model uses to interact with the server.
@@ -100,7 +100,7 @@ type Model struct {
 	// Game-over countdown tracking
 	gameOverStart time.Time
 
-	// Init commands from ~/.null-space/client.txt (dispatched on first tick)
+	// Init commands from ~/.dev-null/client.txt (dispatched on first tick)
 	InitCommands []string
 
 	// Per-player theme
@@ -119,7 +119,7 @@ type Model struct {
 	// Auto-selected to the best available mode on game load; changeable via View menu.
 	renderMode domain.RenderMode
 
-	// Enhanced client protocol (null-space-client with charmap/canvas/local-render support).
+	// Enhanced client protocol (dev-null-client with charmap/canvas/local-render support).
 	IsEnhancedClient bool
 	IsTerminalClient bool     // true = enhanced but terminal-only (no charmap/canvas)
 	localRendering   bool     // true = send game JS + state for client-side rendering

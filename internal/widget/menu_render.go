@@ -5,8 +5,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"null-space/internal/domain"
-	"null-space/internal/theme"
+	"dev-null/internal/domain"
+	"dev-null/internal/theme"
 )
 
 // ─── Overlay box ─────────────────────────────────────────────────────────────

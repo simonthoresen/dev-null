@@ -7,8 +7,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 
-	"null-space/internal/domain"
-	"null-space/internal/theme"
+	"dev-null/internal/domain"
+	"dev-null/internal/theme"
 )
 
 // ─── Theme border tests ─────────────────────────────────────────────────────

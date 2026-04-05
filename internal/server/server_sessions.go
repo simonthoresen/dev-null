@@ -13,10 +13,10 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/ssh"
 
-	"null-space/internal/chrome"
-	"null-space/internal/domain"
-	"null-space/internal/engine"
-	"null-space/internal/network"
+	"dev-null/internal/chrome"
+	"dev-null/internal/domain"
+	"dev-null/internal/engine"
+	"dev-null/internal/network"
 )
 
 // --- SSH session middleware and program handler ---
@@ -37,8 +37,8 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 
 	// Check for init commands and enhanced client flag from SSH env vars.
 	for _, e := range sess.Environ() {
-		if strings.HasPrefix(e, "NULL_SPACE_INIT=") {
-			encoded := strings.TrimPrefix(e, "NULL_SPACE_INIT=")
+		if strings.HasPrefix(e, "DEV_NULL_INIT=") {
+			encoded := strings.TrimPrefix(e, "DEV_NULL_INIT=")
 			if decoded, err := base64.StdEncoding.DecodeString(encoded); err == nil {
 				for _, line := range strings.Split(strings.TrimSpace(string(decoded)), "\n") {
 					line = strings.TrimSpace(line)
@@ -48,10 +48,10 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 				}
 			}
 		}
-		if e == "NULL_SPACE_CLIENT=enhanced" {
+		if e == "DEV_NULL_CLIENT=enhanced" {
 			model.IsEnhancedClient = true
 		}
-		if e == "NULL_SPACE_CLIENT=terminal" {
+		if e == "DEV_NULL_CLIENT=terminal" {
 			model.IsEnhancedClient = true
 			model.IsTerminalClient = true
 		}
@@ -86,11 +86,11 @@ func (a *Server) sessionProgramOptions(sess ssh.Session) ([]tea.ProgramOption, c
 		envs = append(envs, "COLORTERM=truecolor")
 	}
 	cp := colorprofile.Env(envs)
-	// NULL_SPACE_TERM allows the connecting client to request a specific color
+	// DEV_NULL_TERM allows the connecting client to request a specific color
 	// depth for this session (used by --local --term on the server/client side).
 	for _, e := range envs {
-		if strings.HasPrefix(e, "NULL_SPACE_TERM=") {
-			if p, ok := parseNullSpaceTerm(strings.TrimPrefix(e, "NULL_SPACE_TERM=")); ok {
+		if strings.HasPrefix(e, "DEV_NULL_TERM=") {
+			if p, ok := parseDevNullTerm(strings.TrimPrefix(e, "DEV_NULL_TERM=")); ok {
 				cp = p
 			}
 			break
@@ -107,8 +107,8 @@ func (a *Server) sessionProgramOptions(sess ssh.Session) ([]tea.ProgramOption, c
 	return opts, cp
 }
 
-// parseNullSpaceTerm maps a NULL_SPACE_TERM env value to a colorprofile.Profile.
-func parseNullSpaceTerm(s string) (colorprofile.Profile, bool) {
+// parseDevNullTerm maps a DEV_NULL_TERM env value to a colorprofile.Profile.
+func parseDevNullTerm(s string) (colorprofile.Profile, bool) {
 	switch s {
 	case "truecolor":
 		return colorprofile.TrueColor, true

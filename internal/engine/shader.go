@@ -11,9 +11,9 @@ import (
 
 	"github.com/dop251/goja"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
-	"null-space/internal/network"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
+	"dev-null/internal/network"
 )
 
 // jsShader wraps a goja JS runtime for a per-player post-processing shader.

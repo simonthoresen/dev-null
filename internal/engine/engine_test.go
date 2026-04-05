@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"null-space/internal/domain"
-	"null-space/internal/render"
+	"dev-null/internal/domain"
+	"dev-null/internal/render"
 )
 
 // --- gamelist tests ---

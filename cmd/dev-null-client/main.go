@@ -1,4 +1,4 @@
-// null-space-client is a graphical SSH client for null-space servers.
+// dev-null-client is a graphical SSH client for dev-null servers.
 //
 // It connects via standard SSH but additionally supports charmap-based
 // sprite rendering: games that declare a charmap have their PUA codepoints
@@ -25,8 +25,8 @@ import (
 	xterm "github.com/charmbracelet/x/term"
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"null-space/internal/client"
-	"null-space/internal/server"
+	"dev-null/internal/client"
+	"dev-null/internal/server"
 )
 
 // buildCommit and buildDate are injected at build time via -ldflags.
@@ -34,7 +34,7 @@ var buildCommit = "dev"
 var buildDate = "unknown"
 
 func main() {
-	fmt.Printf("null-space-client %s (%s)\n", buildCommit, buildDate)
+	fmt.Printf("dev-null-client %s (%s)\n", buildCommit, buildDate)
 	host := flag.String("host", "localhost", "server hostname")
 	port := flag.Int("port", 23234, "server SSH port")
 	player := flag.String("player", defaultPlayer(), "player name")
@@ -80,7 +80,7 @@ func main() {
 	game := client.NewGame(conn, fontFace, 1200, 800, *player)
 
 	ebiten.SetWindowSize(1200, 800)
-	ebiten.SetWindowTitle("null-space")
+	ebiten.SetWindowTitle("dev-null")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
 	if err := ebiten.RunGame(game); err != nil {
@@ -159,7 +159,7 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	game := client.NewGame(conn, fontFace, 1200, 800, playerName)
 
 	ebiten.SetWindowSize(1200, 800)
-	ebiten.SetWindowTitle("null-space (local)")
+	ebiten.SetWindowTitle("dev-null (local)")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
 	if err := ebiten.RunGame(game); err != nil {

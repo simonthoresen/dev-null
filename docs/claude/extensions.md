@@ -42,7 +42,7 @@ Optional hooks: `init()` (called once on load), `unload()` (called on removal). 
 
 ## Charmaps (Sprite-Based Rendering)
 
-Games can use **charmap-based sprite rendering** by mapping Unicode Private Use Area codepoints (U+E000-U+F8FF) to sprites in a sprite sheet. Regular SSH clients show tofu/blank for PUA codepoints; the custom `null-space-client` renders them as sprites.
+Games can use **charmap-based sprite rendering** by mapping Unicode Private Use Area codepoints (U+E000-U+F8FF) to sprites in a sprite sheet. Regular SSH clients show tofu/blank for PUA codepoints; the custom `dev-null-client` renders them as sprites.
 
 **Charmap format:** Each charmap lives in `dist/charmaps/<name>/` with a `charmap.json` and an atlas PNG:
 ```json
@@ -70,7 +70,7 @@ buf.setChar(x, y, "\uE000", "#ffff00", "#000000"); // renders as sprite in custo
 
 **PUA constants:** `PUA_START` (0xE000) and `PUA_END` (0xF8FF) are available in JS.
 
-**Enhanced client protocol:** The server detects the custom client via `NULL_SPACE_CLIENT=enhanced` SSH env var, then sends charmap data and viewport bounds using in-band OSC escape sequences that regular terminals silently ignore:
+**Enhanced client protocol:** The server detects the custom client via `DEV_NULL_CLIENT=enhanced` SSH env var, then sends charmap data and viewport bounds using in-band OSC escape sequences that regular terminals silently ignore:
 - `\x1b]ns;charmap;<base64 JSON>\x07` -- charmap definition (sent once on game load)
 - `\x1b]ns;atlas;<base64 gzipped PNG>\x07` -- sprite sheet (sent once on game load)
 - `\x1b]ns;viewport;<x>,<y>,<w>,<h>\x07` -- game viewport bounds (sent every frame)

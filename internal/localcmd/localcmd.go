@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"null-space/internal/domain"
-	"null-space/internal/engine"
-	"null-space/internal/theme"
+	"dev-null/internal/domain"
+	"dev-null/internal/engine"
+	"dev-null/internal/theme"
 )
 
 // HandleTheme processes a /theme command. Returns the loaded theme and its name
