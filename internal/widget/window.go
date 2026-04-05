@@ -315,11 +315,14 @@ func (w *Window) cycleFocusDir(dir int) tea.Cmd {
 			break
 		}
 	}
+	wrapped := false
 	if cur < 0 {
 		// Current focus not in order — jump to first.
 		w.FocusIdx = order[0]
 	} else {
-		next := (cur + dir + len(order)) % len(order)
+		linear := cur + dir
+		next := (linear + len(order)) % len(order)
+		wrapped = linear < 0 || linear >= len(order)
 		w.FocusIdx = order[next]
 	}
 	if oldIdx != w.FocusIdx {
@@ -328,6 +331,13 @@ func (w *Window) cycleFocusDir(dir int) tea.Cmd {
 			fdr.OnFocusDir(dir)
 		}
 		return w.activateTextInput(w.FocusIdx)
+	}
+	// Even when focus stays on the same control (single focusable child),
+	// a wrap occurred — notify the control so it can reset internal state.
+	if wrapped {
+		if fdr, ok := w.Children[w.FocusIdx].Control.(FocusDirReceiver); ok {
+			fdr.OnFocusDir(dir)
+		}
 	}
 	return nil
 }
@@ -370,6 +380,9 @@ func (w *Window) FocusFirst() tea.Cmd {
 		return nil
 	}
 	w.FocusIdx = order[0]
+	if fdr, ok := w.Children[w.FocusIdx].Control.(FocusDirReceiver); ok {
+		fdr.OnFocusDir(+1)
+	}
 	return w.activateTextInput(w.FocusIdx)
 }
 

@@ -27,8 +27,14 @@ type ListBox struct {
 	wantBackTab bool
 }
 
-func (lb *ListBox) Focusable() bool     { return len(lb.Items) > 0 }
+func (lb *ListBox) Focusable() bool       { return len(lb.Items) > 0 }
 func (lb *ListBox) TabWant() (bool, bool) { return lb.wantTab, lb.wantBackTab }
+
+// OnFocusDir resets the list cursor to the top when focus arrives via Tab/Shift+Tab.
+func (lb *ListBox) OnFocusDir(_ int) {
+	lb.Cursor = 0
+	lb.ScrollOff = 0
+}
 func (lb *ListBox) MinSize() (int, int) {
 	w := 10
 	for i, item := range lb.Items {

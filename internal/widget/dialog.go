@@ -168,13 +168,9 @@ func (o *OverlayState) buildDialogWindow(d domain.DialogRequest) *dialogEntry {
 		Children: children,
 	}
 	// Focus the first focusable child (list, input, or buttons).
-	win.FocusIdx = -1
-	for i, c := range children {
-		if c.Control.Focusable() {
-			win.FocusIdx = i
-			break
-		}
-	}
+	// FocusFirst also calls OnFocusDir(+1) on composite controls (e.g. Container)
+	// so their internal selection is initialised to the first item.
+	win.FocusFirst()
 
 	entry.window = win
 	return entry
