@@ -78,13 +78,19 @@ func ImageToQuadrants(img *image.RGBA, buf *ImageBuffer, bx, by, w, h int) {
 				// else: stays (0,0,0,0) = transparent black
 			}
 
-			// Check if all 4 pixels are the same color — use full block or space.
+			// Check if all 4 pixels are the same color.
+			// Light cells render as space (bg = that color); dark cells as full block (fg = that color).
+			// This makes stripped ANSI output match visual intent: white areas stay blank.
 			allSame := pr[0] == pr[1] && pr[0] == pr[2] && pr[0] == pr[3] &&
 				pg[0] == pg[1] && pg[0] == pg[2] && pg[0] == pg[3] &&
 				pb[0] == pb[1] && pb[0] == pb[2] && pb[0] == pb[3]
 			if allSame {
 				c := color.RGBA{pr[0], pg[0], pb[0], pa[0]}
-				buf.SetChar(bx+cx, by+cy, '█', c, c, AttrNone)
+				if luminance(pr[0], pg[0], pb[0]) > 127 {
+					buf.SetChar(bx+cx, by+cy, ' ', c, c, AttrNone)
+				} else {
+					buf.SetChar(bx+cx, by+cy, '█', c, c, AttrNone)
+				}
 				continue
 			}
 
@@ -168,13 +174,15 @@ func ImageToQuadrants(img *image.RGBA, buf *ImageBuffer, bx, by, w, h int) {
 				bg = color.RGBA{uint8(bgR / bgN), uint8(bgG / bgN), uint8(bgB / bgN), uint8(bgA / bgN)}
 			}
 
-			// Ensure fg is the brighter group (swap if needed so the quadrant
-			// character's "filled" positions correspond to the lighter color).
+			// Ensure fg is the darker group so the quadrant character's "filled"
+			// positions correspond to dark pixels. This keeps the ANSI-stripped
+			// golden output readable: edge chars like ▗ represent sparse dark marks
+			// rather than their mostly-filled inverses.
 			if fgN > 0 && bgN > 0 {
 				fgLum := luminance(uint8(fgR/fgN), uint8(fgG/fgN), uint8(fgB/fgN))
 				bgLum := luminance(uint8(bgR/bgN), uint8(bgG/bgN), uint8(bgB/bgN))
-				if bgLum > fgLum {
-					// Swap fg/bg and invert the mask.
+				if fgLum > bgLum {
+					// fg is lighter — swap so fg becomes the darker group.
 					fg, bg = bg, fg
 					ch = quadrantRunes[bestMask^0x0F]
 				}

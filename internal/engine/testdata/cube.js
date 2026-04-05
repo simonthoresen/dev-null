@@ -1,12 +1,23 @@
 // Shared cube renderer for canvas harness tests.
 // Draws a wireframe 3D cube with back-face edge culling on a white background.
-// The canvas coordinate space is already square (the engine applies a 2× Y scale
-// internally to compensate for terminal cell aspect ratio), so no correction is
-// needed here.
+//
+// Coordinate system (as seen by renderCanvas after the engine's scaleY=2 correction):
+//   w = 2 × cellWidth   (2 logical X units per terminal cell)
+//   h = cellHeight      (1 logical Y unit per terminal cell)
+//
+// For a visually square cube on a 2:1-aspect terminal font (8×16 px cells):
+//   projX uses sx = 4 × base  (2× for cell isotropy, 2× more for font aspect ratio)
+//   projY uses sy = base
+// where base = (h/2) × 0.65, chosen so the cube fits within both axes with margin.
+// This reproduces the same on-screen pixel size as the previous code that applied
+// a "* 0.5" Y correction directly inside the projection function.
+//
+// Lines are drawn as single-pixel marks (1×1 logical px) so sub-cell edges produce
+// half-block quadrant characters and the wireframe structure is clearly visible.
 //
 // Usage: drawCube(ctx, w, h, ax, ay)
 //   ctx — canvas context passed to renderCanvas
-//   w, h — pixel dimensions of the canvas
+//   w, h — logical dimensions of the canvas
 //   ax   — X-axis rotation in radians
 //   ay   — Y-axis rotation in radians
 function drawCube(ctx, w, h, ax, ay) {
@@ -14,7 +25,10 @@ function drawCube(ctx, w, h, ax, ay) {
     ctx.fillRect(0, 0, w, h);
 
     var cx = w / 2, cy = h / 2;
-    var scale = Math.min(w, h) * 0.65;
+    var base = h / 2 * 0.65;
+    var sx = base * 4;   // X projection scale
+    var sy = base;       // Y projection scale
+
     var cosX = Math.cos(ax), sinX = Math.sin(ax);
     var cosY = Math.cos(ay), sinY = Math.sin(ay);
 
@@ -27,7 +41,7 @@ function drawCube(ctx, w, h, ax, ay) {
 
     function proj(v) {
         var d = 4.0 / (4.0 + v[2] + 2.5);
-        return [cx + v[0] * scale * d, cy + v[1] * scale * d];
+        return [cx + v[0] * sx * d, cy + v[1] * sy * d];
     }
 
     var verts = [
@@ -67,13 +81,13 @@ function drawCube(ctx, w, h, ax, ay) {
     var pv = [];
     for (var i = 0; i < 8; i++) pv.push(proj(rot(verts[i])));
 
-    // Draw visible edges
+    // Draw visible edges as single-pixel marks so sub-cell positions produce
+    // half-block quadrant characters at diagonal edges.
     ctx.setFillStyle("#000000");
     for (var e = 0; e < edges.length; e++) {
         var edge = edges[e];
         if (!vis[edge[2]] && !vis[edge[3]]) continue;
         var p0 = pv[edge[0]], p1 = pv[edge[1]];
-        // Draw line as a series of filled 3×3 pixel squares along the line
         var dx = p1[0] - p0[0], dy = p1[1] - p0[1];
         var steps = Math.ceil(Math.sqrt(dx*dx + dy*dy));
         if (steps < 1) steps = 1;
@@ -81,7 +95,7 @@ function drawCube(ctx, w, h, ax, ay) {
             var t = s / steps;
             var px = Math.round(p0[0] + dx * t);
             var py = Math.round(p0[1] + dy * t);
-            ctx.fillRect(px - 1, py - 1, 3, 3);
+            ctx.fillRect(px, py, 1, 1);
         }
     }
 }

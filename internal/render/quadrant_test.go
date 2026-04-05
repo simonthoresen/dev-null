@@ -127,8 +127,10 @@ func TestImageToQuadrants_MultiCell(t *testing.T) {
 	}
 }
 
-func TestImageToQuadrants_FgBrighterThanBg(t *testing.T) {
-	// Verify that the fg color is always the brighter group.
+func TestImageToQuadrants_FgDarkerThanBg(t *testing.T) {
+	// Verify that the fg color is always the darker group (filled positions = dark pixels).
+	// This keeps ANSI-stripped golden output readable: edge chars like ▗ appear for
+	// sparse dark marks rather than their mostly-filled inverses.
 	white := color.RGBA{255, 255, 255, 255}
 	black := color.RGBA{0, 0, 0, 255}
 	img := makeImage(white, black, black, black)
@@ -145,8 +147,8 @@ func TestImageToQuadrants_FgBrighterThanBg(t *testing.T) {
 	br, bg, bb, _ := p.Bg.RGBA()
 	fgLum := (19595*fr + 38470*fg + 7471*fb + 1<<15) >> 16
 	bgLum := (19595*br + 38470*bg + 7471*bb + 1<<15) >> 16
-	if fgLum < bgLum {
-		t.Errorf("fg should be brighter than bg: fg lum=%d, bg lum=%d", fgLum, bgLum)
+	if fgLum > bgLum {
+		t.Errorf("fg should be darker than bg: fg lum=%d, bg lum=%d", fgLum, bgLum)
 	}
 }
 
