@@ -1,7 +1,7 @@
 .PHONY: build build-server build-client run-server run-server-lan run-server-local run-client run-client-local test clean
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
-BUILD_DATE  := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo unknown)
+BUILD_DATE  := $(shell git log -1 --format=%cI 2>/dev/null || echo unknown)
 
 # Build all binaries into dist/ (strip debug info for smaller binaries)
 build: build-server build-client
