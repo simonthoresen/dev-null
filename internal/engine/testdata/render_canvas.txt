@@ -4,61 +4,11 @@ mode: canvas
 width: 30
 height: 15
 --- js
-var AX = 0.4, AY = 0.0;
+#import "cube.js"
 var Game = {
     init: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) {
-        drawCube(ctx, w, h, AX, AY);
-    }
+    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 0.4, 0.0); }
 };
-function drawCube(ctx, w, h, ax, ay) {
-    ctx.setFillStyle("#ffffff");
-    ctx.fillRect(0, 0, w, h);
-    var cx = w / 2, cy = h / 2;
-    var scale = Math.min(w, h) * 0.32;
-    var cosX = Math.cos(ax), sinX = Math.sin(ax);
-    var cosY = Math.cos(ay), sinY = Math.sin(ay);
-    function rot(v) {
-        var x = v[0], y = v[1], z = v[2];
-        var rx = x * cosY + z * sinY;
-        var rz = -x * sinY + z * cosY;
-        var ry2 = y * cosX - rz * sinX;
-        var rz2 = y * sinX + rz * cosX;
-        return [rx, ry2, rz2];
-    }
-    function proj(v) {
-        var d = 4.0 / (4.0 + v[2] + 2.0);
-        return [cx + v[0] * scale * d, cy + v[1] * scale * d, v[2]];
-    }
-    var verts = [
-        [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
-        [-1,-1, 1],[1,-1, 1],[1,1, 1],[-1,1, 1]
-    ];
-    var pv = [];
-    for (var i = 0; i < 8; i++) pv.push(proj(rot(verts[i])));
-    var faces = [
-        { idx: [0,1,2,3], color: "#dd2222" },
-        { idx: [5,4,7,6], color: "#22dd22" },
-        { idx: [4,0,3,7], color: "#2222dd" },
-        { idx: [1,5,6,2], color: "#dddd22" },
-        { idx: [3,2,6,7], color: "#dd22dd" },
-        { idx: [4,5,1,0], color: "#22dddd" }
-    ];
-    faces.sort(function(a, b) {
-        var za = 0, zb = 0;
-        for (var i = 0; i < 4; i++) { za += pv[a.idx[i]][2]; zb += pv[b.idx[i]][2]; }
-        return zb - za;
-    });
-    for (var f = 0; f < faces.length; f++) {
-        var face = faces[f];
-        ctx.setFillStyle(face.color);
-        ctx.beginPath();
-        ctx.moveTo(pv[face.idx[0]][0], pv[face.idx[0]][1]);
-        for (var k = 1; k < 4; k++) ctx.lineTo(pv[face.idx[k]][0], pv[face.idx[k]][1]);
-        ctx.closePath();
-        ctx.fill();
-    }
-}
 ---
 ===
 ╔════════════════════════════╗
@@ -83,61 +33,11 @@ mode: canvas
 width: 30
 height: 15
 --- js
-var AX = 0.4, AY = 0.8;
+#import "cube.js"
 var Game = {
     init: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) {
-        drawCube(ctx, w, h, AX, AY);
-    }
+    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 0.4, 0.8); }
 };
-function drawCube(ctx, w, h, ax, ay) {
-    ctx.setFillStyle("#ffffff");
-    ctx.fillRect(0, 0, w, h);
-    var cx = w / 2, cy = h / 2;
-    var scale = Math.min(w, h) * 0.32;
-    var cosX = Math.cos(ax), sinX = Math.sin(ax);
-    var cosY = Math.cos(ay), sinY = Math.sin(ay);
-    function rot(v) {
-        var x = v[0], y = v[1], z = v[2];
-        var rx = x * cosY + z * sinY;
-        var rz = -x * sinY + z * cosY;
-        var ry2 = y * cosX - rz * sinX;
-        var rz2 = y * sinX + rz * cosX;
-        return [rx, ry2, rz2];
-    }
-    function proj(v) {
-        var d = 4.0 / (4.0 + v[2] + 2.0);
-        return [cx + v[0] * scale * d, cy + v[1] * scale * d, v[2]];
-    }
-    var verts = [
-        [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
-        [-1,-1, 1],[1,-1, 1],[1,1, 1],[-1,1, 1]
-    ];
-    var pv = [];
-    for (var i = 0; i < 8; i++) pv.push(proj(rot(verts[i])));
-    var faces = [
-        { idx: [0,1,2,3], color: "#dd2222" },
-        { idx: [5,4,7,6], color: "#22dd22" },
-        { idx: [4,0,3,7], color: "#2222dd" },
-        { idx: [1,5,6,2], color: "#dddd22" },
-        { idx: [3,2,6,7], color: "#dd22dd" },
-        { idx: [4,5,1,0], color: "#22dddd" }
-    ];
-    faces.sort(function(a, b) {
-        var za = 0, zb = 0;
-        for (var i = 0; i < 4; i++) { za += pv[a.idx[i]][2]; zb += pv[b.idx[i]][2]; }
-        return zb - za;
-    });
-    for (var f = 0; f < faces.length; f++) {
-        var face = faces[f];
-        ctx.setFillStyle(face.color);
-        ctx.beginPath();
-        ctx.moveTo(pv[face.idx[0]][0], pv[face.idx[0]][1]);
-        for (var k = 1; k < 4; k++) ctx.lineTo(pv[face.idx[k]][0], pv[face.idx[k]][1]);
-        ctx.closePath();
-        ctx.fill();
-    }
-}
 ---
 ===
 ╔════════════════════════════╗
@@ -162,61 +62,11 @@ mode: canvas
 width: 30
 height: 15
 --- js
-var AX = 0.4, AY = 1.571;
+#import "cube.js"
 var Game = {
     init: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) {
-        drawCube(ctx, w, h, AX, AY);
-    }
+    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 0.4, 1.571); }
 };
-function drawCube(ctx, w, h, ax, ay) {
-    ctx.setFillStyle("#ffffff");
-    ctx.fillRect(0, 0, w, h);
-    var cx = w / 2, cy = h / 2;
-    var scale = Math.min(w, h) * 0.32;
-    var cosX = Math.cos(ax), sinX = Math.sin(ax);
-    var cosY = Math.cos(ay), sinY = Math.sin(ay);
-    function rot(v) {
-        var x = v[0], y = v[1], z = v[2];
-        var rx = x * cosY + z * sinY;
-        var rz = -x * sinY + z * cosY;
-        var ry2 = y * cosX - rz * sinX;
-        var rz2 = y * sinX + rz * cosX;
-        return [rx, ry2, rz2];
-    }
-    function proj(v) {
-        var d = 4.0 / (4.0 + v[2] + 2.0);
-        return [cx + v[0] * scale * d, cy + v[1] * scale * d, v[2]];
-    }
-    var verts = [
-        [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
-        [-1,-1, 1],[1,-1, 1],[1,1, 1],[-1,1, 1]
-    ];
-    var pv = [];
-    for (var i = 0; i < 8; i++) pv.push(proj(rot(verts[i])));
-    var faces = [
-        { idx: [0,1,2,3], color: "#dd2222" },
-        { idx: [5,4,7,6], color: "#22dd22" },
-        { idx: [4,0,3,7], color: "#2222dd" },
-        { idx: [1,5,6,2], color: "#dddd22" },
-        { idx: [3,2,6,7], color: "#dd22dd" },
-        { idx: [4,5,1,0], color: "#22dddd" }
-    ];
-    faces.sort(function(a, b) {
-        var za = 0, zb = 0;
-        for (var i = 0; i < 4; i++) { za += pv[a.idx[i]][2]; zb += pv[b.idx[i]][2]; }
-        return zb - za;
-    });
-    for (var f = 0; f < faces.length; f++) {
-        var face = faces[f];
-        ctx.setFillStyle(face.color);
-        ctx.beginPath();
-        ctx.moveTo(pv[face.idx[0]][0], pv[face.idx[0]][1]);
-        for (var k = 1; k < 4; k++) ctx.lineTo(pv[face.idx[k]][0], pv[face.idx[k]][1]);
-        ctx.closePath();
-        ctx.fill();
-    }
-}
 ---
 ===
 ╔════════════════════════════╗
@@ -241,61 +91,11 @@ mode: canvas
 width: 30
 height: 15
 --- js
-var AX = 0.4, AY = 2.356;
+#import "cube.js"
 var Game = {
     init: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) {
-        drawCube(ctx, w, h, AX, AY);
-    }
+    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 0.4, 2.356); }
 };
-function drawCube(ctx, w, h, ax, ay) {
-    ctx.setFillStyle("#ffffff");
-    ctx.fillRect(0, 0, w, h);
-    var cx = w / 2, cy = h / 2;
-    var scale = Math.min(w, h) * 0.32;
-    var cosX = Math.cos(ax), sinX = Math.sin(ax);
-    var cosY = Math.cos(ay), sinY = Math.sin(ay);
-    function rot(v) {
-        var x = v[0], y = v[1], z = v[2];
-        var rx = x * cosY + z * sinY;
-        var rz = -x * sinY + z * cosY;
-        var ry2 = y * cosX - rz * sinX;
-        var rz2 = y * sinX + rz * cosX;
-        return [rx, ry2, rz2];
-    }
-    function proj(v) {
-        var d = 4.0 / (4.0 + v[2] + 2.0);
-        return [cx + v[0] * scale * d, cy + v[1] * scale * d, v[2]];
-    }
-    var verts = [
-        [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
-        [-1,-1, 1],[1,-1, 1],[1,1, 1],[-1,1, 1]
-    ];
-    var pv = [];
-    for (var i = 0; i < 8; i++) pv.push(proj(rot(verts[i])));
-    var faces = [
-        { idx: [0,1,2,3], color: "#dd2222" },
-        { idx: [5,4,7,6], color: "#22dd22" },
-        { idx: [4,0,3,7], color: "#2222dd" },
-        { idx: [1,5,6,2], color: "#dddd22" },
-        { idx: [3,2,6,7], color: "#dd22dd" },
-        { idx: [4,5,1,0], color: "#22dddd" }
-    ];
-    faces.sort(function(a, b) {
-        var za = 0, zb = 0;
-        for (var i = 0; i < 4; i++) { za += pv[a.idx[i]][2]; zb += pv[b.idx[i]][2]; }
-        return zb - za;
-    });
-    for (var f = 0; f < faces.length; f++) {
-        var face = faces[f];
-        ctx.setFillStyle(face.color);
-        ctx.beginPath();
-        ctx.moveTo(pv[face.idx[0]][0], pv[face.idx[0]][1]);
-        for (var k = 1; k < 4; k++) ctx.lineTo(pv[face.idx[k]][0], pv[face.idx[k]][1]);
-        ctx.closePath();
-        ctx.fill();
-    }
-}
 ---
 ===
 ╔════════════════════════════╗

@@ -12,6 +12,7 @@ package engine
 //	height:    <int>              (default 5)
 //	player_id: <string>           (default "player1")
 //	--- js
+//	#import "shared.js"           (optional — inlines a file from testdata/)
 //	<javascript game source>
 //	---
 //	===
@@ -23,6 +24,14 @@ package engine
 // Multi-line values use a block syntax: "--- key" opens a block and "---"
 // closes it. The block content is stored in the lists map under that key.
 //
+// JS blocks may contain "#import" directives on their own line:
+//
+//	#import "filename.js"
+//
+// The named file is read from the same testdata/ directory as the eval file
+// and its contents are inlined at that position. Only simple filenames are
+// allowed (no path separators or "..").
+//
 // Mode semantics:
 //
 //	text   — calls game.Render(buf, playerID, 0, 0, w, h); compare ANSI-stripped buf
@@ -30,6 +39,8 @@ package engine
 //	         block chars via render.ImageToQuadrants; compare ANSI-stripped result
 //	layout — calls game.Layout(playerID, w, h); reconciles via
 //	         widget.ReconcileGameWindow; renders gw.Window.RenderToBuf; compare
+//
+// All modes wrap their output in a Window border via ReconcileGameWindow.
 //
 // Run with -update-engine to regenerate all expected outputs:
 //
@@ -196,15 +207,61 @@ func engineTestLayer() *theme.Layer {
 	return theme.Default().LayerAt(0)
 }
 
+// ─── Import resolution ───────────────────────────────────────────────────────
+
+// resolveImports scans js for "#import" directives and inlines the named files.
+// Each directive must appear on its own line as:
+//
+//	#import "filename.js"
+//
+// The file is read from baseDir. Only simple filenames (no "/" or "..") are
+// permitted to prevent path traversal.
+func resolveImports(js, baseDir string) (string, error) {
+	var sb strings.Builder
+	for _, line := range strings.Split(js, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "#import ") {
+			sb.WriteString(line)
+			sb.WriteByte('\n')
+			continue
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "#import "))
+		if len(rest) < 2 || rest[0] != '"' || rest[len(rest)-1] != '"' {
+			return "", fmt.Errorf("malformed #import (expected quoted filename): %q", line)
+		}
+		name := rest[1 : len(rest)-1]
+		if strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
+			return "", fmt.Errorf("#import %q: only simple filenames are allowed", name)
+		}
+		content, err := os.ReadFile(filepath.Join(baseDir, name))
+		if err != nil {
+			return "", fmt.Errorf("#import %q: %w", name, err)
+		}
+		sb.Write(content)
+		if len(content) > 0 && content[len(content)-1] != '\n' {
+			sb.WriteByte('\n')
+		}
+	}
+	return sb.String(), nil
+}
+
 // ─── Rendering ───────────────────────────────────────────────────────────────
 
 // renderGameCase renders tc and returns normalised plain-text output.
-func renderGameCase(t *testing.T, tc gameCase, profile colorprofile.Profile) string {
+// baseDir is the directory containing the eval file; #import paths are resolved
+// relative to it.
+func renderGameCase(t *testing.T, tc gameCase, profile colorprofile.Profile, baseDir string) string {
 	t.Helper()
 
 	js, ok := tc.blocks["js"]
 	if !ok || strings.TrimSpace(js) == "" {
 		t.Fatalf("test case %q: missing --- js block", tc.name)
+	}
+
+	var err error
+	js, err = resolveImports(js, baseDir)
+	if err != nil {
+		t.Fatalf("test case %q: %v", tc.name, err)
 	}
 
 	w := gamePropInt(tc.props, "width", 20)
@@ -329,6 +386,7 @@ func TestGameRenderHarness(t *testing.T) {
 				t.Skip("no test cases found")
 			}
 
+			baseDir := filepath.Dir(f)
 			updated := false
 			for i, tc := range cases {
 				tc := tc
@@ -338,7 +396,7 @@ func TestGameRenderHarness(t *testing.T) {
 						colorprofile.TrueColor,
 						colorprofile.NoTTY,
 					} {
-						got := renderGameCase(t, tc, profile)
+						got := renderGameCase(t, tc, profile, baseDir)
 						if *updateEngine {
 							cases[i].expected = got
 							cases[i].hasExpected = true
