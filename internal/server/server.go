@@ -342,9 +342,16 @@ func (a *Server) inviteCommand() string {
 	return seg1 + " `\n" + seg2
 }
 
-// LogInviteCommand writes the current invite command to the server log.
+// LogInviteCommand writes the current invite command to the server log,
+// preceded by an ASCII QR code of the same string rendered with quadrant chars.
 func (a *Server) LogInviteCommand() {
-	a.serverLog("Invite:\n" + a.inviteCommand())
+	cmd := a.inviteCommand()
+	qr, err := renderQR(cmd)
+	if err == nil {
+		a.serverLog("Invite:\n" + qr + cmd)
+	} else {
+		a.serverLog("Invite:\n" + cmd)
+	}
 }
 
 func (a *Server) runTicker(ctx context.Context) {
@@ -408,7 +415,12 @@ func (a *Server) registerBuiltins() {
 		Name:        "invite",
 		Description: "Show the shareable join command for this server",
 		Handler: func(ctx domain.CommandContext, args []string) {
-			ctx.Reply(a.inviteCommand())
+			cmd := a.inviteCommand()
+			if qr, err := renderQR(cmd); err == nil {
+				ctx.Reply(qr + cmd)
+			} else {
+				ctx.Reply(cmd)
+			}
 		},
 	})
 
