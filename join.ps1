@@ -111,7 +111,7 @@ foreach ($ep in $endpoints) {
             "-tt",
             "-o", "ConnectTimeout=5",
             "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "UserKnownHostsFile=$( if ($IsWindows -or $env:OS -eq 'Windows_NT') { 'NUL' } else { '/dev/null' } )",
             "-o", "SendEnv=TERM",
             "-o", "SendEnv=LANG",
             "-o", "SendEnv=COLORTERM",
