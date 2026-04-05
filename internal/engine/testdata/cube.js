@@ -49,46 +49,21 @@ function drawCube(ctx, w, h, ax, ay) {
         [-1,-1, 1],[1,-1, 1],[1,1, 1],[-1,1, 1]
     ];
 
-    // 6 face normals (outward) and their vertex indices
-    var faces = [
-        { normal: [ 0,  0, -1], idx: [0,1,2,3] },  // back
-        { normal: [ 0,  0,  1], idx: [4,5,6,7] },  // front
-        { normal: [-1,  0,  0], idx: [4,0,3,7] },  // left
-        { normal: [ 1,  0,  0], idx: [1,5,6,2] },  // right
-        { normal: [ 0, -1,  0], idx: [4,5,1,0] },  // bottom
-        { normal: [ 0,  1,  0], idx: [3,2,6,7] }   // top
-    ];
-
-    // Determine which faces are visible from the camera.
-    // Camera is at -Z looking toward +Z, so a face is visible when its rotated
-    // outward normal has a negative Z component (points back toward the camera).
-    var vis = [];
-    for (var f = 0; f < faces.length; f++) {
-        var rn = rot(faces[f].normal);
-        vis.push(rn[2] < 0);
-    }
-
-    // 12 edges: each edge has [v0, v1, faceA, faceB]
-    // Draw edge only if at least one adjacent face is front-facing
+    // 12 edges of the cube as pairs of vertex indices — pure wireframe, all always drawn.
     var edges = [
-        // back face edges
-        [0,1,0,4], [1,2,0,3], [2,3,0,5], [3,0,0,2],
-        // front face edges
-        [4,5,1,4], [5,6,1,3], [6,7,1,5], [7,4,1,2],
-        // connecting edges (back to front)
-        [0,4,2,4], [1,5,3,4], [2,6,3,5], [3,7,2,5]
+        [0,1], [1,2], [2,3], [3,0],  // back face
+        [4,5], [5,6], [6,7], [7,4],  // front face
+        [0,4], [1,5], [2,6], [3,7]   // connecting edges
     ];
 
     // Project all vertices
     var pv = [];
     for (var i = 0; i < 8; i++) pv.push(proj(rot(verts[i])));
 
-    // Draw visible edges as single-pixel marks so sub-cell positions produce
-    // half-block quadrant characters at diagonal edges.
+    // Draw all edges as single-pixel marks.
     ctx.setFillStyle("#000000");
     for (var e = 0; e < edges.length; e++) {
         var edge = edges[e];
-        if (!vis[edge[2]] && !vis[edge[3]]) continue;
         var p0 = pv[edge[0]], p1 = pv[edge[1]];
         var dx = p1[0] - p0[0], dy = p1[1] - p0[1];
         var steps = Math.ceil(Math.sqrt(dx*dx + dy*dy));
