@@ -55,10 +55,12 @@ func (m *MenuBar) Render(buf *render.ImageBuffer, x, y, width, height int, _ boo
 
 		focused := (m.Overlay.MenuFocused || m.Overlay.OpenMenu >= 0) && i == m.Overlay.MenuCursor
 
-		// Leading space.
+		// Cursor marker / leading space.
 		if col < x+width {
 			if focused {
-				buf.SetChar(col, y, ' ', hlFg, hlBg, render.AttrNone)
+				buf.SetChar(col, y, '►', hlFg, hlBg, render.AttrNone)
+			} else {
+				buf.SetChar(col, y, ' ', fg, bg, render.AttrNone)
 			}
 			col++
 		}

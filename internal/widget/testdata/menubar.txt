@@ -36,7 +36,7 @@ menu: &Help
 menu_cursor: 0
 menu_focused: true
 ===
- File │ Edit │ Help
+►File │ Edit │ Help
 
 === focused_second
 # MenuBar with focus on the second menu.
@@ -49,4 +49,69 @@ menu: &Help
 menu_cursor: 1
 menu_focused: true
 ===
- File │ Edit │ Help
+ File │►Edit │ Help
+
+=== open_first_cursor_first
+# File menu open with cursor on first item (Open).
+widget: menubar
+width: 40
+height: 7
+menu: &File
+menu: &Edit
+open_menu: 0
+menu_cursor: 0
+drop_cursor: 0
+item: &Open
+item: &Save
+item: ---
+item: E&xit
+===
+►File │ Edit
+╔══════════════╗
+║►Open         ║
+║ Save         ║
+║──────────────║
+║ Exit         ║
+╚══════════════╝
+
+=== open_first_cursor_third
+# File menu open with cursor on third item (Exit, after separator).
+widget: menubar
+width: 40
+height: 7
+menu: &File
+menu: &Edit
+open_menu: 0
+menu_cursor: 0
+drop_cursor: 3
+item: &Open
+item: &Save
+item: ---
+item: E&xit
+===
+►File │ Edit
+╔══════════════╗
+║ Open         ║
+║ Save         ║
+║──────────────║
+║►Exit         ║
+╚══════════════╝
+
+=== open_second
+# Edit menu open, cursor on first item — dropdown anchored at Edit position.
+widget: menubar
+width: 40
+height: 5
+menu: &File
+menu: &Edit
+open_menu: 1
+menu_cursor: 1
+drop_cursor: 0
+item: &Undo
+item: &Redo
+===
+ File │►Edit
+       ╔══════════════╗
+       ║►Undo         ║
+       ║ Redo         ║
+       ╚══════════════╝

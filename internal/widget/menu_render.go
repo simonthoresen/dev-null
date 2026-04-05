@@ -35,7 +35,7 @@ func (o *OverlayState) RenderMenuBar(width int, menus []domain.MenuDef, layer *t
 		}
 		focused := (o.MenuFocused || o.OpenMenu >= 0) && i == o.MenuCursor
 		if focused {
-			sb.WriteString(activeStyle.Render(" "))
+			sb.WriteString(activeStyle.Render("►"))
 			sb.WriteString(RenderLabel(m.Label, activeStyle, activeAccent))
 			sb.WriteString(activeStyle.Render(" "))
 		} else {
@@ -153,7 +153,7 @@ func (o *OverlayState) RenderDropdown(menus []domain.MenuDef, ncBarRow int, laye
 		case it.Disabled:
 			inner = disabledStyle.Width(innerW).Render(" " + check + clean + pad + hk + " ")
 		case i == o.DropCursor:
-			inner = activeStyle.Render(" "+check) + RenderLabel(it.Label, activeStyle, activeAccent) + activeStyle.Render(pad+hk+" ")
+			inner = activeStyle.Render("►"+check) + RenderLabel(it.Label, activeStyle, activeAccent) + activeStyle.Render(pad+hk+" ")
 		default:
 			inner = menuStyle.Render(" "+check) + RenderLabel(it.Label, menuStyle, menuAccent) + menuStyle.Render(pad+hk+" ")
 		}

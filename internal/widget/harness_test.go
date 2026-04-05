@@ -469,15 +469,34 @@ func renderCase(tc widgetCase, profile colorprofile.Profile) string {
 		for i, m := range rawMenus {
 			menus[i] = domain.MenuDef{Label: m}
 		}
+		openMenu := propInt(tc.props, "open_menu", -1)
+		rawItems := propList(tc.props, tc.lists, "item")
+		if openMenu >= 0 && openMenu < len(menus) && len(rawItems) > 0 {
+			items := make([]domain.MenuItemDef, len(rawItems))
+			for i, label := range rawItems {
+				items[i] = domain.MenuItemDef{Label: label}
+			}
+			menus[openMenu].Items = items
+		}
 		cursor := propInt(tc.props, "menu_cursor", -1)
+		dropCursor := propInt(tc.props, "drop_cursor", 0)
 		menuFocused := propBool(tc.props, "menu_focused", false)
 		overlay := &OverlayState{
 			MenuCursor:  cursor,
-			MenuFocused: menuFocused,
-			OpenMenu:    -1,
+			MenuFocused: menuFocused || openMenu >= 0,
+			OpenMenu:    openMenu,
+			DropCursor:  dropCursor,
 		}
 		mb := &MenuBar{Menus: menus, Overlay: overlay}
-		mb.Render(buf, 0, 0, w, h, false, layer)
+		mb.Render(buf, 0, 0, w, 1, false, layer)
+		if openMenu >= 0 {
+			dd := overlay.RenderDropdown(menus, 0, layer)
+			if dd.Content != "" {
+				sub := render.NewImageBuffer(dd.Width, dd.Height)
+				sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, layer.Fg, layer.Bg)
+				buf.Blit(dd.Col, dd.Row, sub)
+			}
+		}
 		return normaliseWidgetOutput(buf.ToString(profile))
 	}
 
