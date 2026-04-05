@@ -59,11 +59,13 @@ function drawCube(ctx, w, h, ax, ay) {
         { normal: [ 0,  1,  0], idx: [3,2,6,7] }   // top
     ];
 
-    // Determine which faces are front-facing (rotated normal z > 0 means facing camera)
+    // Determine which faces are visible from the camera.
+    // Camera is at -Z looking toward +Z, so a face is visible when its rotated
+    // outward normal has a negative Z component (points back toward the camera).
     var vis = [];
     for (var f = 0; f < faces.length; f++) {
         var rn = rot(faces[f].normal);
-        vis.push(rn[2] > 0);
+        vis.push(rn[2] < 0);
     }
 
     // 12 edges: each edge has [v0, v1, faceA, faceB]
