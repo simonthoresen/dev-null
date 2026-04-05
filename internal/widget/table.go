@@ -1,9 +1,8 @@
 package widget
 
 import (
-	"unicode/utf8"
-
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"null-space/internal/render"
 	"null-space/internal/theme"
@@ -68,7 +67,7 @@ func (t *Table) Render(buf *render.ImageBuffer, x, y, width, height int, _ bool,
 	colWidths := make([]int, numCols)
 	for _, row := range t.Rows {
 		for c, cell := range row {
-			w := utf8.RuneCountInString(cell)
+			w := ansi.StringWidth(cell)
 			if w > colWidths[c] {
 				colWidths[c] = w
 			}
@@ -88,17 +87,17 @@ func (t *Table) Render(buf *render.ImageBuffer, x, y, width, height int, _ bool,
 				cell = dataRow[c]
 			}
 			cellEnd := col + colWidths[c]
-			// Write cell content, clipped to contentW.
-			written := 0
-			for _, r := range cell {
-				if col+written >= x+contentW {
-					break
-				}
-				buf.SetChar(col+written, row, r, fg, bg, render.AttrNone)
-				written++
+			// Write cell content using ANSI-aware painting, clipped to contentW.
+			availW := x + contentW - col
+			if availW > colWidths[c] {
+				availW = colWidths[c]
 			}
-			// Pad to column width, clipped to contentW.
-			for i := written; i < colWidths[c]; i++ {
+			if availW > 0 {
+				buf.PaintANSI(col, row, availW, 1, cell, fg, bg)
+			}
+			// Pad remaining space in the column.
+			cellVis := ansi.StringWidth(cell)
+			for i := cellVis; i < colWidths[c]; i++ {
 				if col+i >= x+contentW {
 					break
 				}

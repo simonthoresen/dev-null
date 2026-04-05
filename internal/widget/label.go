@@ -1,8 +1,6 @@
 package widget
 
 import (
-	"unicode/utf8"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -23,7 +21,7 @@ func (l *Label) Render(buf *render.ImageBuffer, x, y, w, h int, _ bool, layer *t
 	fg := layer.Fg
 	bg := layer.Bg
 	text := l.Text
-	vis := utf8.RuneCountInString(text)
+	vis := ansi.StringWidth(text)
 
 	startX := x
 	switch l.Align {
@@ -37,14 +35,5 @@ func (l *Label) Render(buf *render.ImageBuffer, x, y, w, h int, _ bool, layer *t
 		}
 	}
 
-	col := startX
-	for _, r := range text {
-		if col >= x+w {
-			break
-		}
-		if col >= x {
-			buf.SetChar(col, y, r, fg, bg, render.AttrNone)
-		}
-		col++
-	}
+	buf.PaintANSI(startX, y, w-(startX-x), 1, text, fg, bg)
 }
