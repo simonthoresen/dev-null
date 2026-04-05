@@ -1,0 +1,140 @@
+=== empty
+# Empty TextView — renders as blank interior.
+widget: textview
+title: TextView
+width: 20
+height: 5
+===
+╔═ TextView ═══════╗
+║                  ║
+║                  ║
+║                  ║
+╚══════════════════╝
+
+=== short_lines
+# A few short lines, no scroll needed.
+widget: textview
+title: TextView
+width: 20
+height: 6
+lines: Hello world
+lines: Second line
+lines: Third line
+===
+╔═ TextView ═══════╗
+║Hello world       ║
+║Second line       ║
+║Third line        ║
+║                  ║
+╚══════════════════╝
+
+=== long_line_wraps
+# A line longer than the interior width (18) must wrap, not overflow.
+widget: textview
+title: TextView
+width: 20
+height: 8
+lines: This line is definitely too long to fit in eighteen chars
+lines: Short
+===
+╔═ TextView ═══════╗
+║This line is defin║
+║itely too long to ║
+║fit in eighteen ch║
+║ars               ║
+║Short             ║
+║                  ║
+╚══════════════════╝
+
+=== overflow_vertical_scrollbar
+# More lines than visible height → scrollbar appears on the right.
+widget: textview
+title: TextView
+width: 20
+height: 7
+scrollable: true
+lines: Line 1
+lines: Line 2
+lines: Line 3
+lines: Line 4
+lines: Line 5
+lines: Line 6
+lines: Line 7
+lines: Line 8
+===
+╔═ TextView ═══════╗
+║Line 4           ░║
+║Line 5           ░║
+║Line 6           █║
+║Line 7           █║
+║Line 8           █║
+╚══════════════════╝
+
+=== scroll_offset_mid
+# Scrollable with scroll_offset in the middle — thumb should be lower.
+widget: textview
+title: TextView
+width: 20
+height: 7
+scrollable: true
+scroll_offset: 3
+lines: Line 1
+lines: Line 2
+lines: Line 3
+lines: Line 4
+lines: Line 5
+lines: Line 6
+lines: Line 7
+lines: Line 8
+===
+╔═ TextView ═══════╗
+║Line 1           █║
+║Line 2           █║
+║Line 3           █║
+║Line 4           ░║
+║Line 5           ░║
+╚══════════════════╝
+
+=== scroll_offset_top
+# scroll_offset at max scrolls to top of content.
+widget: textview
+title: TextView
+width: 20
+height: 7
+scrollable: true
+scroll_offset: 4
+lines: Line 1
+lines: Line 2
+lines: Line 3
+lines: Line 4
+lines: Line 5
+lines: Line 6
+lines: Line 7
+lines: Line 8
+===
+╔═ TextView ═══════╗
+║Line 1           █║
+║Line 2           █║
+║Line 3           █║
+║Line 4           ░║
+║Line 5           ░║
+╚══════════════════╝
+
+=== bottom_align
+# BottomAlign: content anchors to the bottom of the viewport.
+widget: textview
+title: TextView
+width: 20
+height: 7
+bottom_align: true
+lines: First
+lines: Second
+lines: Third
+===
+╔═ TextView ═══════╗
+║                  ║
+║                  ║
+║First             ║
+║Second            ║
+║Third             ║
+╚══════════════════╝

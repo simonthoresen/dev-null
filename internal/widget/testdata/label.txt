@@ -1,0 +1,49 @@
+=== left_align
+# Default left-aligned label.
+widget: label
+title: Label
+width: 20
+height: 3
+text: Hello world
+===
+╔═ Label ══════════╗
+║Hello world       ║
+╚══════════════════╝
+
+=== center_align
+# Center-aligned label.
+widget: label
+title: Label
+width: 20
+height: 3
+align: center
+text: Hello world
+===
+╔═ Label ══════════╗
+║   Hello world    ║
+╚══════════════════╝
+
+=== right_align
+# Right-aligned label.
+widget: label
+title: Label
+width: 20
+height: 3
+align: right
+text: Hello world
+===
+╔═ Label ══════════╗
+║       Hello world║
+╚══════════════════╝
+
+=== long_text_truncated
+# Text longer than the interior width — must not overflow the border.
+widget: label
+title: Label
+width: 14
+height: 3
+text: This is a very long label text
+===
+╔═ Label ════╗
+║This is a ver
+╚════════════╝

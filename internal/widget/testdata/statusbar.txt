@@ -1,0 +1,25 @@
+=== left_and_right
+# Left and right text positioned correctly.
+widget: statusbar
+width: 40
+height: 1
+left_text: hello
+right_text: world
+===
+hello                              world
+
+=== empty
+# Empty status bar fills with background.
+widget: statusbar
+width: 20
+height: 1
+===
+
+=== left_only
+# Only left text.
+widget: statusbar
+width: 30
+height: 1
+left_text: status text here
+===
+status text here

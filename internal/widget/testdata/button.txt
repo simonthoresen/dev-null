@@ -1,0 +1,36 @@
+=== basic
+# Unfocused button.
+widget: button
+title: Button
+width: 16
+height: 3
+label: OK
+===
+╔═ Button ═════╗
+║[ OK ]        ║
+╚══════════════╝
+
+=== long_label
+# Button with a longer label.
+widget: button
+title: Button
+width: 20
+height: 3
+label: Confirm
+===
+╔═ Button ═════════╗
+║[ Confirm ]       ║
+╚══════════════════╝
+
+=== focused
+# Focused button — rendered with highlight colours.
+widget: button
+title: Button
+width: 16
+height: 3
+label: OK
+focused: true
+===
+╔═ Button ═════╗
+║[ OK ]        ║
+╚══════════════╝

@@ -1,0 +1,51 @@
+=== unchecked
+# Unchecked checkbox.
+widget: checkbox
+title: Checkbox
+width: 20
+height: 3
+label: Enable feature
+===
+╔═ Checkbox ═══════╗
+║[ ] Enable feature║
+╚══════════════════╝
+
+=== checked
+# Checked checkbox.
+widget: checkbox
+title: Checkbox
+width: 20
+height: 3
+label: Enable feature
+checked: true
+===
+╔═ Checkbox ═══════╗
+║[x] Enable feature║
+╚══════════════════╝
+
+=== focused_unchecked
+# Focused unchecked checkbox — rendered with highlight colours.
+widget: checkbox
+title: Checkbox
+width: 20
+height: 3
+label: Enable feature
+focused: true
+===
+╔═ Checkbox ═══════╗
+║[ ] Enable feature║
+╚══════════════════╝
+
+=== focused_checked
+# Focused checked checkbox.
+widget: checkbox
+title: Checkbox
+width: 20
+height: 3
+label: Enable feature
+checked: true
+focused: true
+===
+╔═ Checkbox ═══════╗
+║[x] Enable feature║
+╚══════════════════╝

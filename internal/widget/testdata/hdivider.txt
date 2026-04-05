@@ -1,0 +1,22 @@
+=== standalone
+# HDivider not connected to outer border — floats inside the window.
+widget: hdivider
+title: Divider
+width: 20
+height: 3
+===
+╔═ Divider ════════╗
+║──────────────────║
+╚══════════════════╝
+
+=== connected
+# HDivider with Connected: true — junction chars meet the outer border.
+widget: hdivider
+title: Divider
+width: 20
+height: 3
+connected: true
+===
+╔═ Divider ════════╗
+╟──────────────────╢
+╚══════════════════╝

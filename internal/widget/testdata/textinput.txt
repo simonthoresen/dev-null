@@ -1,0 +1,22 @@
+=== empty
+# Empty text input with no value.
+widget: textinput
+title: Input
+width: 24
+height: 3
+===
+╔═ Input ══════════════╗
+║[····················]║
+╚══════════════════════╝
+
+=== with_value
+# Text input pre-populated with a value.
+widget: textinput
+title: Input
+width: 24
+height: 3
+value: hello world
+===
+╔═ Input ══════════════╗
+║[hello world·········]║
+╚══════════════════════╝

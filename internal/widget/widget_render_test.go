@@ -13,28 +13,6 @@ import (
 
 // ─── StatusBar ──────────────────────────────────────────────────────────────
 
-func TestStatusBarRender(t *testing.T) {
-	sb := &StatusBar{LeftText: "hello", RightText: "world"}
-	out := renderControl(sb, 40, 1, false, testLayer())
-	stripped := stripANSI(out)
-	if !strings.HasPrefix(stripped, "hello") {
-		t.Errorf("expected left text 'hello', got %q", stripped)
-	}
-	if !strings.HasSuffix(strings.TrimRight(stripped, " "), "world") {
-		t.Errorf("expected right text 'world' at end, got %q", stripped)
-	}
-}
-
-func TestStatusBarEmptyTexts(t *testing.T) {
-	sb := &StatusBar{}
-	out := renderControl(sb, 20, 1, false, testLayer())
-	stripped := stripANSI(out)
-	// Should be all spaces.
-	if strings.TrimSpace(stripped) != "" {
-		t.Errorf("expected only spaces for empty status bar, got %q", stripped)
-	}
-}
-
 func TestStatusBarZeroSize(t *testing.T) {
 	sb := &StatusBar{LeftText: "x"}
 	// Should not panic.
@@ -90,37 +68,6 @@ func TestMenuBarZeroSize(t *testing.T) {
 	overlay := &OverlayState{OpenMenu: -1}
 	mb := &MenuBar{Overlay: overlay}
 	renderControl(mb, 0, 0, false, testLayer())
-}
-
-// ─── Label ──────────────────────────────────────────────────────────────────
-
-func TestLabelRenderLeft(t *testing.T) {
-	l := &Label{Text: "hello"}
-	buf := render.NewImageBuffer(20, 1)
-	l.Render(buf, 0, 0, 20, 1, false, testLayer())
-	if buf.Pixels[0].Char != 'h' {
-		t.Errorf("expected 'h' at position 0, got %c", buf.Pixels[0].Char)
-	}
-}
-
-func TestLabelRenderCenter(t *testing.T) {
-	l := &Label{Text: "hi", Align: "center"}
-	buf := render.NewImageBuffer(10, 1)
-	l.Render(buf, 0, 0, 10, 1, false, testLayer())
-	// "hi" is 2 chars, centered in 10 → starts at column 4.
-	if buf.Pixels[4].Char != 'h' {
-		t.Errorf("expected 'h' at position 4 (centered), got %c", buf.Pixels[4].Char)
-	}
-}
-
-func TestLabelRenderRight(t *testing.T) {
-	l := &Label{Text: "hi", Align: "right"}
-	buf := render.NewImageBuffer(10, 1)
-	l.Render(buf, 0, 0, 10, 1, false, testLayer())
-	// "hi" is 2 chars, right-aligned in 10 → starts at column 8.
-	if buf.Pixels[8].Char != 'h' {
-		t.Errorf("expected 'h' at position 8 (right), got %c", buf.Pixels[8].Char)
-	}
 }
 
 // ─── GameView ───────────────────────────────────────────────────────────────

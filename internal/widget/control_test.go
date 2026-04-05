@@ -40,26 +40,6 @@ func renderWindow(w *Window, x, y, width, height int, layer *theme.Layer) string
 
 // ─── TextInput tests ─────────────────────────────────────────────────────────
 
-func TestNCTextInputRender(t *testing.T) {
-	model := newTestTextInput()
-	ti := &TextInput{Model: model}
-	layer := testLayer()
-
-	output := renderControl(ti, 20, 1, false, layer)
-	stripped := stripANSI(output)
-
-	if !strings.HasPrefix(stripped, "[") {
-		t.Errorf("expected bracket prefix, got %q", stripped)
-	}
-	if !strings.HasSuffix(stripped, "]") {
-		t.Errorf("expected bracket suffix, got %q", stripped)
-	}
-	// Should contain dots for empty field.
-	if !strings.Contains(stripped, "·") {
-		t.Errorf("expected dots in empty field, got %q", stripped)
-	}
-}
-
 func TestNCTextInputRenderWidth(t *testing.T) {
 	model := newTestTextInput()
 	ti := &TextInput{Model: model}
@@ -184,27 +164,6 @@ func TestNCCommandInputEscClears(t *testing.T) {
 
 // ─── TextView tests ──────────────────────────────────────────────────────────
 
-func TestNCTextViewRender(t *testing.T) {
-	tv := &TextView{
-		Lines:       []string{"line1", "line2", "line3"},
-		BottomAlign: true,
-	}
-	layer := testLayer()
-
-	output := renderControl(tv, 20, 5, false, layer)
-	lines := strings.Split(output, "\n")
-
-	if len(lines) != 5 {
-		t.Errorf("expected 5 lines, got %d", len(lines))
-	}
-
-	// Bottom-aligned: last 3 lines should have content.
-	stripped := stripANSI(lines[4])
-	if !strings.Contains(stripped, "line3") {
-		t.Errorf("expected line3 at bottom, got %q", stripped)
-	}
-}
-
 func TestNCTextViewScrollClamp(t *testing.T) {
 	tv := &TextView{
 		Lines:      []string{"a", "b", "c"},
@@ -246,15 +205,6 @@ func TestTextViewMinSizeEmpty(t *testing.T) {
 
 // ─── Button tests ────────────────────────────────────────────────────────────
 
-func TestNCButtonRender(t *testing.T) {
-	btn := &Button{Label: "OK"}
-	output := renderControl(btn, 10, 1, false, testLayer())
-	stripped := stripANSI(output)
-	if !strings.Contains(stripped, "[ OK ]") {
-		t.Errorf("expected '[ OK ]', got %q", stripped)
-	}
-}
-
 func TestNCButtonPress(t *testing.T) {
 	pressed := false
 	btn := &Button{Label: "OK", OnPress: func() { pressed = true }}
@@ -282,69 +232,7 @@ func TestNCCheckboxToggle(t *testing.T) {
 	}
 }
 
-func TestNCCheckboxRender(t *testing.T) {
-	cb := &Checkbox{Label: "Opt", Checked: true}
-	output := renderControl(cb, 20, 1, false, testLayer())
-	stripped := stripANSI(output)
-	if !strings.Contains(stripped, "[x] Opt") {
-		t.Errorf("expected '[x] Opt', got %q", stripped)
-	}
-
-	cb.Checked = false
-	output = renderControl(cb, 20, 1, false, testLayer())
-	stripped = stripANSI(output)
-	if !strings.Contains(stripped, "[ ] Opt") {
-		t.Errorf("expected '[ ] Opt', got %q", stripped)
-	}
-}
-
 // ─── Window tests ────────────────────────────────────────────────────────────
-
-func TestNCWindowRenderBasic(t *testing.T) {
-	label := &Label{Text: "Hello"}
-	win := &Window{
-		Title: "Test",
-		Children: []GridChild{
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
-		},
-	}
-
-	output := renderWindow(win, 0, 0, 30, 5, testLayer())
-	lines := strings.Split(output, "\n")
-
-	if len(lines) != 5 {
-		t.Errorf("expected 5 lines, got %d", len(lines))
-	}
-
-	// First line should contain the title.
-	stripped := stripANSI(lines[0])
-	if !strings.Contains(stripped, "Test") {
-		t.Errorf("expected title 'Test' in first line, got %q", stripped)
-	}
-
-	// Should have double borders.
-	if !strings.Contains(stripped, "╔") {
-		t.Errorf("expected ╔ in top border, got %q", stripped)
-	}
-}
-
-func TestNCWindowNoTitle(t *testing.T) {
-	win := &Window{
-		Children: []GridChild{
-			{Control: &Label{Text: "X"}, Constraint: GridConstraint{Col: 0, Row: 0}},
-		},
-	}
-	output := renderWindow(win, 0, 0, 20, 4, testLayer())
-	stripped := stripANSI(strings.Split(output, "\n")[0])
-
-	// Should be plain top border without title.
-	if strings.Contains(stripped, "─") {
-		// Inner horizontal used for title — without title should be all outer.
-	}
-	if !strings.Contains(stripped, "╔") {
-		t.Errorf("expected ╔ in top border, got %q", stripped)
-	}
-}
 
 func TestNCWindowFocusCycle(t *testing.T) {
 	btn1 := &Button{Label: "A"}
@@ -428,28 +316,6 @@ func TestNCWindowGridLayout(t *testing.T) {
 	}
 }
 
-// ─── HDivider / VDivider tests ───────────────────────────────────────────────
-
-func TestNCHDividerRender(t *testing.T) {
-	d := &HDivider{Connected: true}
-	output := renderControl(d, 10, 1, false, testLayer())
-	stripped := stripANSI(output)
-	// The divider renders inner horizontal chars repeated to fill width.
-	visW := ansi.StringWidth(output)
-	if visW < 10 {
-		t.Errorf("expected at least 10 visual width, got %d (stripped: %q)", visW, stripped)
-	}
-}
-
-func TestNCVDividerRender(t *testing.T) {
-	d := &VDivider{}
-	output := renderControl(d, 1, 3, false, testLayer())
-	lines := strings.Split(output, "\n")
-	if len(lines) != 3 {
-		t.Errorf("expected 3 lines, got %d", len(lines))
-	}
-}
-
 // ─── Integration: Window with multiple controls ──────────────────────────────
 
 func TestNCWindowIntegration(t *testing.T) {
@@ -485,45 +351,6 @@ func TestNCWindowIntegration(t *testing.T) {
 	win.HandleUpdate(tea.KeyPressMsg{Code: -1, Text: "enter"})
 	if submitted != "/help" {
 		t.Errorf("expected '/help' submitted, got %q", submitted)
-	}
-}
-
-// ─── Full NCWindow render with assertScreen ──────────────────────────────────
-
-func TestNCWindowRenderAssertScreen(t *testing.T) {
-	label := &Label{Text: "Hi"}
-	win := &Window{
-		Title: "Win",
-		Children: []GridChild{
-			{Control: label, Constraint: GridConstraint{Col: 0, Row: 0, WeightX: 1, Fill: FillHorizontal}},
-		},
-	}
-	output := renderWindow(win, 0, 0, 12, 4, testLayer())
-	s := newScreen(output)
-
-	// Verify structure line by line.
-	if !strings.Contains(s.lines[0], "Win") {
-		t.Errorf("top border should contain title, got %q", s.lines[0])
-	}
-	if !strings.HasPrefix(s.lines[0], "╔") {
-		t.Errorf("expected ╔ start, got %q", s.lines[0])
-	}
-	if !strings.HasSuffix(s.lines[0], "╗") {
-		t.Errorf("expected ╗ end, got %q", s.lines[0])
-	}
-
-	// Content row with label.
-	if !strings.HasPrefix(s.lines[1], "║") || !strings.HasSuffix(s.lines[1], "║") {
-		t.Errorf("content row should have side borders, got %q", s.lines[1])
-	}
-	if !strings.Contains(s.lines[1], "Hi") {
-		t.Errorf("content row should contain 'Hi', got %q", s.lines[1])
-	}
-
-	// Bottom border.
-	last := s.lines[s.h-1]
-	if !strings.HasPrefix(last, "╚") || !strings.HasSuffix(last, "╝") {
-		t.Errorf("expected bottom border, got %q", last)
 	}
 }
 

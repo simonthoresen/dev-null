@@ -1,0 +1,151 @@
+=== basic
+# Short list, cursor at top. Window sized to fit all items exactly.
+widget: listbox
+title: ListBox
+width: 20
+height: 7
+items: Alpha
+items: Beta
+items: Gamma
+===
+╔═ ListBox ════════╗
+║ ► Alpha          ║
+║   Beta           ║
+║   Gamma          ║
+║                  ║
+║                  ║
+╚══════════════════╝
+
+=== cursor_mid
+# Cursor on middle item — that item should be highlighted.
+widget: listbox
+title: ListBox
+width: 20
+height: 7
+cursor: 1
+items: Alpha
+items: Beta
+items: Gamma
+===
+╔═ ListBox ════════╗
+║   Alpha          ║
+║ ► Beta           ║
+║   Gamma          ║
+║                  ║
+║                  ║
+╚══════════════════╝
+
+=== cursor_last
+# Cursor on last item.
+widget: listbox
+title: ListBox
+width: 20
+height: 7
+cursor: 2
+items: Alpha
+items: Beta
+items: Gamma
+===
+╔═ ListBox ════════╗
+║   Alpha          ║
+║   Beta           ║
+║ ► Gamma          ║
+║                  ║
+║                  ║
+╚══════════════════╝
+
+=== with_tags
+# Items with tags shown on the right.
+widget: listbox
+title: ListBox
+width: 24
+height: 7
+items: alpha.js
+items: beta.js
+items: gamma.js
+tags: [active]
+tags:
+tags: [active]
+===
+╔═ ListBox ════════════╗
+║ ► alpha.js  [active] ║
+║   beta.js            ║
+║   gamma.js  [active] ║
+║                      ║
+║                      ║
+╚══════════════════════╝
+
+=== overflow_scrollbar
+# 14 items exceeds MaxListVisible(12) so window gives listbox height=12 and
+# a scrollbar appears (14 > 12). Cursor at top shows first 12 items.
+widget: listbox
+title: ListBox
+width: 22
+height: 14
+cursor: 0
+items: Item 01
+items: Item 02
+items: Item 03
+items: Item 04
+items: Item 05
+items: Item 06
+items: Item 07
+items: Item 08
+items: Item 09
+items: Item 10
+items: Item 11
+items: Item 12
+items: Item 13
+items: Item 14
+===
+╔═ ListBox ══════════╗
+║ ► Item 01         █║
+║   Item 02         █║
+║   Item 03         █║
+║   Item 04         █║
+║   Item 05         █║
+║   Item 06         █║
+║   Item 07         █║
+║   Item 08         █║
+║   Item 09         █║
+║   Item 10         █║
+║   Item 11         ░║
+║   Item 12         ░║
+╚════════════════════╝
+
+=== overflow_scrolled_to_bottom
+# Same 14-item list with cursor at last item — view scrolls down, thumb at bottom.
+widget: listbox
+title: ListBox
+width: 22
+height: 14
+cursor: 13
+items: Item 01
+items: Item 02
+items: Item 03
+items: Item 04
+items: Item 05
+items: Item 06
+items: Item 07
+items: Item 08
+items: Item 09
+items: Item 10
+items: Item 11
+items: Item 12
+items: Item 13
+items: Item 14
+===
+╔═ ListBox ══════════╗
+║   Item 03         ░║
+║   Item 04         ░║
+║   Item 05         █║
+║   Item 06         █║
+║   Item 07         █║
+║   Item 08         █║
+║   Item 09         █║
+║   Item 10         █║
+║   Item 11         █║
+║   Item 12         █║
+║   Item 13         █║
+║ ► Item 14         █║
+╚════════════════════╝
