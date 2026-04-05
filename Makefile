@@ -11,7 +11,7 @@ build-server:
 	go build -ldflags="-s -w" -o dist/pinggy-helper.exe ./cmd/pinggy-helper
 
 build-client:
-	go build -ldflags="-s -w" -o dist/null-space-client.exe ./cmd/null-space-client
+	go build -ldflags="-s -w -X 'main.buildCommit=$(GIT_COMMIT)' -X 'main.buildDate=$(BUILD_DATE)'" -o dist/null-space-client.exe ./cmd/null-space-client
 
 # Server: normal mode (SSH server + console TUI)
 run-server: build-server

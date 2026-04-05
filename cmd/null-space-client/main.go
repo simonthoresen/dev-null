@@ -29,7 +29,12 @@ import (
 	"null-space/internal/server"
 )
 
+// buildCommit and buildDate are injected at build time via -ldflags.
+var buildCommit = "dev"
+var buildDate = "unknown"
+
 func main() {
+	fmt.Printf("null-space-client %s (%s)\n", buildCommit, buildDate)
 	host := flag.String("host", "localhost", "server hostname")
 	port := flag.Int("port", 23234, "server SSH port")
 	player := flag.String("player", defaultPlayer(), "player name")

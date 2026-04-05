@@ -408,6 +408,29 @@ func TestHandleKeyDropdownNavigation(t *testing.T) {
 	}
 }
 
+func TestHandleKeyUpAtTopClosesDropdown(t *testing.T) {
+	menus := []domain.MenuDef{
+		{Label: "&File", Items: []domain.MenuItemDef{
+			{Label: "&Open", Handler: func(string) {}},
+			{Label: "---"},
+			{Label: "&Close", Handler: func(string) {}},
+		}},
+	}
+	o := &OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+
+	// Already at top (index 0). Up should close dropdown and return to menu bar.
+	o.HandleKey("up", menus, "p1")
+	if o.OpenMenu != -1 {
+		t.Errorf("expected OpenMenu=-1, got %d", o.OpenMenu)
+	}
+	if !o.MenuFocused {
+		t.Error("expected MenuFocused=true after closing dropdown via Up")
+	}
+	if o.MenuCursor != 0 {
+		t.Errorf("expected MenuCursor=0, got %d", o.MenuCursor)
+	}
+}
+
 func TestHandleKeyDialogNavigation(t *testing.T) {
 	var result string
 	o := &OverlayState{OpenMenu: -1}

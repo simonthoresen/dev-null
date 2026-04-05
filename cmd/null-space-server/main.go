@@ -29,6 +29,7 @@ var buildCommit = "dev"
 var buildDate = "unknown"
 
 func main() {
+	fmt.Printf("null-space-server %s (%s)\n", buildCommit, buildDate)
 	cleanupLog, err := runlog.ConfigureFromEnv("server")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "could not configure logging: %v\n", err)
