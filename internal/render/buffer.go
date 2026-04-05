@@ -135,15 +135,32 @@ func (b *ImageBuffer) Fill(x, y, w, h int, ch rune, fg, bg color.Color, attr Pix
 // WriteString writes plain text (no ANSI codes) at (x, y) with the given style.
 // Stops at the right edge of the buffer or end of string. Returns columns consumed.
 func (b *ImageBuffer) WriteString(x, y int, s string, fg, bg color.Color, attr PixelAttr) int {
-	col := x
-	for _, r := range s {
-		if !b.inBounds(col, y) {
-			break
-		}
-		b.SetChar(col, y, r, fg, bg, attr)
-		col++
+	if fg == nil {
+		fg = color.RGBA{}
 	}
-	return col - x
+	if bg == nil {
+		bg = color.RGBA{}
+	}
+	availW := b.Width - x
+	if availW <= 0 {
+		return 0
+	}
+	visW := ansi.StringWidth(s)
+	written := visW
+	if written > availW {
+		written = availW
+	}
+	// Apply default attr to the buffer region before painting so that
+	// characters without explicit SGR inherit the caller's attr.
+	if attr != AttrNone {
+		for i := 0; i < written; i++ {
+			if c := b.at(x+i, y); c != nil {
+				c.Attr = attr
+			}
+		}
+	}
+	b.PaintANSI(x, y, availW, 1, s, fg, bg)
+	return written
 }
 
 // Blit copies all cells from src onto b at position (x, y).
