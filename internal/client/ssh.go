@@ -29,7 +29,7 @@ type SSHConn struct {
 // default (120×50). Callers should pass the actual terminal size to avoid a
 // race where the first frame is rendered at the wrong dimensions.
 func Dial(host string, port int, player string, terminalMode bool, termOverride string, ptyW, ptyH int) (*SSHConn, error) {
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 
 	config := &ssh.ClientConfig{
 		User: player,
