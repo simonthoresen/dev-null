@@ -419,7 +419,7 @@ func (m *Model) pushConsoleThemeDialog(cursor int) {
 			m.persistServerConfig()
 			m.overlay.PopDialog()
 			m.pushConsoleThemeDialog(0)
-			m.overlay.SetTopListCursor(idx)
+			m.overlay.SetTopCursor(idx)
 		},
 		OnListAction: func(btn string, idx int) {
 			switch btn {
@@ -430,7 +430,7 @@ func (m *Model) pushConsoleThemeDialog(cursor int) {
 			}
 		},
 	})
-	m.overlay.SetTopListCursor(cursor)
+	m.overlay.SetTopCursor(cursor)
 }
 
 func (m *Model) showConsoleThemeAddDialog(returnCursor int) {
@@ -539,7 +539,7 @@ func (m *Model) pushConsolePluginDialog(cursor int) {
 			}
 			m.overlay.PopDialog()
 			m.pushConsolePluginDialog(0)
-			m.overlay.SetTopListCursor(newCursor)
+			m.overlay.SetTopCursor(newCursor)
 		},
 		OnListAction: func(btn string, idx int) {
 			switch btn {
@@ -561,7 +561,7 @@ func (m *Model) pushConsolePluginDialog(cursor int) {
 			}
 		},
 	})
-	m.overlay.SetTopListCursor(cursor)
+	m.overlay.SetTopCursor(cursor)
 }
 
 func (m *Model) showConsolePluginAddDialog(returnCursor int) {
@@ -677,7 +677,7 @@ func (m *Model) pushConsoleShaderDialog(cursor int) {
 			}
 			m.overlay.PopDialog()
 			m.pushConsoleShaderDialog(0)
-			m.overlay.SetTopListCursor(newCursor)
+			m.overlay.SetTopCursor(newCursor)
 		},
 		OnListAction: func(btn string, idx int) {
 			switch btn {
@@ -701,7 +701,7 @@ func (m *Model) pushConsoleShaderDialog(cursor int) {
 			}
 		},
 	})
-	m.overlay.SetTopListCursor(cursor)
+	m.overlay.SetTopCursor(cursor)
 }
 
 func (m *Model) showConsoleShaderAddDialog(returnCursor int) {

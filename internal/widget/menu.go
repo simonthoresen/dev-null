@@ -108,14 +108,20 @@ func (o *OverlayState) PopDialog() {
 	o.popDialogEntry()
 }
 
-// SetTopListCursor sets the cursor on the top dialog's list without resetting scroll.
-func (o *OverlayState) SetTopListCursor(idx int) {
+// SetTopCursor sets the cursor position on the focused control of the top dialog,
+// if that control implements CursorPositioner. No-op otherwise.
+func (o *OverlayState) SetTopCursor(idx int) {
 	e := o.topEntry()
-	if e == nil || e.listBox == nil {
+	if e == nil || e.window == nil {
 		return
 	}
-	e.listBox.Cursor = idx
-	e.listBox.ensureVisible()
+	fi := e.window.FocusIdx
+	if fi < 0 || fi >= len(e.window.Children) {
+		return
+	}
+	if cp, ok := e.window.Children[fi].Control.(CursorPositioner); ok {
+		cp.SetCursor(idx)
+	}
 }
 
 // IsActive returns true when any overlay is intercepting input.

@@ -203,7 +203,7 @@ func (m *Model) pushThemeDialog(cursor int) {
 			m.persistClientConfig()
 			m.overlay.PopDialog()
 			m.pushThemeDialog(0)
-			m.overlay.SetTopListCursor(idx)
+			m.overlay.SetTopCursor(idx)
 		},
 		OnListAction: func(btn string, idx int) {
 			if btn == "Add" {
@@ -211,7 +211,7 @@ func (m *Model) pushThemeDialog(cursor int) {
 			}
 		},
 	})
-	m.overlay.SetTopListCursor(cursor)
+	m.overlay.SetTopCursor(cursor)
 }
 
 func (m *Model) showThemeAddDialog(returnCursor int) {
@@ -303,7 +303,7 @@ func (m *Model) pushPluginDialog(cursor int) {
 			}
 			m.overlay.PopDialog()
 			m.pushPluginDialog(0)
-			m.overlay.SetTopListCursor(newCursor)
+			m.overlay.SetTopCursor(newCursor)
 		},
 		OnListAction: func(btn string, idx int) {
 			if btn == "Add" {
@@ -311,7 +311,7 @@ func (m *Model) pushPluginDialog(cursor int) {
 			}
 		},
 	})
-	m.overlay.SetTopListCursor(cursor)
+	m.overlay.SetTopCursor(cursor)
 }
 
 func (m *Model) showPluginAddDialog(returnCursor int) {
@@ -407,7 +407,7 @@ func (m *Model) pushShaderDialog(cursor int) {
 			}
 			m.overlay.PopDialog()
 			m.pushShaderDialog(0)
-			m.overlay.SetTopListCursor(newCursor)
+			m.overlay.SetTopCursor(newCursor)
 		},
 		OnListAction: func(btn string, idx int) {
 			if btn == "Add" {
@@ -415,7 +415,7 @@ func (m *Model) pushShaderDialog(cursor int) {
 			}
 		},
 	})
-	m.overlay.SetTopListCursor(cursor)
+	m.overlay.SetTopCursor(cursor)
 }
 
 func (m *Model) showShaderAddDialog(returnCursor int) {

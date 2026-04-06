@@ -81,6 +81,13 @@ type Clickable interface {
 	HandleClick(rx, ry int)
 }
 
+// CursorPositioner is optionally implemented by Controls that maintain a
+// discrete cursor position (e.g. ListBox). SetCursor moves the cursor to idx
+// and scrolls it into view without triggering a focus-reset side effect.
+type CursorPositioner interface {
+	SetCursor(idx int)
+}
+
 // reuseIntSlice returns a zeroed []int of length n, reusing the backing
 // array of dst when possible to avoid allocation.
 func reuseIntSlice(dst []int, n int) []int {
