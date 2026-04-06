@@ -46,6 +46,7 @@ func main() {
 	var portOverride string
 	var dataDir string
 	var localMode bool
+	var noSSH bool
 	var localPlayer string
 	var localGame string
 	var localResume string
@@ -57,6 +58,7 @@ func main() {
 	flag.StringVar(&portOverride, "port", "", "SSH listen port (overrides --address port, default 23234)")
 	flag.StringVar(&dataDir, "data-dir", defaultDataDir(), "directory containing games/, logs/")
 	flag.BoolVar(&localMode, "local", false, "run headless SSH server and connect as a terminal client")
+	flag.BoolVar(&noSSH, "no-ssh", false, "skip SSH entirely; connect chrome directly to the terminal (requires --local)")
 	flag.BoolVar(&lanMode, "lan", false, "LAN-only server (no UPnP, no public IP, no Pinggy)")
 	flag.StringVar(&localPlayer, "player", "player", "player name (local mode)")
 	flag.StringVar(&localGame, "game", "", "game to preload (local mode)")
@@ -99,16 +101,23 @@ func main() {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		sshPort := 23234
-		if idx := strings.LastIndex(address, ":"); idx >= 0 {
-			if p := address[idx+1:]; p != "" {
-				fmt.Sscanf(p, "%d", &sshPort)
+		if noSSH {
+			if err := app.RunDirect(ctx, localPlayer, termFlag); err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
 			}
-		}
+		} else {
+			sshPort := 23234
+			if idx := strings.LastIndex(address, ":"); idx >= 0 {
+				if p := address[idx+1:]; p != "" {
+					fmt.Sscanf(p, "%d", &sshPort)
+				}
+			}
 
-		if err := app.RunLocalSSH(ctx, localPlayer, sshPort, termFlag); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			if err := app.RunLocalSSH(ctx, localPlayer, sshPort, termFlag); err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
 		}
 		stop()
 		return

@@ -39,6 +39,10 @@ go run ./cmd/dev-null-server --local --data-dir dist --player alice
 go run ./cmd/dev-null-server --local --data-dir dist --game orbits
 go run ./cmd/dev-null-server --local --data-dir dist --resume orbits/autosave
 
+# No-SSH mode — skips SSH entirely; chrome renders directly to terminal via Bubble Tea.
+# Use to isolate rendering artifacts: if gone here, the bug is in SSH/PTY/transport.
+go run ./cmd/dev-null-server --local --no-ssh --data-dir dist --game cube
+
 # Local mode (client) — headless SSH server + graphical client in one process.
 # Exercises the full SSH pipeline with the Ebitengine renderer.
 go run ./cmd/dev-null-client --local --data-dir dist
