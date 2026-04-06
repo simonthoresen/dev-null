@@ -57,6 +57,13 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 		}
 	}
 
+	// --local server mode connects back with DEV_NULL_CLIENT=enhanced, but the
+	// output is a plain terminal — strip enhanced flags to match plain ssh behaviour.
+	if a.localPlayerName != "" && sess.User() == a.localPlayerName {
+		model.IsEnhancedClient = false
+		model.IsTerminalClient = false
+	}
+
 	opts, cp := a.sessionProgramOptions(sess)
 	model.ColorProfile = cp
 
