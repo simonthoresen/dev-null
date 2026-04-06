@@ -464,7 +464,6 @@ func (m *Model) showConsoleThemeRemoveConfirm(name string, returnCursor int) {
 }
 
 // pushConsolePluginDialog opens an interactive Plugins dialog for the server console.
-// Loaded plugins are listed first (with order numbers), then unloaded ones.
 // Enter toggles load/unload. Remove deletes the plugin file from disk.
 func (m *Model) pushConsolePluginDialog(cursor int) {
 	available := engine.ListScripts(filepath.Join(m.api.DataDir(), "plugins"))
@@ -472,7 +471,17 @@ func (m *Model) pushConsolePluginDialog(cursor int) {
 	for _, n := range m.pluginNames {
 		loadedSet[n] = true
 	}
-	if len(available) == 0 && len(m.pluginNames) == 0 {
+	availableSet := make(map[string]bool)
+	for _, n := range available {
+		availableSet[n] = true
+	}
+	items := append([]string(nil), available...)
+	for _, n := range m.pluginNames {
+		if !availableSet[n] {
+			items = append(items, n)
+		}
+	}
+	if len(items) == 0 {
 		m.overlay.PushDialog(domain.DialogRequest{
 			Title:   "Plugins",
 			Body:    "No plugins found in plugins/",
@@ -485,26 +494,14 @@ func (m *Model) pushConsolePluginDialog(cursor int) {
 		})
 		return
 	}
-
-	activeCount := len(m.pluginNames)
-	numWidth := len(fmt.Sprintf("%d", max(activeCount, 1)))
-	inactivePad := strings.Repeat(" ", numWidth+2) // matches "N. " width
-
-	var items []string
-	var tags []string
-	for i, name := range m.pluginNames {
-		items = append(items, fmt.Sprintf("%*d. %s", numWidth, i+1, name))
-		tags = append(tags, "[✓]")
-	}
-	var inactive []string
-	for _, name := range available {
-		if !loadedSet[name] {
-			items = append(items, inactivePad+name)
-			tags = append(tags, "[ ]")
-			inactive = append(inactive, name)
+	tags := make([]string, len(items))
+	for i, name := range items {
+		if loadedSet[name] {
+			tags[i] = "[✓]"
+		} else {
+			tags[i] = "[ ]"
 		}
 	}
-
 	m.overlay.PushDialog(domain.DialogRequest{
 		Title:                 "Plugins",
 		ListItems:             items,
@@ -512,52 +509,22 @@ func (m *Model) pushConsolePluginDialog(cursor int) {
 		Buttons:               []string{"Add", "Remove", "Close"},
 		RequireListNavigation: []string{"Remove"},
 		OnListEnter: func(idx int) {
-			var newCursor int
-			if idx < activeCount {
-				toggledName := m.pluginNames[idx]
-				m.handlePluginCommand("/plugin unload " + toggledName)
-				newActiveSet := make(map[string]bool)
-				for _, n := range m.pluginNames {
-					newActiveSet[n] = true
-				}
-				pos := 0
-				for _, n := range available {
-					if !newActiveSet[n] {
-						if strings.EqualFold(n, toggledName) {
-							break
-						}
-						pos++
-					}
-				}
-				newCursor = len(m.pluginNames) + pos
+			name := items[idx]
+			if loadedSet[name] {
+				m.handlePluginCommand("/plugin unload " + name)
 			} else {
-				inactiveIdx := idx - activeCount
-				if inactiveIdx < len(inactive) {
-					m.handlePluginCommand("/plugin load " + inactive[inactiveIdx])
-					newCursor = len(m.pluginNames) - 1
-				}
+				m.handlePluginCommand("/plugin load " + name)
 			}
 			m.overlay.PopDialog()
 			m.pushConsolePluginDialog(0)
-			m.overlay.SetTopCursor(newCursor)
+			m.overlay.SetTopCursor(idx)
 		},
 		OnListAction: func(btn string, idx int) {
 			switch btn {
 			case "Add":
 				m.showConsolePluginAddDialog(idx)
 			case "Remove":
-				var name string
-				if idx < activeCount {
-					name = m.pluginNames[idx]
-				} else {
-					inactiveIdx := idx - activeCount
-					if inactiveIdx < len(inactive) {
-						name = inactive[inactiveIdx]
-					}
-				}
-				if name != "" {
-					m.showConsolePluginRemoveConfirm(name, idx)
-				}
+				m.showConsolePluginRemoveConfirm(items[idx], idx)
 			}
 		},
 	})
@@ -600,34 +567,23 @@ func (m *Model) showConsolePluginRemoveConfirm(name string, returnCursor int) {
 }
 
 // pushConsoleShaderDialog opens an interactive Shaders dialog for the server console.
-// Active shaders are listed first (in order), then inactive ones.
-// Enter toggles load/unload. Up/Down reorders active shaders. Remove deletes file from disk.
+// Enter toggles load/unload. Remove deletes the shader file from disk.
 func (m *Model) pushConsoleShaderDialog(cursor int) {
 	available := engine.ListScripts(filepath.Join(m.api.DataDir(), "shaders"))
 	loadedSet := make(map[string]bool)
 	for _, n := range m.shaderNames {
 		loadedSet[n] = true
 	}
-
-	activeCount := len(m.shaderNames)
-	numWidth := len(fmt.Sprintf("%d", max(activeCount, 1)))
-	inactivePad := strings.Repeat(" ", numWidth+2) // matches "N. " width
-
-	var items []string
-	var tags []string
-	for i, name := range m.shaderNames {
-		items = append(items, fmt.Sprintf("%*d. %s", numWidth, i+1, name))
-		tags = append(tags, "[✓]")
+	availableSet := make(map[string]bool)
+	for _, n := range available {
+		availableSet[n] = true
 	}
-	var inactive []string
-	for _, name := range available {
-		if !loadedSet[name] {
-			items = append(items, inactivePad+name)
-			tags = append(tags, "[ ]")
-			inactive = append(inactive, name)
+	items := append([]string(nil), available...)
+	for _, n := range m.shaderNames {
+		if !availableSet[n] {
+			items = append(items, n)
 		}
 	}
-
 	if len(items) == 0 {
 		m.overlay.PushDialog(domain.DialogRequest{
 			Title:   "Shaders",
@@ -641,7 +597,14 @@ func (m *Model) pushConsoleShaderDialog(cursor int) {
 		})
 		return
 	}
-
+	tags := make([]string, len(items))
+	for i, name := range items {
+		if loadedSet[name] {
+			tags[i] = "[✓]"
+		} else {
+			tags[i] = "[ ]"
+		}
+	}
 	m.overlay.PushDialog(domain.DialogRequest{
 		Title:                 "Shaders",
 		ListItems:             items,
@@ -649,55 +612,22 @@ func (m *Model) pushConsoleShaderDialog(cursor int) {
 		Buttons:               []string{"Add", "Remove", "Close"},
 		RequireListNavigation: []string{"Remove"},
 		OnListEnter: func(idx int) {
-			var newCursor int
-			if idx < activeCount {
-				toggledName := m.shaderNames[idx]
-				m.handleShaderCommand("/shader unload " + toggledName)
-				// Find where the unloaded shader landed in the new inactive list.
-				newActiveSet := make(map[string]bool)
-				for _, n := range m.shaderNames {
-					newActiveSet[n] = true
-				}
-				pos := 0
-				for _, n := range available {
-					if !newActiveSet[n] {
-						if strings.EqualFold(n, toggledName) {
-							break
-						}
-						pos++
-					}
-				}
-				newCursor = len(m.shaderNames) + pos
+			name := items[idx]
+			if loadedSet[name] {
+				m.handleShaderCommand("/shader unload " + name)
 			} else {
-				inactiveIdx := idx - activeCount
-				if inactiveIdx < len(inactive) {
-					m.handleShaderCommand("/shader load " + inactive[inactiveIdx])
-					newCursor = len(m.shaderNames) - 1
-				}
+				m.handleShaderCommand("/shader load " + name)
 			}
 			m.overlay.PopDialog()
 			m.pushConsoleShaderDialog(0)
-			m.overlay.SetTopCursor(newCursor)
+			m.overlay.SetTopCursor(idx)
 		},
 		OnListAction: func(btn string, idx int) {
 			switch btn {
 			case "Add":
 				m.showConsoleShaderAddDialog(idx)
 			case "Remove":
-				var name string
-				if idx < activeCount {
-					name = m.shaderNames[idx]
-				} else {
-					inactiveIdx := idx - activeCount
-					if inactiveIdx < len(inactive) {
-						name = inactive[inactiveIdx]
-					}
-				}
-				if name != "" {
-					m.showConsoleShaderRemoveConfirm(name, idx)
-				} else {
-					m.pushConsoleShaderDialog(idx)
-				}
+				m.showConsoleShaderRemoveConfirm(items[idx], idx)
 			}
 		},
 	})
