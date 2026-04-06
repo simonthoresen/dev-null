@@ -31,7 +31,6 @@ var buildDate = "unknown"
 var buildRemote = ""
 
 func main() {
-	fmt.Printf("dev-null-server %s (%s)\n", buildCommit, buildDate)
 	cleanupLog, err := runlog.ConfigureFromEnv("server")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "could not configure logging: %v\n", err)
