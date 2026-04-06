@@ -459,17 +459,15 @@ func (a *Server) registerBuiltins() {
 			}
 			return
 		}
-		// Try to close the SSH session; if there is none (local mode),
-		// quit the player's Bubble Tea program directly.
-		if err := a.kickPlayer(ctx.PlayerID); err != nil {
-			a.programsMu.Lock()
-			p := a.programs[ctx.PlayerID]
-			a.programsMu.Unlock()
-			if p != nil {
-				// Async to avoid deadlock — this runs inside
-				// the Bubble Tea update loop.
-				go p.Quit()
-			}
+		// Close the SSH session (no-op if there is none, e.g. local mode).
+		a.kickPlayer(ctx.PlayerID) //nolint:errcheck
+		// Always quit the program directly — SSH close alone doesn't
+		// propagate until the next key press triggers a read.
+		a.programsMu.Lock()
+		p := a.programs[ctx.PlayerID]
+		a.programsMu.Unlock()
+		if p != nil {
+			go p.Quit() // async: called from inside the Bubble Tea update loop
 		}
 	}
 
