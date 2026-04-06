@@ -174,8 +174,11 @@ func PushGameDialog(cursor int, opts GameDialogOptions) {
 		OnListAction: func(btn string, idx int) {
 			switch btn {
 			case "Load":
-				if opts.OnLoad != nil {
-					opts.OnLoad(available[idx])
+				name := available[idx]
+				if opts.OnLoad != nil && opts.CurrentGame != "" && !strings.EqualFold(opts.CurrentGame, name) {
+					pushGameLoadConfirm(opts, name, idx)
+				} else if opts.OnLoad != nil {
+					opts.OnLoad(name)
 				}
 			case "Add":
 				pushGameAddDialog(opts, idx)
@@ -201,6 +204,23 @@ func gameButtons(opts GameDialogOptions, hasItems bool) []string {
 		btns = append(btns, "Remove")
 	}
 	return append(btns, "Close")
+}
+
+func pushGameLoadConfirm(opts GameDialogOptions, name string, returnCursor int) {
+	opts.Overlay.PushDialog(domain.DialogRequest{
+		Title:   "Load Game",
+		Body:    "A game is already running:\n\n  " + opts.CurrentGame + "\n\nUnload it and load " + name + "?",
+		Buttons: []string{"Load", "Cancel"},
+		Warning: true,
+		OnClose: func(btn string) {
+			if btn == "Load" && opts.OnLoad != nil {
+				opts.OnLoad(name)
+			} else {
+				opts.Overlay.PopDialog()
+				PushGameDialog(returnCursor, opts)
+			}
+		},
+	})
 }
 
 func pushGameAddDialog(opts GameDialogOptions, returnCursor int) {
