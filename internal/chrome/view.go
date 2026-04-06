@@ -17,7 +17,7 @@ import (
 	"dev-null/internal/widget"
 )
 
-func (m Model) View() tea.View {
+func (m *Model) View() tea.View {
 	console.EnterRenderPath()
 	defer console.LeaveRenderPath()
 
@@ -213,7 +213,7 @@ func (m Model) View() tea.View {
 
 // renderLobby renders the lobby view using NC controls directly into the buffer.
 // Layout: row 0 = NCMenuBar, rows 1..H-2 = NCWindow (chat + teams + cmd bar), row H-1 = NCStatusBar.
-func (m Model) renderLobby(buf *render.ImageBuffer, menus []domain.MenuDef) {
+func (m *Model) renderLobby(buf *render.ImageBuffer, menus []domain.MenuDef) {
 	// Update menu bar.
 	m.lobbyMenuBar.Menus = menus
 
@@ -247,7 +247,7 @@ func (m Model) renderLobby(buf *render.ImageBuffer, menus []domain.MenuDef) {
 }
 
 
-func (m Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, game domain.Game, gameName string, phase domain.GamePhase) {
+func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, game domain.Game, gameName string, phase domain.GamePhase) {
 	// Compute game viewport height (16:9 aspect ratio with min chat height).
 	// Window interior = total - menuBar(1) - statusBar(1) - topBorder(1) - bottomBorder(1) = height - 4
 	// Interior rows: gameView + divider(1) + chat + divider(1) + cmdInput(1) = gameH + chatH + 3
@@ -372,7 +372,7 @@ func (m Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, ga
 }
 
 // defaultRenderStarting renders a figlet game name centered in the viewport.
-func (m Model) defaultRenderStarting(buf *render.ImageBuffer, name string, x, y, w, h int) {
+func (m *Model) defaultRenderStarting(buf *render.ImageBuffer, name string, x, y, w, h int) {
 	figletTitle := strings.TrimRight(engine.Figlet(name, ""), "\n")
 	var lines []string
 	if figletTitle != "" {
@@ -410,7 +410,7 @@ func (m Model) defaultRenderStarting(buf *render.ImageBuffer, name string, x, y,
 }
 
 // defaultRenderEnding renders a figlet "GAME OVER" title with ranked results.
-func (m Model) defaultRenderEnding(buf *render.ImageBuffer, results []domain.GameResult, x, y, w, h int) {
+func (m *Model) defaultRenderEnding(buf *render.ImageBuffer, results []domain.GameResult, x, y, w, h int) {
 	var lines []string
 
 	// Figlet title.

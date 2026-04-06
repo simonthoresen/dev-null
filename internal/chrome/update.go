@@ -12,7 +12,7 @@ import (
 	"dev-null/internal/widget"
 )
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m.handleWindowSize(msg)
@@ -53,7 +53,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = max(1, msg.Width)
 	m.height = max(8, msg.Height)
 	m.resizeViewports()
@@ -61,7 +61,7 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleTick(_ domain.TickMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleTick(_ domain.TickMsg) (tea.Model, tea.Cmd) {
 	if len(m.InitCommands) > 0 {
 		for _, cmd := range m.InitCommands {
 			if strings.HasPrefix(cmd, "/plugin") {
@@ -77,7 +77,7 @@ func (m Model) handleTick(_ domain.TickMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleChat(msg domain.ChatMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleChat(msg domain.ChatMsg) (tea.Model, tea.Cmd) {
 	chatMsg := msg.Msg
 	if chatMsg.IsPrivate {
 		if chatMsg.ToID != m.playerID && chatMsg.FromID != m.playerID {
@@ -136,7 +136,7 @@ func (m Model) handleChat(msg domain.ChatMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleGameLoaded(_ domain.GameLoadedMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleGameLoaded(_ domain.GameLoadedMsg) (tea.Model, tea.Cmd) {
 	m.inActiveGame = true
 	m.charmapSent = false
 	m.gameSrcSent = false
@@ -153,7 +153,7 @@ func (m Model) handleGameLoaded(_ domain.GameLoadedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleGameUnloaded() (tea.Model, tea.Cmd) {
+func (m *Model) handleGameUnloaded() (tea.Model, tea.Cmd) {
 	m.inActiveGame = false
 	m.invalidateMenuCache()
 	m.lobbyWindow.FocusIdx = 4
@@ -163,7 +163,7 @@ func (m Model) handleGameUnloaded() (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) handleGamePhase(msg domain.GamePhaseMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleGamePhase(msg domain.GamePhaseMsg) (tea.Model, tea.Cmd) {
 	if msg.Phase == domain.PhaseEnding {
 		m.gameOverStart = time.Now()
 	}
@@ -178,9 +178,9 @@ func (m Model) handleGamePhase(msg domain.GamePhaseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if msg.Button == tea.MouseLeft {
-		m.menuCache = nil // force fresh closures bound to current &m
+		m.menuCache = nil // force rebuild so menus reflect current game/state
 		if m.overlay.HandleClick(msg.X, msg.Y, 0, m.width, m.height, m.cachedMenus(), m.playerID) {
 			return m, nil
 		}

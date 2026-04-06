@@ -8,7 +8,7 @@ import (
 	"dev-null/internal/domain"
 )
 
-func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	phase := m.api.State().GetGamePhase()
 
 	// Ctrl+C / Ctrl+D quit from any mode.
@@ -48,7 +48,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Menu overlay intercepts keys when active (F10, menu navigation).
-	m.menuCache = nil // force fresh closures bound to current &m
+	m.menuCache = nil // force rebuild so menus reflect current game/state
 	if m.overlay.HandleKey(msg.String(), m.cachedMenus(), m.playerID) {
 		return m, nil
 	}
@@ -100,7 +100,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) handleTeamEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleTeamEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		name := strings.TrimSpace(m.teamEditInput.Value())
@@ -207,7 +207,7 @@ func (m *Model) handleTeamPanelClick(panelX, contentY int) string {
 }
 
 // handleMouseWheel scrolls the chat panel on wheel events.
-func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	scrollAmount := 3
 	chatH := max(1, m.chatH)
 	switch msg.Button {

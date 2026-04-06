@@ -170,7 +170,7 @@ type Model struct {
 	ColorProfile colorprofile.Profile
 }
 
-func NewModel(api ServerAPI, playerID string) Model {
+func NewModel(api ServerAPI, playerID string) *Model {
 	teamInput := textinput.New()
 	teamInput.Prompt = ""
 	teamInput.CharLimit = 20
@@ -335,10 +335,10 @@ func NewModel(api ServerAPI, playerID string) Model {
 
 	m.syncChat()
 	m.lobbyInput.Model.Focus()
-	return m
+	return &m
 }
 
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return m.lobbyInput.Model.Focus() // starts cursor blink in lobby
 }
 
