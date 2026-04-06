@@ -161,12 +161,19 @@ func (m *Model) showGamesDialog() {
 	})
 }
 
+func (m *Model) isAdmin() bool {
+	m.api.State().RLock()
+	p := m.api.State().Players[m.playerID]
+	m.api.State().RUnlock()
+	return p != nil && p.IsAdmin
+}
+
 func (m *Model) pushThemeDialog(cursor int) {
 	localcmd.PushThemeDialog(cursor, localcmd.ThemeDialogOptions{
 		DataDir:          m.api.DataDir(),
 		Overlay:          &m.overlay,
 		CurrentThemeName: m.themeName,
-		CanAdd:           true,
+		CanAdd:           m.isAdmin(),
 		OnSelect: func(name string, t *theme.Theme) {
 			m.theme = t
 			m.themeName = name
@@ -184,7 +191,7 @@ func (m *Model) pushPluginDialog(cursor int) {
 		DataDir: m.api.DataDir(),
 		Overlay: &m.overlay,
 		Loaded:  m.pluginNames,
-		CanAdd:  true,
+		CanAdd:  m.isAdmin(),
 		OnToggle: func(name string, load bool) {
 			if load {
 				m.handlePluginCommand("/plugin load " + name)
@@ -203,7 +210,7 @@ func (m *Model) pushShaderDialog(cursor int) {
 		DataDir: m.api.DataDir(),
 		Overlay: &m.overlay,
 		Loaded:  m.shaderNames,
-		CanAdd:  true,
+		CanAdd:  m.isAdmin(),
 		OnToggle: func(name string, load bool) {
 			if load {
 				m.handleShaderCommand("/shader load " + name)
