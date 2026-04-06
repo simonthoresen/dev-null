@@ -7,6 +7,7 @@ import (
 
 	"dev-null/internal/domain"
 	"dev-null/internal/engine"
+	"dev-null/internal/localcmd"
 	"dev-null/internal/theme"
 )
 
@@ -160,227 +161,56 @@ func (m *Model) showGamesDialog() {
 	})
 }
 
-// pushThemeDialog opens the Themes dialog with radio-style selection.
-// Enter activates the highlighted theme. Add downloads a new theme. No file deletion.
 func (m *Model) pushThemeDialog(cursor int) {
-	available := theme.ListThemes(m.api.DataDir())
-	if len(available) == 0 {
-		m.overlay.PushDialog(domain.DialogRequest{
-			Title:   "Themes",
-			Body:    "No themes found in themes/",
-			Buttons: []string{"Add", "Close"},
-			OnClose: func(btn string) {
-				if btn == "Add" {
-					m.showThemeAddDialog(0)
-				}
-			},
-		})
-		return
-	}
-	tags := make([]string, len(available))
-	for i, name := range available {
-		if strings.EqualFold(name, m.theme.Name) {
-			tags[i] = "(●)"
-		} else {
-			tags[i] = "(○)"
-		}
-	}
-	m.overlay.PushDialog(domain.DialogRequest{
-		Title:     "Themes",
-		ListItems: available,
-		ListTags:  tags,
-		Buttons:   []string{"Add", "Close"},
-		OnListEnter: func(idx int) {
-			name := available[idx]
-			path := filepath.Join(m.api.DataDir(), "themes", name+".json")
-			t, err := theme.Load(path)
-			if err != nil {
-				return
-			}
+	localcmd.PushThemeDialog(cursor, localcmd.ThemeDialogOptions{
+		DataDir:          m.api.DataDir(),
+		Overlay:          &m.overlay,
+		CurrentThemeName: m.themeName,
+		CanAdd:           true,
+		OnSelect: func(name string, t *theme.Theme) {
 			m.theme = t
 			m.themeName = name
 			m.gameWindow = nil
 			m.persistClientConfig()
-			m.overlay.PopDialog()
-			m.pushThemeDialog(0)
-			m.overlay.SetTopCursor(idx)
 		},
-		OnListAction: func(btn string, idx int) {
-			if btn == "Add" {
-				m.showThemeAddDialog(idx)
-			}
-		},
-	})
-	m.overlay.SetTopCursor(cursor)
-}
-
-func (m *Model) showThemeAddDialog(returnCursor int) {
-	m.overlay.PushDialog(domain.DialogRequest{
-		Title:        "Add Theme",
-		Body:         "Enter a theme name or URL:",
-		InputPrompt:  "Theme",
-		Buttons:      []string{"Load", "Cancel"},
-		OnInputClose: func(btn, value string) {
-			if btn == "Load" && strings.TrimSpace(value) != "" {
-				m.handleThemeCommand("/theme " + strings.TrimSpace(value))
-			}
-			m.pushThemeDialog(returnCursor)
-		},
+		Reload: m.pushThemeDialog,
 	})
 }
 
-// pushPluginDialog opens the Plugins dialog. Enter toggles load/unload.
 func (m *Model) pushPluginDialog(cursor int) {
-	available := engine.ListScripts(filepath.Join(m.api.DataDir(), "plugins"))
-	loadedSet := make(map[string]bool)
-	for _, n := range m.pluginNames {
-		loadedSet[n] = true
-	}
-	availableSet := make(map[string]bool)
-	for _, n := range available {
-		availableSet[n] = true
-	}
-	items := append([]string(nil), available...)
-	for _, n := range m.pluginNames {
-		if !availableSet[n] {
-			items = append(items, n)
-		}
-	}
-	if len(items) == 0 {
-		m.overlay.PushDialog(domain.DialogRequest{
-			Title:   "Plugins",
-			Body:    "No plugins found in plugins/",
-			Buttons: []string{"Add", "Close"},
-			OnClose: func(btn string) {
-				if btn == "Add" {
-					m.showPluginAddDialog(0)
-				}
-			},
-		})
-		return
-	}
-	tags := make([]string, len(items))
-	for i, name := range items {
-		if loadedSet[name] {
-			tags[i] = "[✓]"
-		} else {
-			tags[i] = "[ ]"
-		}
-	}
-	m.overlay.PushDialog(domain.DialogRequest{
-		Title:     "Plugins",
-		ListItems: items,
-		ListTags:  tags,
-		Buttons:   []string{"Add", "Close"},
-		OnListEnter: func(idx int) {
-			name := items[idx]
-			if loadedSet[name] {
-				m.handlePluginCommand("/plugin unload " + name)
-			} else {
+	localcmd.PushScriptDialog(cursor, localcmd.ScriptDialogOptions{
+		Title:   "Plugins",
+		SubDir:  "plugins",
+		DataDir: m.api.DataDir(),
+		Overlay: &m.overlay,
+		Loaded:  m.pluginNames,
+		CanAdd:  true,
+		OnToggle: func(name string, load bool) {
+			if load {
 				m.handlePluginCommand("/plugin load " + name)
-			}
-			m.overlay.PopDialog()
-			m.pushPluginDialog(0)
-			m.overlay.SetTopCursor(idx)
-		},
-		OnListAction: func(btn string, idx int) {
-			if btn == "Add" {
-				m.showPluginAddDialog(idx)
-			}
-		},
-	})
-	m.overlay.SetTopCursor(cursor)
-}
-
-func (m *Model) showPluginAddDialog(returnCursor int) {
-	m.overlay.PushDialog(domain.DialogRequest{
-		Title:        "Add Plugin",
-		Body:         "Enter a plugin name or URL:",
-		InputPrompt:  "Plugin",
-		Buttons:      []string{"Load", "Cancel"},
-		OnInputClose: func(btn, value string) {
-			if btn == "Load" && strings.TrimSpace(value) != "" {
-				m.handlePluginCommand("/plugin load " + strings.TrimSpace(value))
-			}
-			m.pushPluginDialog(returnCursor)
-		},
-	})
-}
-
-// pushShaderDialog opens the Shaders dialog. Enter toggles load/unload.
-func (m *Model) pushShaderDialog(cursor int) {
-	available := engine.ListScripts(filepath.Join(m.api.DataDir(), "shaders"))
-	loadedSet := make(map[string]bool)
-	for _, n := range m.shaderNames {
-		loadedSet[n] = true
-	}
-	availableSet := make(map[string]bool)
-	for _, n := range available {
-		availableSet[n] = true
-	}
-	items := append([]string(nil), available...)
-	for _, n := range m.shaderNames {
-		if !availableSet[n] {
-			items = append(items, n)
-		}
-	}
-	if len(items) == 0 {
-		m.overlay.PushDialog(domain.DialogRequest{
-			Title:   "Shaders",
-			Body:    "No shaders found in shaders/",
-			Buttons: []string{"Add", "Close"},
-			OnClose: func(btn string) {
-				if btn == "Add" {
-					m.showShaderAddDialog(0)
-				}
-			},
-		})
-		return
-	}
-	tags := make([]string, len(items))
-	for i, name := range items {
-		if loadedSet[name] {
-			tags[i] = "[✓]"
-		} else {
-			tags[i] = "[ ]"
-		}
-	}
-	m.overlay.PushDialog(domain.DialogRequest{
-		Title:     "Shaders",
-		ListItems: items,
-		ListTags:  tags,
-		Buttons:   []string{"Add", "Close"},
-		OnListEnter: func(idx int) {
-			name := items[idx]
-			if loadedSet[name] {
-				m.handleShaderCommand("/shader unload " + name)
 			} else {
-				m.handleShaderCommand("/shader load " + name)
-			}
-			m.overlay.PopDialog()
-			m.pushShaderDialog(0)
-			m.overlay.SetTopCursor(idx)
-		},
-		OnListAction: func(btn string, idx int) {
-			if btn == "Add" {
-				m.showShaderAddDialog(idx)
+				m.handlePluginCommand("/plugin unload " + name)
 			}
 		},
+		Reload: m.pushPluginDialog,
 	})
-	m.overlay.SetTopCursor(cursor)
 }
 
-func (m *Model) showShaderAddDialog(returnCursor int) {
-	m.overlay.PushDialog(domain.DialogRequest{
-		Title:        "Add Shader",
-		Body:         "Enter a shader name or URL:",
-		InputPrompt:  "Shader",
-		Buttons:      []string{"Load", "Cancel"},
-		OnInputClose: func(btn, value string) {
-			if btn == "Load" && strings.TrimSpace(value) != "" {
-				m.handleShaderCommand("/shader load " + strings.TrimSpace(value))
+func (m *Model) pushShaderDialog(cursor int) {
+	localcmd.PushScriptDialog(cursor, localcmd.ScriptDialogOptions{
+		Title:   "Shaders",
+		SubDir:  "shaders",
+		DataDir: m.api.DataDir(),
+		Overlay: &m.overlay,
+		Loaded:  m.shaderNames,
+		CanAdd:  true,
+		OnToggle: func(name string, load bool) {
+			if load {
+				m.handleShaderCommand("/shader load " + name)
+			} else {
+				m.handleShaderCommand("/shader unload " + name)
 			}
-			m.pushShaderDialog(returnCursor)
 		},
+		Reload: m.pushShaderDialog,
 	})
 }
