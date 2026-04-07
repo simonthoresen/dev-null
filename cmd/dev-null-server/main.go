@@ -114,20 +114,25 @@ func main() {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		if noSSH {
-			if err := app.RunDirect(ctx, localPlayer, termFlag, noGUI); err != nil {
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
-				os.Exit(1)
-			}
-		} else {
+		if !noSSH && noGUI {
+			// Terminal + SSH: pipe SSH session to stdin/stdout.
 			sshPort := 23234
 			if idx := strings.LastIndex(address, ":"); idx >= 0 {
 				if p := address[idx+1:]; p != "" {
 					fmt.Sscanf(p, "%d", &sshPort)
 				}
 			}
-
 			if err := app.RunLocalSSH(ctx, localPlayer, sshPort, termFlag); err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			// GUI or --no-ssh: run chrome directly (Ebitengine window or terminal).
+			// Start the SSH server in the background so other players can connect.
+			if !noSSH {
+				go app.Start(ctx) //nolint:errcheck
+			}
+			if err := app.RunDirect(ctx, localPlayer, termFlag, noGUI); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
