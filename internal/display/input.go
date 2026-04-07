@@ -59,13 +59,15 @@ func PollKeyMessages() []tea.Msg {
 
 	// Character input (typed text) — Ebitengine filters to printable runes.
 	// Note: Ebitengine handles key repeat for character input automatically.
+	// Skip when Alt or Ctrl is held — those combos are handled separately below.
 	runes := ebiten.AppendInputChars(nil)
-	for _, r := range runes {
-		msgs = append(msgs, tea.KeyPressMsg{
-			Code: rune(r),
-			Text: string(r),
-			Mod:  buildMod(false, alt, false), // shift already applied to the rune
-		})
+	if !alt && !ctrl {
+		for _, r := range runes {
+			msgs = append(msgs, tea.KeyPressMsg{
+				Code: rune(r),
+				Text: string(r),
+			})
+		}
 	}
 
 	// Special keys with key repeat support.
@@ -80,8 +82,7 @@ func PollKeyMessages() []tea.Msg {
 	}
 
 	// Alt+letter for menu shortcuts (e.g. Alt+F for File menu).
-	// These don't produce runes via AppendInputChars when Alt is held.
-	if alt && len(runes) == 0 {
+	if alt && !ctrl {
 		for key := ebiten.KeyA; key <= ebiten.KeyZ; key++ {
 			if inpututil.IsKeyJustPressed(key) {
 				letter := rune('a' + (key - ebiten.KeyA))
@@ -93,8 +94,8 @@ func PollKeyMessages() []tea.Msg {
 		}
 	}
 
-	// Ctrl+letter combos that don't produce runes.
-	if ctrl && !alt && len(runes) == 0 {
+	// Ctrl+letter combos.
+	if ctrl && !alt {
 		for key := ebiten.KeyA; key <= ebiten.KeyZ; key++ {
 			if inpututil.IsKeyJustPressed(key) {
 				letter := rune('a' + (key - ebiten.KeyA))
