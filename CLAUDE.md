@@ -16,41 +16,35 @@ Games are written in JavaScript (goja) and loaded at runtime from `dist/games/`.
 
 ```bash
 make build              # compile to dist/dev-null-{server,client}.exe + dist/pinggy-helper.exe
-make run-server         # server: SSH server + console TUI
+make run-server         # server: SSH server + console GUI
 make run-server-lan     # server: LAN-only (no UPnP, no public IP, no Pinggy)
-make run-server-local   # server: headless SSH server + terminal client
 make run-client         # client: connect to a running server
 make run-client-local   # client: headless SSH server + graphical client
 make clean              # remove compiled binaries from dist/
 
-go run ./cmd/dev-null-server --data-dir dist   # GUI mode (default): Ebitengine window
-go run ./cmd/dev-null-server --no-gui --data-dir dist   # TUI mode: runs in terminal
+# Server — runs the SSH server + admin console.
+go run ./cmd/dev-null-server --data-dir dist             # GUI mode (default)
+go run ./cmd/dev-null-server --no-gui --data-dir dist    # TUI mode
 go test ./...
 
 ssh -p 23234 localhost   # connect via plain SSH (host plays this way too)
 
-# Graphical client — SSH + sprite rendering for charmap games.
+# Client — connects to a server (or starts one locally with --local).
 go run ./cmd/dev-null-client
 go run ./cmd/dev-null-client --host example.com --port 23234 --player alice
 go run ./cmd/dev-null-client --no-gui   # TUI mode: render in terminal instead of window
 
-# Local mode (server) — headless SSH server + terminal client in one process.
-# Exercises the full SSH pipeline; you see what `ssh -p 23234 localhost` would show.
-go run ./cmd/dev-null-server --local --data-dir dist
-go run ./cmd/dev-null-server --local --no-gui --data-dir dist   # local + TUI
-go run ./cmd/dev-null-server --local --data-dir dist --player alice
-go run ./cmd/dev-null-server --local --data-dir dist --game orbits
-go run ./cmd/dev-null-server --local --data-dir dist --resume orbits/autosave
-
-# No-SSH mode — skips SSH entirely; chrome renders directly via Bubble Tea or Ebitengine.
-# Use to isolate rendering artifacts: if gone here, the bug is in SSH/PTY/transport.
-go run ./cmd/dev-null-server --local --no-ssh --data-dir dist --game cube          # GUI
-go run ./cmd/dev-null-server --local --no-ssh --no-gui --data-dir dist --game cube  # TUI
-
-# Local mode (client) — headless SSH server + graphical client in one process.
-# Exercises the full SSH pipeline with the Ebitengine renderer.
+# Local mode — starts a headless server + connects the client in one process.
 go run ./cmd/dev-null-client --local --data-dir dist
-go run ./cmd/dev-null-client --local --data-dir dist --player alice --game orbits
+go run ./cmd/dev-null-client --local --data-dir dist --player alice
+go run ./cmd/dev-null-client --local --data-dir dist --game orbits
+go run ./cmd/dev-null-client --local --data-dir dist --resume orbits/autosave
+go run ./cmd/dev-null-client --local --no-gui --data-dir dist    # local + TUI
+
+# No-SSH mode — skips SSH transport; chrome renders directly via Bubble Tea or Ebitengine.
+# Use to isolate rendering artifacts: if gone here, the bug is in SSH/PTY/transport.
+go run ./cmd/dev-null-client --local --no-ssh --data-dir dist --game cube          # GUI
+go run ./cmd/dev-null-client --local --no-ssh --no-gui --data-dir dist --game cube  # TUI
 ```
 
 **Environment variables:**

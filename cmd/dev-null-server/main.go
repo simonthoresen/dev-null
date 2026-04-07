@@ -46,11 +46,6 @@ func main() {
 	var address string
 	var portOverride string
 	var dataDir string
-	var localMode bool
-	var noSSH bool
-	var localPlayer string
-	var localGame string
-	var localResume string
 	var lanMode bool
 	var noGUI bool
 	var tickInterval time.Duration
@@ -59,13 +54,8 @@ func main() {
 	flag.StringVar(&address, "address", ":23234", "listen address")
 	flag.StringVar(&portOverride, "port", "", "SSH listen port (overrides --address port, default 23234)")
 	flag.StringVar(&dataDir, "data-dir", datadir.DefaultDataDir(), "directory containing games/, logs/")
-	flag.BoolVar(&localMode, "local", false, "run headless SSH server and connect as a terminal client")
-	flag.BoolVar(&noSSH, "no-ssh", false, "skip SSH entirely; connect chrome directly to the terminal (requires --local)")
 	flag.BoolVar(&lanMode, "lan", false, "LAN-only server (no UPnP, no public IP, no Pinggy)")
 	flag.BoolVar(&noGUI, "no-gui", false, "run in terminal mode (TUI) instead of opening a graphical window")
-	flag.StringVar(&localPlayer, "player", "player", "player name (local mode)")
-	flag.StringVar(&localGame, "game", "", "game to preload (local mode)")
-	flag.StringVar(&localResume, "resume", "", "game/save to resume, e.g. orbits/autosave (local mode)")
 	flag.DurationVar(&tickInterval, "tick-interval", 100*time.Millisecond, "server tick interval (e.g. 100ms, 50ms)")
 	flag.StringVar(&termFlag, "term", "", "force terminal color profile for all sessions: truecolor, 256color, ansi, ascii")
 	flag.Parse()
@@ -83,62 +73,6 @@ func main() {
 
 	if portOverride != "" {
 		address = ":" + portOverride
-	}
-
-	if localMode {
-		app, err := server.New(address, password, dataDir, tickInterval)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
-		app.InstallConsoleSlogHandler()
-
-		// Preload or resume a game before the client connects.
-		if localResume != "" {
-			parts := strings.SplitN(localResume, "/", 2)
-			if len(parts) != 2 {
-				fmt.Fprintf(os.Stderr, "--resume requires game/save format, e.g. orbits/autosave\n")
-				os.Exit(1)
-			}
-			if err := app.PreloadResume(parts[0], parts[1]); err != nil {
-				fmt.Fprintf(os.Stderr, "resume %s: %v\n", localResume, err)
-				os.Exit(1)
-			}
-		} else if localGame != "" {
-			if err := app.PreloadGame(localGame); err != nil {
-				fmt.Fprintf(os.Stderr, "load game %s: %v\n", localGame, err)
-				os.Exit(1)
-			}
-		}
-
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-		defer stop()
-
-		if !noSSH && noGUI {
-			// Terminal + SSH: pipe SSH session to stdin/stdout.
-			sshPort := 23234
-			if idx := strings.LastIndex(address, ":"); idx >= 0 {
-				if p := address[idx+1:]; p != "" {
-					fmt.Sscanf(p, "%d", &sshPort)
-				}
-			}
-			if err := app.RunLocalSSH(ctx, localPlayer, sshPort, termFlag); err != nil {
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
-				os.Exit(1)
-			}
-		} else {
-			// GUI or --no-ssh: run chrome directly (Ebitengine window or terminal).
-			// Start the SSH server in the background so other players can connect.
-			if !noSSH {
-				go app.Start(ctx) //nolint:errcheck
-			}
-			if err := app.RunDirect(ctx, localPlayer, termFlag, noGUI); err != nil {
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
-				os.Exit(1)
-			}
-		}
-		stop()
-		return
 	}
 
 	// Determine port from address
@@ -381,5 +315,3 @@ func detectConsoleProfile(termFlag string) colorprofile.Profile {
 	}
 	return colorprofile.Detect(os.Stderr, os.Environ())
 }
-
-

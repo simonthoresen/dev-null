@@ -1,4 +1,4 @@
-.PHONY: build build-server build-client build-testbed run-server run-server-lan run-server-local run-client run-client-local run-testbed run-testbed-onlcr test clean generate-manifest
+.PHONY: build build-server build-client build-testbed run-server run-server-lan run-client run-client-local run-testbed run-testbed-onlcr test clean generate-manifest
 
 GIT_COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 BUILD_DATE  := $(shell git log -1 --format=%cI 2>/dev/null || echo unknown)
@@ -21,10 +21,6 @@ run-server: build-server
 # Server: LAN-only mode (no UPnP, no public IP, no Pinggy)
 run-server-lan: build-server
 	./dist/dev-null-server.exe --data-dir dist --lan
-
-# Server: local mode (headless SSH server + terminal client)
-run-server-local: build-server
-	./dist/dev-null-server.exe --data-dir dist --local
 
 # Client: connect to a running server
 run-client: build-client

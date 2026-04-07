@@ -43,15 +43,21 @@ func main() {
 	port := flag.Int("port", 23234, "server SSH port")
 	player := flag.String("player", defaultPlayer(), "player name")
 	noGUI := flag.Bool("no-gui", false, "run in terminal mode (TUI) instead of opening a graphical window")
-	localMode := flag.Bool("local", false, "start a headless SSH server and connect the graphical client to it")
+	localMode := flag.Bool("local", false, "start a headless server and connect to it")
+	noSSH := flag.Bool("no-ssh", false, "skip SSH transport; connect chrome directly (requires --local, for testing)")
 	address := flag.String("address", ":23234", "SSH listen address (local mode)")
 	dataDir := flag.String("data-dir", datadir.DefaultDataDir(), "data directory containing games/ (local mode)")
 	gameName := flag.String("game", "", "game to preload (local mode)")
 	resumeName := flag.String("resume", "", "game/save to resume, e.g. orbits/autosave (local mode)")
 	tickInterval := flag.Duration("tick-interval", 100*time.Millisecond, "server tick interval (local mode)")
 	password := flag.String("password", "", "admin password (authenticates as admin on connect)")
-	termFlag := flag.String("term", "", "force terminal color profile for local-mode sessions: truecolor, 256color, ansi, ascii")
+	termFlag := flag.String("term", "", "force terminal color profile: truecolor, 256color, ansi, ascii")
 	flag.Parse()
+
+	if *noSSH && !*localMode {
+		fmt.Fprintf(os.Stderr, "--no-ssh requires --local\n")
+		os.Exit(1)
+	}
 
 	// Bootstrap bundled assets for local mode.
 	if *localMode && *dataDir == datadir.DefaultDataDir() {
@@ -62,7 +68,7 @@ func main() {
 	}
 
 	if *localMode {
-		runLocal(*address, *dataDir, *player, *port, *tickInterval, *gameName, *resumeName, *termFlag)
+		runLocal(*address, *dataDir, *player, *port, *tickInterval, *gameName, *resumeName, *termFlag, *noSSH, *noGUI)
 		return
 	}
 
@@ -102,10 +108,8 @@ func main() {
 	}
 }
 
-// runLocal starts a headless SSH server in-process, then connects the
-// graphical Ebitengine client to it. This exercises the full network pipeline
-// (SSH transport, session middleware, PTY, etc.) in a single process.
-func runLocal(address, dataDir, playerName string, port int, tickInterval time.Duration, gameName, resumeName, termFlag string) {
+// runLocal starts a headless server in-process, then connects to it.
+func runLocal(address, dataDir, playerName string, port int, tickInterval time.Duration, gameName, resumeName, termFlag string, noSSH, noGUI bool) {
 	app, err := server.New(address, "", dataDir, tickInterval)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating server: %v\n", err)
@@ -134,7 +138,32 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Parse port from address.
+	if noSSH {
+		// No-SSH mode: connect chrome directly (no SSH transport).
+		// Useful for isolating rendering issues from transport issues.
+		if err := app.RunDirect(ctx, playerName, termFlag, noGUI); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if noGUI {
+		// TUI + SSH: pipe SSH session to the terminal.
+		sshPort := port
+		if idx := strings.LastIndex(address, ":"); idx >= 0 {
+			if p := address[idx+1:]; p != "" {
+				fmt.Sscanf(p, "%d", &sshPort)
+			}
+		}
+		if err := app.RunLocalSSH(ctx, playerName, sshPort, termFlag); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// GUI + SSH: start server, connect via SSH, run Ebitengine renderer.
 	sshPort := port
 	if idx := strings.LastIndex(address, ":"); idx >= 0 {
 		if p := address[idx+1:]; p != "" {
@@ -142,7 +171,6 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 		}
 	}
 
-	// Start SSH server and wait for it to be ready.
 	ready := make(chan struct{})
 	serverErr := make(chan error, 1)
 	go func() {
@@ -151,7 +179,6 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 
 	select {
 	case <-ready:
-		// Server is listening.
 	case err := <-serverErr:
 		fmt.Fprintf(os.Stderr, "server failed to start: %v\n", err)
 		os.Exit(1)
@@ -159,7 +186,6 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 		return
 	}
 
-	// Connect via SSH using the full client stack (graphical mode).
 	conn, err := client.Dial("127.0.0.1", sshPort, playerName, false, termFlag, "", 0, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local SSH dial: %v\n", err)
@@ -167,7 +193,6 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	}
 	defer conn.Close()
 
-	// Run the graphical client.
 	fontFace := client.DefaultFontFace()
 	game := client.NewGame(conn, fontFace, 1200, 800, playerName, dataDir)
 
@@ -184,7 +209,6 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 }
 
 // detectClientProfile returns the color profile for client-side terminal rendering.
-// It auto-detects from the local terminal env, then applies the --term override.
 func detectClientProfile(termFlag string) colorprofile.Profile {
 	if termFlag != "" {
 		switch strings.ToLower(termFlag) {
