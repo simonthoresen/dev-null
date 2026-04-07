@@ -3,6 +3,7 @@
 package display
 
 import (
+	"image"
 	"image/color"
 	"math"
 	"os"
@@ -107,6 +108,7 @@ func init() {
 
 // DrawImageBuffer renders an ImageBuffer to an Ebitengine screen image.
 // Each cell is drawn as a colored background rectangle, then foreground text.
+// Text is clipped to cell bounds to prevent box-drawing glyph overflow.
 func DrawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer, fontFace text.Face) {
 	for cy := 0; cy < buf.Height; cy++ {
 		for cx := 0; cx < buf.Width; cx++ {
@@ -126,17 +128,20 @@ func DrawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer, fontFace tex
 				screen.DrawImage(sharedPixel, op)
 			}
 
-			// Foreground text.
+			// Foreground text — clip to cell bounds so box-drawing glyphs
+			// don't bleed into adjacent cells.
 			if p.Char != ' ' && p.Char != 0 {
 				fg := color.RGBA{R: 204, G: 204, B: 204, A: 255}
 				if p.Fg != nil {
 					r, g, b, _ := p.Fg.RGBA()
 					fg = color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 255}
 				}
+				cellRect := image.Rect(px, py, px+CellW, py+CellH)
+				cellClip := screen.SubImage(cellRect).(*ebiten.Image)
 				dop := &text.DrawOptions{}
 				dop.GeoM.Translate(float64(px), float64(py))
 				dop.ColorScale.ScaleWithColor(fg)
-				text.Draw(screen, string(p.Char), fontFace, dop)
+				text.Draw(cellClip, string(p.Char), fontFace, dop)
 			}
 		}
 	}
