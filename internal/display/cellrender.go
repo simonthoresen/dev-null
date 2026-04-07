@@ -106,10 +106,31 @@ func init() {
 	sharedPixel.Fill(color.White)
 }
 
+// textBuf is a reusable offscreen image for rendering text with per-cell
+// clipping. Each cell is drawn into a CellW×CellH sub-region; the offscreen
+// boundary clips glyph overflow. Reused across frames, reallocated on resize.
+var (
+	textBuf  *ebiten.Image
+	textBufW int
+	textBufH int
+)
+
 // DrawImageBuffer renders an ImageBuffer to an Ebitengine screen image.
 // Each cell is drawn as a colored background rectangle, then foreground text.
-// Text is clipped to cell bounds to prevent box-drawing glyph overflow.
+// Text is rendered per-cell into an offscreen buffer to clip box-drawing
+// glyph overflow, then composited onto the screen in a single draw call.
 func DrawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer, fontFace text.Face) {
+	pixW := buf.Width * CellW
+	pixH := buf.Height * CellH
+
+	// Ensure offscreen text buffer is large enough.
+	if textBuf == nil || textBufW != pixW || textBufH != pixH {
+		textBuf = ebiten.NewImage(pixW, pixH)
+		textBufW = pixW
+		textBufH = pixH
+	}
+	textBuf.Clear()
+
 	for cy := 0; cy < buf.Height; cy++ {
 		for cx := 0; cx < buf.Width; cx++ {
 			p := &buf.Pixels[cy*buf.Width+cx]
@@ -128,16 +149,15 @@ func DrawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer, fontFace tex
 				screen.DrawImage(sharedPixel, op)
 			}
 
-			// Foreground text — clip to cell bounds so box-drawing glyphs
-			// don't bleed into adjacent cells.
+			// Foreground text — draw into per-cell sub-region of offscreen buffer.
+			// The sub-region clips glyph overflow at cell boundaries.
 			if p.Char != ' ' && p.Char != 0 {
 				fg := color.RGBA{R: 204, G: 204, B: 204, A: 255}
 				if p.Fg != nil {
 					r, g, b, _ := p.Fg.RGBA()
 					fg = color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 255}
 				}
-				cellRect := image.Rect(px, py, px+CellW, py+CellH)
-				cellClip := screen.SubImage(cellRect).(*ebiten.Image)
+				cellClip := textBuf.SubImage(image.Rect(px, py, px+CellW, py+CellH)).(*ebiten.Image)
 				dop := &text.DrawOptions{}
 				dop.GeoM.Translate(float64(px), float64(py))
 				dop.ColorScale.ScaleWithColor(fg)
@@ -145,4 +165,7 @@ func DrawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer, fontFace tex
 			}
 		}
 	}
+
+	// Composite text layer onto screen in a single draw call.
+	screen.DrawImage(textBuf, nil)
 }
