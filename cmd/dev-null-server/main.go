@@ -19,6 +19,7 @@ import (
 
 	"dev-null/internal/console"
 	"dev-null/internal/datadir"
+	"dev-null/internal/display"
 	"dev-null/internal/engine"
 	"dev-null/internal/runlog"
 	"dev-null/internal/server"
@@ -51,6 +52,7 @@ func main() {
 	var localGame string
 	var localResume string
 	var lanMode bool
+	var terminalMode bool
 	var tickInterval time.Duration
 	var termFlag string
 	flag.StringVar(&password, "password", "", "admin password (optional, can be set at runtime via /password)")
@@ -60,6 +62,7 @@ func main() {
 	flag.BoolVar(&localMode, "local", false, "run headless SSH server and connect as a terminal client")
 	flag.BoolVar(&noSSH, "no-ssh", false, "skip SSH entirely; connect chrome directly to the terminal (requires --local)")
 	flag.BoolVar(&lanMode, "lan", false, "LAN-only server (no UPnP, no public IP, no Pinggy)")
+	flag.BoolVar(&terminalMode, "terminal", false, "run in terminal mode (TUI) instead of opening a graphical window")
 	flag.StringVar(&localPlayer, "player", "player", "player name (local mode)")
 	flag.StringVar(&localGame, "game", "", "game to preload (local mode)")
 	flag.StringVar(&localResume, "resume", "", "game/save to resume, e.g. orbits/autosave (local mode)")
@@ -112,7 +115,7 @@ func main() {
 		defer stop()
 
 		if noSSH {
-			if err := app.RunDirect(ctx, localPlayer, termFlag); err != nil {
+			if err := app.RunDirect(ctx, localPlayer, termFlag, terminalMode); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
@@ -194,19 +197,11 @@ func main() {
 
 	startBootStep("Starting console")
 	consoleModel := console.NewModel(app, stop, bootProfile)
-	program := tea.NewProgram(consoleModel, tea.WithFPS(60), tea.WithColorProfile(bootProfile))
-	app.SetConsoleProgram(program)
 
 	// Start server in background
 	serverErr := make(chan error, 1)
 	go func() {
 		serverErr <- app.Start(ctx)
-	}()
-
-	// Quit console when context is cancelled
-	go func() {
-		<-ctx.Done()
-		program.Send(tea.QuitMsg{})
 	}()
 
 	// Force-exit on second Ctrl+C (safety valve if Bubble Tea is stuck)
@@ -220,8 +215,32 @@ func main() {
 	}()
 
 	finishBootStep("DONE")
-	if _, err := program.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "console error: %v\n", err)
+
+	if terminalMode {
+		// TUI mode: run console in the terminal via Bubble Tea.
+		program := tea.NewProgram(consoleModel, tea.WithFPS(60), tea.WithColorProfile(bootProfile))
+		app.SetConsoleProgram(program)
+		go func() {
+			<-ctx.Done()
+			program.Send(tea.QuitMsg{})
+		}()
+		if _, err := program.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "console error: %v\n", err)
+		}
+	} else {
+		// GUI mode: run console in an Ebitengine window.
+		backend := display.NewEbitenBackend(
+			display.WithWindowTitle("dev-null server"),
+			display.WithWindowSize(1200, 800),
+		)
+		app.SetConsoleSender(backend)
+		go func() {
+			<-ctx.Done()
+			backend.Send(tea.QuitMsg{})
+		}()
+		if err := backend.Run(consoleModel); err != nil {
+			fmt.Fprintf(os.Stderr, "console error: %v\n", err)
+		}
 	}
 
 	startBootStep("Initiating shutdown")

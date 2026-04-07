@@ -17,16 +17,16 @@ import (
 
 // --- Broadcast and messaging ---
 
-// safeSend sends msg to p in a goroutine, recovering from any panic (e.g.
+// safeSend sends msg to s in a goroutine, recovering from any panic (e.g.
 // if the program has already shut down).
-func safeSend(p *tea.Program, msg tea.Msg) {
+func safeSend(s msgSender, msg tea.Msg) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				slog.Error("Send panic", "panic", r)
 			}
 		}()
-		p.Send(msg)
+		s.Send(msg)
 	}()
 }
 
@@ -35,7 +35,7 @@ func safeSend(p *tea.Program, msg tea.Msg) {
 // a complete frame — recovering from any accumulated display artifacts.
 func (a *Server) broadcastRepaint() {
 	a.programsMu.Lock()
-	progs := make([]*tea.Program, 0, len(a.programs))
+	progs := make([]msgSender, 0, len(a.programs))
 	for _, p := range a.programs {
 		progs = append(progs, p)
 	}
@@ -47,7 +47,7 @@ func (a *Server) broadcastRepaint() {
 
 func (a *Server) broadcastMsg(msg tea.Msg) {
 	a.programsMu.Lock()
-	progs := make([]*tea.Program, 0, len(a.programs))
+	progs := make([]msgSender, 0, len(a.programs))
 	for _, p := range a.programs {
 		progs = append(progs, p)
 	}
@@ -58,10 +58,10 @@ func (a *Server) broadcastMsg(msg tea.Msg) {
 	}
 
 	a.consoleProgramMu.Lock()
-	cp := a.consoleProgram
+	cs := a.consoleSender
 	a.consoleProgramMu.Unlock()
-	if cp != nil {
-		safeSend(cp, msg)
+	if cs != nil {
+		safeSend(cs, msg)
 	}
 }
 

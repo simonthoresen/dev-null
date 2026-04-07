@@ -191,6 +191,12 @@ func (m *Model) Init() tea.Cmd {
 	return tea.Batch(m.inputCtrl.Model.Focus(), listenForEvents(m.api.ChatCh(), m.api.SlogCh()))
 }
 
+// ViewBuffer returns the raw render buffer from the last View() call.
+// Used by the GUI backend to skip ANSI serialization.
+func (m *Model) ViewBuffer() *render.ImageBuffer {
+	return m.renderBuf
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:

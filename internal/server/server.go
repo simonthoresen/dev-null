@@ -30,6 +30,11 @@ import (
 	"dev-null/internal/state"
 )
 
+// msgSender is anything that can receive a tea.Msg (tea.Program, display.Backend, etc.).
+type msgSender interface {
+	Send(msg tea.Msg)
+}
+
 type Server struct {
 	state    *state.CentralState
 	registry *commandRegistry
@@ -38,7 +43,7 @@ type Server struct {
 	clock    domain.Clock // central server clock (mockable in tests)
 
 	maxPlayers int // max concurrent SSH sessions (0 = unlimited)
-	programs   map[string]*tea.Program // key = playerID
+	programs   map[string]msgSender // key = playerID
 	programsMu sync.Mutex
 
 	sessions   map[string]ssh.Session // SSH sessions; nil in local mode
@@ -55,7 +60,8 @@ type Server struct {
 	sshServer  *ssh.Server
 
 	consoleProgramMu sync.Mutex
-	consoleProgram   *tea.Program
+	consoleProgram   *tea.Program  // TUI mode: the tea.Program for the console
+	consoleSender    msgSender     // GUI or TUI: anything that can receive tea.Msg
 	consoleWidth     int
 
 	upnpMapping *network.UPnPMapping
@@ -80,7 +86,7 @@ func New(address, password, dataDir string, tickInterval time.Duration) (*Server
 		clock:        domain.RealClock{},
 		tickInterval: tickInterval,
 		maxPlayers:   domain.MaxConnections,
-		programs:     make(map[string]*tea.Program),
+		programs:     make(map[string]msgSender),
 		sessions:     make(map[string]ssh.Session),
 		logCh:        make(chan string, 256),
 		chatCh:       make(chan domain.Message, 256),
@@ -409,6 +415,16 @@ func (a *Server) uptime() string {
 func (a *Server) SetConsoleProgram(p *tea.Program) {
 	a.consoleProgramMu.Lock()
 	a.consoleProgram = p
+	a.consoleSender = p
+	a.consoleProgramMu.Unlock()
+}
+
+// SetConsoleSender registers a message sender for the console (GUI mode).
+// Use this instead of SetConsoleProgram when the console runs in an
+// EbitenBackend rather than a tea.Program.
+func (a *Server) SetConsoleSender(s msgSender) {
+	a.consoleProgramMu.Lock()
+	a.consoleSender = s
 	a.consoleProgramMu.Unlock()
 }
 
@@ -467,7 +483,7 @@ func (a *Server) registerBuiltins() {
 		p := a.programs[ctx.PlayerID]
 		a.programsMu.Unlock()
 		if p != nil {
-			go p.Quit() // async: called from inside the Bubble Tea update loop
+			safeSend(p, tea.QuitMsg{}) // async: called from inside the Bubble Tea update loop
 		}
 	}
 

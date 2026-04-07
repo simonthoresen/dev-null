@@ -19,8 +19,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
 	"github.com/hajimehoshi/ebiten/v2/audio/wav"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-	"github.com/hajimehoshi/bitmapfont/v4"
 
+	"dev-null/internal/display"
 	"dev-null/internal/render"
 	"dev-null/internal/theme"
 )
@@ -40,9 +40,10 @@ func getAudioCtx() *audio.Context {
 }
 
 // cellW and cellH are the pixel dimensions of a single terminal cell.
+// These alias display.CellW/CellH for internal use.
 const (
-	cellW = 10
-	cellH = 20
+	cellW = display.CellW
+	cellH = display.CellH
 )
 
 // Game implements ebiten.Game for the dev-null client.
@@ -93,7 +94,7 @@ type Game struct {
 
 // DefaultFontFace returns the built-in bitmap font face for terminal rendering.
 func DefaultFontFace() text.Face {
-	return text.NewGoXFace(bitmapfont.Face)
+	return display.DefaultFontFace()
 }
 
 // NewGame creates a new client game instance.
@@ -584,38 +585,8 @@ func (g *Game) drawRemote(screen *ebiten.Image) {
 
 // Layout implements ebiten.Game.
 // drawImageBuffer renders an ImageBuffer to the Ebitengine screen.
-// Each cell is drawn as a colored background rectangle, then foreground text.
 func (g *Game) drawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer) {
-	for cy := 0; cy < buf.Height; cy++ {
-		for cx := 0; cx < buf.Width; cx++ {
-			p := &buf.Pixels[cy*buf.Width+cx]
-			px := cx * cellW
-			py := cy * cellH
-
-			// Background.
-			if p.Bg != nil {
-				r, gg, b, _ := p.Bg.RGBA()
-				bgImg := ebiten.NewImage(cellW, cellH)
-				bgImg.Fill(color.RGBA{R: uint8(r >> 8), G: uint8(gg >> 8), B: uint8(b >> 8), A: 255})
-				op := &ebiten.DrawImageOptions{}
-				op.GeoM.Translate(float64(px), float64(py))
-				screen.DrawImage(bgImg, op)
-			}
-
-			// Foreground text.
-			if p.Char != ' ' && p.Char != 0 {
-				fg := color.RGBA{R: 204, G: 204, B: 204, A: 255}
-				if p.Fg != nil {
-					r, gg, b, _ := p.Fg.RGBA()
-					fg = color.RGBA{R: uint8(r >> 8), G: uint8(gg >> 8), B: uint8(b >> 8), A: 255}
-				}
-				dop := &text.DrawOptions{}
-				dop.GeoM.Translate(float64(px), float64(py))
-				dop.ColorScale.ScaleWithColor(fg)
-				text.Draw(screen, string(p.Char), g.fontFace, dop)
-			}
-		}
-	}
+	display.DrawImageBuffer(screen, buf, g.fontFace)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

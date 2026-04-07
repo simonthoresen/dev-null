@@ -23,7 +23,8 @@ make run-client         # client: connect to a running server
 make run-client-local   # client: headless SSH server + graphical client
 make clean              # remove compiled binaries from dist/
 
-go run ./cmd/dev-null-server --data-dir dist   # equivalent to make run, add --password etc.
+go run ./cmd/dev-null-server --data-dir dist   # GUI mode (default): Ebitengine window
+go run ./cmd/dev-null-server --terminal --data-dir dist   # TUI mode: runs in terminal
 go test ./...
 
 ssh -p 23234 localhost   # connect via plain SSH (host plays this way too)
@@ -31,17 +32,20 @@ ssh -p 23234 localhost   # connect via plain SSH (host plays this way too)
 # Graphical client — SSH + sprite rendering for charmap games.
 go run ./cmd/dev-null-client
 go run ./cmd/dev-null-client --host example.com --port 23234 --player alice
+go run ./cmd/dev-null-client --terminal   # TUI mode: render in terminal instead of window
 
 # Local mode (server) — headless SSH server + terminal client in one process.
 # Exercises the full SSH pipeline; you see what `ssh -p 23234 localhost` would show.
 go run ./cmd/dev-null-server --local --data-dir dist
+go run ./cmd/dev-null-server --local --terminal --data-dir dist   # local + TUI
 go run ./cmd/dev-null-server --local --data-dir dist --player alice
 go run ./cmd/dev-null-server --local --data-dir dist --game orbits
 go run ./cmd/dev-null-server --local --data-dir dist --resume orbits/autosave
 
-# No-SSH mode — skips SSH entirely; chrome renders directly to terminal via Bubble Tea.
+# No-SSH mode — skips SSH entirely; chrome renders directly via Bubble Tea or Ebitengine.
 # Use to isolate rendering artifacts: if gone here, the bug is in SSH/PTY/transport.
-go run ./cmd/dev-null-server --local --no-ssh --data-dir dist --game cube
+go run ./cmd/dev-null-server --local --no-ssh --data-dir dist --game cube          # GUI
+go run ./cmd/dev-null-server --local --no-ssh --terminal --data-dir dist --game cube  # TUI
 
 # Local mode (client) — headless SSH server + graphical client in one process.
 # Exercises the full SSH pipeline with the Ebitengine renderer.
@@ -89,6 +93,11 @@ On first run or version upgrade, `datadir.Bootstrap()` copies bundled assets fro
 | `internal/server/commands.go` | Slash command registry and dispatch |
 | `internal/server/local.go` | `--local` mode: headless SSH server + terminal SSH pipe to stdin/stdout |
 | `internal/server/pinggy.go` | Pinggy tunnel status polling bridge |
+| `internal/display/display.go` | Display backend interface: `Backend`, `BufferViewer`, options |
+| `internal/display/terminal.go` | `TerminalBackend`: wraps `tea.Program` for TUI mode |
+| `internal/display/ebiten.go` | `EbitenBackend`: Ebitengine window for GUI mode (drives Bubble Tea models) |
+| `internal/display/cellrender.go` | Shared cell→pixel renderer: `DrawImageBuffer()`, `DefaultFontFace()` |
+| `internal/display/input.go` | Ebitengine key/mouse → `tea.Msg` translation |
 | `internal/chrome/model.go` | Per-player TUI model: struct, constructor, Init, Update |
 | `internal/chrome/view.go` | Per-player rendering: lobby, playing, starting, ending |
 | `internal/chrome/input.go` | Key/mouse handling: lobby, game, team editing |

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/ssh"
 
 	"dev-null/internal/domain"
@@ -81,7 +80,7 @@ func newTestServer(t *testing.T) *Server {
 		registry:     newCommandRegistry(),
 		dataDir:      dir,
 		clock:        &domain.MockClock{T: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
-		programs:     make(map[string]*tea.Program),
+		programs:     make(map[string]msgSender),
 		sessions:     make(map[string]ssh.Session),
 		tickInterval: 100 * time.Millisecond,
 	}

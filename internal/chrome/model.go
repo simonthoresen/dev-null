@@ -345,6 +345,12 @@ func (m *Model) Init() tea.Cmd {
 	return m.lobbyInput.Model.Focus() // starts cursor blink in lobby
 }
 
+// ViewBuffer returns the raw render buffer from the last View() call.
+// Used by the GUI backend to skip ANSI serialization.
+func (m *Model) ViewBuffer() *render.ImageBuffer {
+	return m.renderBuf
+}
+
 
 func (m *Model) syncChat() {
 	// Rebuild chat from state
