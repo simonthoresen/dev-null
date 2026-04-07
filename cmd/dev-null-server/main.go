@@ -52,7 +52,7 @@ func main() {
 	var localGame string
 	var localResume string
 	var lanMode bool
-	var terminalMode bool
+	var noGUI bool
 	var tickInterval time.Duration
 	var termFlag string
 	flag.StringVar(&password, "password", "", "admin password (optional, can be set at runtime via /password)")
@@ -62,7 +62,7 @@ func main() {
 	flag.BoolVar(&localMode, "local", false, "run headless SSH server and connect as a terminal client")
 	flag.BoolVar(&noSSH, "no-ssh", false, "skip SSH entirely; connect chrome directly to the terminal (requires --local)")
 	flag.BoolVar(&lanMode, "lan", false, "LAN-only server (no UPnP, no public IP, no Pinggy)")
-	flag.BoolVar(&terminalMode, "terminal", false, "run in terminal mode (TUI) instead of opening a graphical window")
+	flag.BoolVar(&noGUI, "no-gui", false, "run in terminal mode (TUI) instead of opening a graphical window")
 	flag.StringVar(&localPlayer, "player", "player", "player name (local mode)")
 	flag.StringVar(&localGame, "game", "", "game to preload (local mode)")
 	flag.StringVar(&localResume, "resume", "", "game/save to resume, e.g. orbits/autosave (local mode)")
@@ -115,7 +115,7 @@ func main() {
 		defer stop()
 
 		if noSSH {
-			if err := app.RunDirect(ctx, localPlayer, termFlag, terminalMode); err != nil {
+			if err := app.RunDirect(ctx, localPlayer, termFlag, noGUI); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
@@ -216,7 +216,7 @@ func main() {
 
 	finishBootStep("DONE")
 
-	if terminalMode {
+	if noGUI {
 		// TUI mode: run console in the terminal via Bubble Tea.
 		program := tea.NewProgram(consoleModel, tea.WithFPS(60), tea.WithColorProfile(bootProfile))
 		app.SetConsoleProgram(program)

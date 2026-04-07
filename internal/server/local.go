@@ -125,7 +125,7 @@ func (a *Server) RunLocalSSH(ctx context.Context, playerName string, port int, t
 // normally, but a chrome model is connected directly to os.Stdin/os.Stdout
 // via Bubble Tea. No SSH transport, no KittyStripWriter, no PTY negotiation.
 // Use alongside --local to isolate rendering issues from transport issues.
-func (a *Server) RunDirect(ctx context.Context, playerName, termOverride string, terminal bool) error {
+func (a *Server) RunDirect(ctx context.Context, playerName, termOverride string, noGUI bool) error {
 	// Initialise lastUpdate so the first tick dt isn't enormous.
 	a.lastUpdateMu.Lock()
 	a.lastUpdate = time.Now()
@@ -182,7 +182,7 @@ func (a *Server) RunDirect(ctx context.Context, playerName, termOverride string,
 		}
 	}
 
-	if terminal {
+	if noGUI {
 		// TUI mode: run chrome in the terminal via Bubble Tea.
 		program := tea.NewProgram(model,
 			tea.WithInput(os.Stdin),
