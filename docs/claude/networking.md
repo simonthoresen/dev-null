@@ -4,10 +4,14 @@
 
 **Binaries are NOT checked into git.** They are built and published automatically by GitHub Actions on every push to `main`.
 
-- **GitHub Actions** (`.github/workflows/release.yml`): builds `dev-null-server.exe` + `dev-null-client.exe` + `pinggy-helper.exe`, packages the full `dist/` folder into `dev-null.zip`, and publishes a rolling `latest` release.
+- **GitHub Actions** (`.github/workflows/release.yml`): builds binaries, generates `.bundle-manifest.json` (via `cmd/gen-manifest`), zips everything in `dist/` (excluding `logs/`, `state/`, host keys, `.bundle-version`), and publishes releases.
+  - **`push to main`**: rolling `latest` release (dev channel).
+  - **`v*` tags**: versioned release (e.g. `v0.1.0`) for stable distribution and winget.
+- **Winget packaging** (`winget/`): manifest templates for Windows Package Manager. `InstallerType: zip` with `NestedInstallerType: portable` — winget extracts the zip, creates PATH symlinks for `dev-null-server` and `dev-null-client`. Submit to `microsoft/winget-pkgs` by updating the version, URL, and SHA256, then opening a PR.
 - **`install.ps1`** (repo root): one-liner installer for operators -- downloads and extracts the latest release zip, creates desktop shortcuts. Usage: `irm https://github.com/simonthoresen/dev-null/raw/main/install.ps1 | iex`
-- **`start.ps1`** (in `dist/`): auto-updates on each launch -- checks the GitHub release for a newer version and downloads the full zip (binaries, games, fonts) before starting.
+- **`start-server.ps1` / `start-client.ps1`** (in `dist/`): auto-updates on each launch -- checks the GitHub release for a newer version and downloads the full zip (binaries, games, fonts) before starting.
 - **Version tracking**: `dist/.version` stores the commit SHA of the installed release. Not tracked in git.
+- **Data directory bootstrap** (`internal/datadir`): on first run or version upgrade, bundled assets are copied from the install dir (next to the exe) to `%APPDATA%/DevNull` using `.bundle-manifest.json` for diffing. See the "Data Directory Layout" section in `CLAUDE.md` for the full merge strategy.
 
 ## Connection Strategy
 
