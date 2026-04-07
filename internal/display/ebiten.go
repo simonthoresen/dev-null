@@ -28,9 +28,6 @@ type EbitenBackend struct {
 	// Track window size for resize detection.
 	lastCols int
 	lastRows int
-
-	// Reusable 1x1 pixel image for background fills (avoids per-cell allocation).
-	bgPixel *ebiten.Image
 }
 
 // NewEbitenBackend creates a backend that renders to an Ebitengine window.
@@ -39,12 +36,10 @@ func NewEbitenBackend(opts ...Option) *EbitenBackend {
 	for _, fn := range opts {
 		fn(&o)
 	}
-	px := ebiten.NewImage(1, 1)
 	return &EbitenBackend{
 		opts:     o,
-		fontFace: DefaultFontFace(),
+		fontFace: GUIFontFace(16),
 		msgCh:    make(chan tea.Msg, 256),
-		bgPixel:  px,
 		dirty:    true, // force initial render
 	}
 }

@@ -40,10 +40,11 @@ func getAudioCtx() *audio.Context {
 }
 
 // cellW and cellH are the pixel dimensions of a single terminal cell.
-// These alias display.CellW/CellH for internal use.
+// The client always uses the bitmap font (10x20), independent of the
+// GUI backend's font choice.
 const (
-	cellW = display.CellW
-	cellH = display.CellH
+	cellW = 10
+	cellH = 20
 )
 
 // Game implements ebiten.Game for the dev-null client.
