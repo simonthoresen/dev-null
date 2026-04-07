@@ -63,4 +63,4 @@ Uses the same Screen layout as all views (MenuBar + Window + StatusBar):
 | game: none | players: 0 | 15:04:05|  StatusBar (row 2)
 ```
 
-The server console is always admin. SSH clients elevate via `/admin <password>`. Password set via `--password`; changeable at runtime via `/password <new>` (admin only).
+The server console is always admin. The `/password` command is context-aware: from the console it sets the admin password; from a player session it authenticates as admin. Password can be pre-set via `--password` on the server. Clients can pass `--password` to auto-authenticate on connect.

@@ -57,6 +57,15 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 		}
 	}
 
+	// DEV_NULL_PASSWORD: auto-authenticate as admin on connect.
+	for _, e := range sess.Environ() {
+		if strings.HasPrefix(e, "DEV_NULL_PASSWORD=") {
+			pw := strings.TrimPrefix(e, "DEV_NULL_PASSWORD=")
+			model.InitCommands = append(model.InitCommands, "/password "+pw)
+			break
+		}
+	}
+
 	// --local server mode connects back with DEV_NULL_CLIENT=enhanced, but the
 	// output is a plain terminal — strip enhanced flags to match plain ssh behaviour.
 	if a.localPlayerName != "" && sess.User() == a.localPlayerName {

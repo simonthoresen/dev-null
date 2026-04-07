@@ -49,6 +49,7 @@ func main() {
 	gameName := flag.String("game", "", "game to preload (local mode)")
 	resumeName := flag.String("resume", "", "game/save to resume, e.g. orbits/autosave (local mode)")
 	tickInterval := flag.Duration("tick-interval", 100*time.Millisecond, "server tick interval (local mode)")
+	password := flag.String("password", "", "admin password (authenticates as admin on connect)")
 	termFlag := flag.String("term", "", "force terminal color profile for local-mode sessions: truecolor, 256color, ansi, ascii")
 	flag.Parse()
 
@@ -71,7 +72,7 @@ func main() {
 	if *noGUI {
 		ptyW, ptyH, _ = xterm.GetSize(os.Stdin.Fd())
 	}
-	conn, err := client.Dial(*host, *port, *player, *noGUI, *termFlag, ptyW, ptyH)
+	conn, err := client.Dial(*host, *port, *player, *noGUI, *termFlag, *password, ptyW, ptyH)
 	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
@@ -159,7 +160,7 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	}
 
 	// Connect via SSH using the full client stack (graphical mode).
-	conn, err := client.Dial("127.0.0.1", sshPort, playerName, false, termFlag, 0, 0)
+	conn, err := client.Dial("127.0.0.1", sshPort, playerName, false, termFlag, "", 0, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "local SSH dial: %v\n", err)
 		os.Exit(1)

@@ -518,44 +518,39 @@ func (a *Server) registerBuiltins() {
 	})
 
 	a.registry.Register(domain.Command{
-		Name:        "admin",
-		Description: "Elevate to admin (/admin <password>)",
+		Name:        "password",
+		Description: "Set admin password (console) or authenticate as admin (player)",
 		Handler: func(ctx domain.CommandContext, args []string) {
+			if ctx.IsConsole {
+				// Console: set the admin password.
+				if len(args) != 1 {
+					ctx.Reply("Usage: /password <new>")
+					return
+				}
+				a.state.Lock()
+				a.state.AdminPassword = args[0]
+				a.state.Unlock()
+				ctx.Reply("Admin password set.")
+				return
+			}
+			// Player: authenticate with the admin password.
 			if len(args) != 1 {
-				ctx.Reply("Usage: /admin <password>")
+				ctx.Reply("Usage: /password <password>")
 				return
 			}
 			a.state.RLock()
 			pw := a.state.AdminPassword
 			a.state.RUnlock()
 			if pw == "" {
-				ctx.Reply("No admin password set. Ask the server operator to set one with /password.")
+				ctx.Reply("No admin password set. Ask the server operator to set one.")
 				return
 			}
 			if args[0] != pw {
 				ctx.Reply("Invalid password.")
 				return
 			}
-			if !ctx.IsConsole {
-				a.state.SetPlayerAdmin(ctx.PlayerID, true)
-			}
+			a.state.SetPlayerAdmin(ctx.PlayerID, true)
 			ctx.Reply("Admin privileges granted.")
-		},
-	})
-
-	a.registry.Register(domain.Command{
-		Name:        "password",
-		Description: "Change admin password (admin only)",
-		AdminOnly:   true,
-		Handler: func(ctx domain.CommandContext, args []string) {
-			if len(args) != 1 {
-				ctx.Reply("Usage: /password <new>")
-				return
-			}
-			a.state.Lock()
-			a.state.AdminPassword = args[0]
-			a.state.Unlock()
-			ctx.Reply("Admin password changed.")
 		},
 	})
 

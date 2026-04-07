@@ -28,7 +28,7 @@ type SSHConn struct {
 // ptyW and ptyH set the initial PTY dimensions; pass 0 for each to use the
 // default (120×50). Callers should pass the actual terminal size to avoid a
 // race where the first frame is rendered at the wrong dimensions.
-func Dial(host string, port int, player string, noGUI bool, termOverride string, ptyW, ptyH int) (*SSHConn, error) {
+func Dial(host string, port int, player string, noGUI bool, termOverride, password string, ptyW, ptyH int) (*SSHConn, error) {
 	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 
 	config := &ssh.ClientConfig{
@@ -69,6 +69,9 @@ func Dial(host string, port int, player string, noGUI bool, termOverride string,
 	}
 	if termOverride != "" {
 		_ = session.Setenv("DEV_NULL_TERM", termOverride)
+	}
+	if password != "" {
+		_ = session.Setenv("DEV_NULL_PASSWORD", password)
 	}
 
 	// Request a PTY.
