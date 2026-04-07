@@ -18,6 +18,13 @@ var rowColors = [15]int{
 	51, 45, 21, 57, 201,     // cyans → blues → magentas
 }
 
+// scrollMsg is the text that scrolls across the middle of the screen.
+// Padded with spaces so the loop seam is invisible.
+const scrollMsg = "    >>> SSH DELTA RENDER TEST — colors + leading-spaces + per-frame scroll OK <<<    "
+
+// scrollWidth is the visible width of the marquee window (columns).
+const scrollWidth = 60
+
 type model struct{ frame int }
 
 func (m model) Init() tea.Cmd {
@@ -40,23 +47,45 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders 15 rows, each with:
-//   - leading spaces (0..14) to stress cursor-column tracking
-//   - ANSI 256-color foreground to stress color state across delta updates
-//   - fixed content so delta renderer only repaints the changed frame counter
+// View renders:
+//   - A bold header with frame counter (changes every tick → delta repaints it)
+//   - A blank line
+//   - Rows 0–6   with colors and 0–6 leading spaces  (static)
+//   - The scrolling marquee line                      (changes every tick)
+//   - Rows 7–14  with colors and 7–14 leading spaces (static)
+//   - A footer
+//
+// The static rows exercise that delta rendering leaves undisturbed content
+// alone; the header and marquee exercise that only changed lines are repainted.
 func (m model) View() tea.View {
 	var b strings.Builder
 
-	// Bold + colored header — changes every frame so delta renders it each tick.
+	// Header — frame counter changes every tick.
 	fmt.Fprintf(&b, "\x1b[1mSSH delta render test — frame %04d\x1b[0m\n\n", m.frame)
 
-	for i := 0; i < 15; i++ {
+	// Top half of static rows (0–6).
+	for i := 0; i < 7; i++ {
 		indent := strings.Repeat(" ", i)
-		color := rowColors[i]
-		letter := string(rune('A' + i%26))
-		content := strings.Repeat(letter, 40-i) // shrinks to compensate for indent
-		// Row is static content; only the header above changes each frame.
-		fmt.Fprintf(&b, "%s\x1b[38;5;%dm[Row %02d] %s\x1b[0m\n", indent, color, i, content)
+		content := strings.Repeat(string(rune('A'+i%26)), 40-i)
+		fmt.Fprintf(&b, "%s\x1b[38;5;%dm[Row %02d] %s\x1b[0m\n",
+			indent, rowColors[i], i, content)
+	}
+
+	// Scrolling marquee — advances 1 character left per frame.
+	runes := []rune(scrollMsg)
+	msgLen := len(runes)
+	offset := m.frame % msgLen
+	// Build a scrollWidth-wide window by doubling the message for wrap-around.
+	doubled := append(runes, runes...)
+	window := string(doubled[offset : offset+scrollWidth])
+	fmt.Fprintf(&b, "\x1b[1;38;5;226m[ %-*s ]\x1b[0m\n", scrollWidth, window)
+
+	// Bottom half of static rows (7–14).
+	for i := 7; i < 15; i++ {
+		indent := strings.Repeat(" ", i)
+		content := strings.Repeat(string(rune('A'+i%26)), 40-i)
+		fmt.Fprintf(&b, "%s\x1b[38;5;%dm[Row %02d] %s\x1b[0m\n",
+			indent, rowColors[i], i, content)
 	}
 
 	fmt.Fprintf(&b, "\n(q=quit)\n")
