@@ -12,12 +12,6 @@ import (
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-func collect(fn func(func(string))) []string {
-	var out []string
-	fn(func(s string) { out = append(out, s) })
-	return out
-}
-
 func output(t *testing.T) (func(string), func() string) {
 	t.Helper()
 	var lines []string
@@ -26,64 +20,46 @@ func output(t *testing.T) (func(string), func() string) {
 	return write, read
 }
 
-// writeTheme creates a minimal valid theme JSON file in dataDir/themes/.
 func writeTheme(t *testing.T, dataDir, name string) {
 	t.Helper()
 	dir := filepath.Join(dataDir, "themes")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	content := `{"name":"` + name + `"}`
-	if err := os.WriteFile(filepath.Join(dir, name+".json"), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, name+".json"), []byte(`{"name":"`+name+`"}`), 0o644)
 }
 
-// writePlugin creates a minimal valid plugin JS file in dataDir/plugins/.
 func writePlugin(t *testing.T, dataDir, name string) {
 	t.Helper()
 	dir := filepath.Join(dataDir, "plugins")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	content := `var Plugin = { name: "` + name + `", onMessage: function(a,t,s){ return t; } };`
-	if err := os.WriteFile(filepath.Join(dir, name+".js"), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, name+".js"), []byte(`var Plugin = { name: "`+name+`", onMessage: function(a,t,s){ return t; } };`), 0o644)
 }
 
-// writeShader creates a minimal valid shader JS file in dataDir/shaders/.
 func writeShader(t *testing.T, dataDir, name string) {
 	t.Helper()
 	dir := filepath.Join(dataDir, "shaders")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	content := `var Shader = { name: "` + name + `", process: function(buf,t){} };`
-	if err := os.WriteFile(filepath.Join(dir, name+".js"), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, name+".js"), []byte(`var Shader = { name: "`+name+`", process: function(buf,t){} };`), 0o644)
 }
 
 var testClock = &domain.MockClock{T: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 
-// ─── HandleTheme ────────────────────────────────────────────────────────────
+// ─── HandleThemeList / HandleThemeLoad ──────────────────────────────────────
 
-func TestHandleTheme_NoArgs_NoThemes(t *testing.T) {
+func TestHandleThemeList_NoThemes(t *testing.T) {
 	dataDir := t.TempDir()
 	w, read := output(t)
-	HandleTheme("/theme", dataDir, "", w)
+	HandleThemeList(dataDir, "", w)
 	if !strings.Contains(read(), "No themes found") {
 		t.Errorf("expected 'No themes found', got: %s", read())
 	}
 }
 
-func TestHandleTheme_NoArgs_ListsAvailable(t *testing.T) {
+func TestHandleThemeList_ListsAvailable(t *testing.T) {
 	dataDir := t.TempDir()
 	writeTheme(t, dataDir, "dark")
 	writeTheme(t, dataDir, "light")
 	w, read := output(t)
-	HandleTheme("/theme", dataDir, "dark", w)
+	HandleThemeList(dataDir, "dark", w)
 	got := read()
 	if !strings.Contains(got, "dark") || !strings.Contains(got, "light") {
 		t.Errorf("expected both themes listed, got: %s", got)
@@ -93,11 +69,11 @@ func TestHandleTheme_NoArgs_ListsAvailable(t *testing.T) {
 	}
 }
 
-func TestHandleTheme_Load_Success(t *testing.T) {
+func TestHandleThemeLoad_Success(t *testing.T) {
 	dataDir := t.TempDir()
 	writeTheme(t, dataDir, "dark")
 	w, read := output(t)
-	theme, name := HandleTheme("/theme dark", dataDir, "", w)
+	theme, name := HandleThemeLoad("dark", dataDir, w)
 	if theme == nil {
 		t.Fatalf("expected theme to be returned; output: %s", read())
 	}
@@ -106,10 +82,10 @@ func TestHandleTheme_Load_Success(t *testing.T) {
 	}
 }
 
-func TestHandleTheme_Load_Missing(t *testing.T) {
+func TestHandleThemeLoad_Missing(t *testing.T) {
 	dataDir := t.TempDir()
 	w, read := output(t)
-	theme, name := HandleTheme("/theme nonexistent", dataDir, "", w)
+	theme, name := HandleThemeLoad("nonexistent", dataDir, w)
 	if theme != nil {
 		t.Error("expected nil theme for missing file")
 	}
@@ -121,32 +97,34 @@ func TestHandleTheme_Load_Missing(t *testing.T) {
 	}
 }
 
-// ─── HandlePlugin ────────────────────────────────────────────────────────────
+// ─── HandlePluginList / HandlePluginLoad / HandlePluginUnload ───────────────
 
-func TestHandlePlugin_NoArgs_NoPlugins(t *testing.T) {
+func TestHandlePluginList_NoPlugins(t *testing.T) {
 	dataDir := t.TempDir()
 	w, read := output(t)
-	HandlePlugin("/plugin", dataDir, testClock, nil, nil, w)
+	HandlePluginList(dataDir, nil, w)
 	if !strings.Contains(read(), "No plugins found") {
 		t.Errorf("expected 'No plugins found', got: %s", read())
 	}
 }
 
-func TestHandlePlugin_NoArgs_ListsAvailable(t *testing.T) {
+func TestHandlePluginList_ShowsLoaded(t *testing.T) {
 	dataDir := t.TempDir()
 	writePlugin(t, dataDir, "echo")
-	w, read := output(t)
-	HandlePlugin("/plugin", dataDir, testClock, nil, nil, w)
-	if !strings.Contains(read(), "echo") {
-		t.Errorf("expected 'echo' listed, got: %s", read())
+	w, _ := output(t)
+	_, names, _ := HandlePluginLoad("echo", dataDir, testClock, nil, nil, w)
+	w2, read2 := output(t)
+	HandlePluginList(dataDir, names, w2)
+	if !strings.Contains(read2(), "[loaded]") {
+		t.Errorf("expected '[loaded]' marker, got: %s", read2())
 	}
 }
 
-func TestHandlePlugin_Load_Success(t *testing.T) {
+func TestHandlePluginLoad_Success(t *testing.T) {
 	dataDir := t.TempDir()
 	writePlugin(t, dataDir, "echo")
 	w, read := output(t)
-	plugins, names, changed := HandlePlugin("/plugin load echo", dataDir, testClock, nil, nil, w)
+	plugins, names, changed := HandlePluginLoad("echo", dataDir, testClock, nil, nil, w)
 	if !changed {
 		t.Errorf("expected changed=true; output: %s", read())
 	}
@@ -155,12 +133,12 @@ func TestHandlePlugin_Load_Success(t *testing.T) {
 	}
 }
 
-func TestHandlePlugin_Load_Duplicate(t *testing.T) {
+func TestHandlePluginLoad_Duplicate(t *testing.T) {
 	dataDir := t.TempDir()
 	writePlugin(t, dataDir, "echo")
 	w, read := output(t)
-	plugins, names, _ := HandlePlugin("/plugin load echo", dataDir, testClock, nil, nil, w)
-	_, _, changed := HandlePlugin("/plugin load echo", dataDir, testClock, plugins, names, w)
+	plugins, names, _ := HandlePluginLoad("echo", dataDir, testClock, nil, nil, w)
+	_, _, changed := HandlePluginLoad("echo", dataDir, testClock, plugins, names, w)
 	if changed {
 		t.Error("expected no change on duplicate load")
 	}
@@ -169,10 +147,10 @@ func TestHandlePlugin_Load_Duplicate(t *testing.T) {
 	}
 }
 
-func TestHandlePlugin_Load_Missing(t *testing.T) {
+func TestHandlePluginLoad_Missing(t *testing.T) {
 	dataDir := t.TempDir()
 	w, read := output(t)
-	_, _, changed := HandlePlugin("/plugin load nope", dataDir, testClock, nil, nil, w)
+	_, _, changed := HandlePluginLoad("nope", dataDir, testClock, nil, nil, w)
 	if changed {
 		t.Error("expected no change on missing plugin")
 	}
@@ -181,12 +159,12 @@ func TestHandlePlugin_Load_Missing(t *testing.T) {
 	}
 }
 
-func TestHandlePlugin_Unload_Success(t *testing.T) {
+func TestHandlePluginUnload_Success(t *testing.T) {
 	dataDir := t.TempDir()
 	writePlugin(t, dataDir, "echo")
 	w, _ := output(t)
-	plugins, names, _ := HandlePlugin("/plugin load echo", dataDir, testClock, nil, nil, w)
-	plugins2, names2, changed := HandlePlugin("/plugin unload echo", dataDir, testClock, plugins, names, w)
+	plugins, names, _ := HandlePluginLoad("echo", dataDir, testClock, nil, nil, w)
+	plugins2, names2, changed := HandlePluginUnload("echo", plugins, names, w)
 	if !changed {
 		t.Error("expected changed=true on unload")
 	}
@@ -195,10 +173,9 @@ func TestHandlePlugin_Unload_Success(t *testing.T) {
 	}
 }
 
-func TestHandlePlugin_Unload_NotLoaded(t *testing.T) {
-	dataDir := t.TempDir()
+func TestHandlePluginUnload_NotLoaded(t *testing.T) {
 	w, read := output(t)
-	_, _, changed := HandlePlugin("/plugin unload ghost", dataDir, testClock, nil, nil, w)
+	_, _, changed := HandlePluginUnload("ghost", nil, nil, w)
 	if changed {
 		t.Error("expected no change")
 	}
@@ -207,85 +184,34 @@ func TestHandlePlugin_Unload_NotLoaded(t *testing.T) {
 	}
 }
 
-func TestHandlePlugin_List(t *testing.T) {
-	dataDir := t.TempDir()
-	writePlugin(t, dataDir, "echo")
-	w, read := output(t)
-	plugins, names, _ := HandlePlugin("/plugin load echo", dataDir, testClock, nil, nil, w)
-	HandlePlugin("/plugin list", dataDir, testClock, plugins, names, w)
-	if !strings.Contains(read(), "echo") {
-		t.Errorf("expected echo in list, got: %s", read())
-	}
-}
+// ─── HandleShaderList / HandleShaderLoad / HandleShaderUnload / Up / Down ───
 
-func TestHandlePlugin_List_Empty(t *testing.T) {
+func TestHandleShaderList_NoShaders(t *testing.T) {
 	dataDir := t.TempDir()
 	w, read := output(t)
-	HandlePlugin("/plugin list", dataDir, testClock, nil, nil, w)
-	if !strings.Contains(read(), "No plugins") {
-		t.Errorf("expected 'No plugins' message, got: %s", read())
-	}
-}
-
-func TestHandlePlugin_UnknownSubcommand(t *testing.T) {
-	dataDir := t.TempDir()
-	w, read := output(t)
-	HandlePlugin("/plugin bogus", dataDir, testClock, nil, nil, w)
-	if !strings.Contains(read(), "Unknown subcommand") {
-		t.Errorf("expected 'Unknown subcommand', got: %s", read())
-	}
-}
-
-func TestHandlePlugin_Load_NoName(t *testing.T) {
-	dataDir := t.TempDir()
-	w, read := output(t)
-	_, _, changed := HandlePlugin("/plugin load", dataDir, testClock, nil, nil, w)
-	if changed {
-		t.Error("expected no change")
-	}
-	if !strings.Contains(read(), "Usage") {
-		t.Errorf("expected usage hint, got: %s", read())
-	}
-}
-
-func TestHandlePlugin_Unload_NoName(t *testing.T) {
-	dataDir := t.TempDir()
-	w, read := output(t)
-	_, _, changed := HandlePlugin("/plugin unload", dataDir, testClock, nil, nil, w)
-	if changed {
-		t.Error("expected no change")
-	}
-	if !strings.Contains(read(), "Usage") {
-		t.Errorf("expected usage hint, got: %s", read())
-	}
-}
-
-// ─── HandleShader ────────────────────────────────────────────────────────────
-
-func TestHandleShader_NoArgs_NoShaders(t *testing.T) {
-	dataDir := t.TempDir()
-	w, read := output(t)
-	HandleShader("/shader", dataDir, testClock, nil, nil, w)
+	HandleShaderList(dataDir, nil, w)
 	if !strings.Contains(read(), "No shaders found") {
 		t.Errorf("expected 'No shaders found', got: %s", read())
 	}
 }
 
-func TestHandleShader_NoArgs_ListsAvailable(t *testing.T) {
+func TestHandleShaderList_ShowsActive(t *testing.T) {
 	dataDir := t.TempDir()
 	writeShader(t, dataDir, "noop")
-	w, read := output(t)
-	HandleShader("/shader", dataDir, testClock, nil, nil, w)
-	if !strings.Contains(read(), "noop") {
-		t.Errorf("expected 'noop' listed, got: %s", read())
+	w, _ := output(t)
+	_, names, _ := HandleShaderLoad("noop", dataDir, testClock, nil, nil, w)
+	w2, read2 := output(t)
+	HandleShaderList(dataDir, names, w2)
+	if !strings.Contains(read2(), "[active]") {
+		t.Errorf("expected '[active]' marker, got: %s", read2())
 	}
 }
 
-func TestHandleShader_Load_Success(t *testing.T) {
+func TestHandleShaderLoad_Success(t *testing.T) {
 	dataDir := t.TempDir()
 	writeShader(t, dataDir, "noop")
 	w, read := output(t)
-	shaders, names, changed := HandleShader("/shader load noop", dataDir, testClock, nil, nil, w)
+	shaders, names, changed := HandleShaderLoad("noop", dataDir, testClock, nil, nil, w)
 	if !changed {
 		t.Errorf("expected changed=true; output: %s", read())
 	}
@@ -294,12 +220,12 @@ func TestHandleShader_Load_Success(t *testing.T) {
 	}
 }
 
-func TestHandleShader_Load_Duplicate(t *testing.T) {
+func TestHandleShaderLoad_Duplicate(t *testing.T) {
 	dataDir := t.TempDir()
 	writeShader(t, dataDir, "noop")
 	w, read := output(t)
-	shaders, names, _ := HandleShader("/shader load noop", dataDir, testClock, nil, nil, w)
-	_, _, changed := HandleShader("/shader load noop", dataDir, testClock, shaders, names, w)
+	shaders, names, _ := HandleShaderLoad("noop", dataDir, testClock, nil, nil, w)
+	_, _, changed := HandleShaderLoad("noop", dataDir, testClock, shaders, names, w)
 	if changed {
 		t.Error("expected no change on duplicate load")
 	}
@@ -308,10 +234,10 @@ func TestHandleShader_Load_Duplicate(t *testing.T) {
 	}
 }
 
-func TestHandleShader_Load_Missing(t *testing.T) {
+func TestHandleShaderLoad_Missing(t *testing.T) {
 	dataDir := t.TempDir()
 	w, read := output(t)
-	_, _, changed := HandleShader("/shader load ghost", dataDir, testClock, nil, nil, w)
+	_, _, changed := HandleShaderLoad("ghost", dataDir, testClock, nil, nil, w)
 	if changed {
 		t.Error("expected no change")
 	}
@@ -320,12 +246,12 @@ func TestHandleShader_Load_Missing(t *testing.T) {
 	}
 }
 
-func TestHandleShader_Unload_Success(t *testing.T) {
+func TestHandleShaderUnload_Success(t *testing.T) {
 	dataDir := t.TempDir()
 	writeShader(t, dataDir, "noop")
 	w, _ := output(t)
-	shaders, names, _ := HandleShader("/shader load noop", dataDir, testClock, nil, nil, w)
-	shaders2, names2, changed := HandleShader("/shader unload noop", dataDir, testClock, shaders, names, w)
+	shaders, names, _ := HandleShaderLoad("noop", dataDir, testClock, nil, nil, w)
+	shaders2, names2, changed := HandleShaderUnload("noop", shaders, names, w)
 	if !changed {
 		t.Error("expected changed=true on unload")
 	}
@@ -334,10 +260,9 @@ func TestHandleShader_Unload_Success(t *testing.T) {
 	}
 }
 
-func TestHandleShader_Unload_NotLoaded(t *testing.T) {
-	dataDir := t.TempDir()
+func TestHandleShaderUnload_NotLoaded(t *testing.T) {
 	w, read := output(t)
-	_, _, changed := HandleShader("/shader unload ghost", dataDir, testClock, nil, nil, w)
+	_, _, changed := HandleShaderUnload("ghost", nil, nil, w)
 	if changed {
 		t.Error("expected no change")
 	}
@@ -346,35 +271,14 @@ func TestHandleShader_Unload_NotLoaded(t *testing.T) {
 	}
 }
 
-func TestHandleShader_List(t *testing.T) {
-	dataDir := t.TempDir()
-	writeShader(t, dataDir, "noop")
-	w, read := output(t)
-	shaders, names, _ := HandleShader("/shader load noop", dataDir, testClock, nil, nil, w)
-	HandleShader("/shader list", dataDir, testClock, shaders, names, w)
-	if !strings.Contains(read(), "noop") {
-		t.Errorf("expected noop in list, got: %s", read())
-	}
-}
-
-func TestHandleShader_List_Empty(t *testing.T) {
-	dataDir := t.TempDir()
-	w, read := output(t)
-	HandleShader("/shader list", dataDir, testClock, nil, nil, w)
-	if !strings.Contains(read(), "No shaders") {
-		t.Errorf("expected 'No shaders', got: %s", read())
-	}
-}
-
-func TestHandleShader_MoveUp(t *testing.T) {
+func TestHandleShaderUp(t *testing.T) {
 	dataDir := t.TempDir()
 	writeShader(t, dataDir, "a")
 	writeShader(t, dataDir, "b")
 	w, read := output(t)
-	shaders, names, _ := HandleShader("/shader load a", dataDir, testClock, nil, nil, w)
-	shaders, names, _ = HandleShader("/shader load b", dataDir, testClock, shaders, names, w)
-	// b is at index 1; move it up to index 0
-	shaders, names, changed := HandleShader("/shader up b", dataDir, testClock, shaders, names, w)
+	shaders, names, _ := HandleShaderLoad("a", dataDir, testClock, nil, nil, w)
+	shaders, names, _ = HandleShaderLoad("b", dataDir, testClock, shaders, names, w)
+	shaders, names, changed := HandleShaderUp("b", shaders, names, w)
 	if !changed {
 		t.Errorf("expected changed=true; output: %s", read())
 	}
@@ -384,15 +288,14 @@ func TestHandleShader_MoveUp(t *testing.T) {
 	_ = shaders
 }
 
-func TestHandleShader_MoveDown(t *testing.T) {
+func TestHandleShaderDown(t *testing.T) {
 	dataDir := t.TempDir()
 	writeShader(t, dataDir, "a")
 	writeShader(t, dataDir, "b")
 	w, _ := output(t)
-	shaders, names, _ := HandleShader("/shader load a", dataDir, testClock, nil, nil, w)
-	shaders, names, _ = HandleShader("/shader load b", dataDir, testClock, shaders, names, w)
-	// a is at index 0; move it down to index 1
-	shaders, names, changed := HandleShader("/shader down a", dataDir, testClock, shaders, names, w)
+	shaders, names, _ := HandleShaderLoad("a", dataDir, testClock, nil, nil, w)
+	shaders, names, _ = HandleShaderLoad("b", dataDir, testClock, shaders, names, w)
+	shaders, names, changed := HandleShaderDown("a", shaders, names, w)
 	if !changed {
 		t.Error("expected changed=true")
 	}
@@ -402,12 +305,12 @@ func TestHandleShader_MoveDown(t *testing.T) {
 	_ = shaders
 }
 
-func TestHandleShader_MoveUp_AlreadyFirst(t *testing.T) {
+func TestHandleShaderUp_AlreadyFirst(t *testing.T) {
 	dataDir := t.TempDir()
 	writeShader(t, dataDir, "a")
 	w, read := output(t)
-	shaders, names, _ := HandleShader("/shader load a", dataDir, testClock, nil, nil, w)
-	_, _, changed := HandleShader("/shader up a", dataDir, testClock, shaders, names, w)
+	shaders, names, _ := HandleShaderLoad("a", dataDir, testClock, nil, nil, w)
+	_, _, changed := HandleShaderUp("a", shaders, names, w)
 	if changed {
 		t.Error("expected no change when already at top")
 	}
@@ -416,12 +319,12 @@ func TestHandleShader_MoveUp_AlreadyFirst(t *testing.T) {
 	}
 }
 
-func TestHandleShader_MoveDown_AlreadyLast(t *testing.T) {
+func TestHandleShaderDown_AlreadyLast(t *testing.T) {
 	dataDir := t.TempDir()
 	writeShader(t, dataDir, "a")
 	w, read := output(t)
-	shaders, names, _ := HandleShader("/shader load a", dataDir, testClock, nil, nil, w)
-	_, _, changed := HandleShader("/shader down a", dataDir, testClock, shaders, names, w)
+	shaders, names, _ := HandleShaderLoad("a", dataDir, testClock, nil, nil, w)
+	_, _, changed := HandleShaderDown("a", shaders, names, w)
 	if changed {
 		t.Error("expected no change when already at bottom")
 	}
@@ -429,55 +332,3 @@ func TestHandleShader_MoveDown_AlreadyLast(t *testing.T) {
 		t.Errorf("expected position message, got: %s", read())
 	}
 }
-
-func TestHandleShader_UnknownSubcommand(t *testing.T) {
-	dataDir := t.TempDir()
-	w, read := output(t)
-	HandleShader("/shader bogus", dataDir, testClock, nil, nil, w)
-	if !strings.Contains(read(), "Unknown subcommand") {
-		t.Errorf("expected 'Unknown subcommand', got: %s", read())
-	}
-}
-
-func TestHandleShader_Load_NoName(t *testing.T) {
-	dataDir := t.TempDir()
-	w, read := output(t)
-	_, _, changed := HandleShader("/shader load", dataDir, testClock, nil, nil, w)
-	if changed {
-		t.Error("expected no change")
-	}
-	if !strings.Contains(read(), "Usage") {
-		t.Errorf("expected usage hint, got: %s", read())
-	}
-}
-
-// ─── integration: loaded plugin shown as [loaded] in listing ─────────────────
-
-func TestHandlePlugin_NoArgs_ShowsLoaded(t *testing.T) {
-	dataDir := t.TempDir()
-	writePlugin(t, dataDir, "echo")
-	w, _ := output(t)
-	plugins, names, _ := HandlePlugin("/plugin load echo", dataDir, testClock, nil, nil, w)
-
-	var out2 []string
-	HandlePlugin("/plugin", dataDir, testClock, plugins, names, func(s string) { out2 = append(out2, s) })
-	combined := strings.Join(out2, "\n")
-	if !strings.Contains(combined, "[loaded]") {
-		t.Errorf("expected '[loaded]' marker for loaded plugin, got: %s", combined)
-	}
-}
-
-func TestHandleShader_NoArgs_ShowsActive(t *testing.T) {
-	dataDir := t.TempDir()
-	writeShader(t, dataDir, "noop")
-	w, _ := output(t)
-	shaders, names, _ := HandleShader("/shader load noop", dataDir, testClock, nil, nil, w)
-
-	var out2 []string
-	HandleShader("/shader", dataDir, testClock, shaders, names, func(s string) { out2 = append(out2, s) })
-	combined := strings.Join(out2, "\n")
-	if !strings.Contains(combined, "[active]") {
-		t.Errorf("expected '[active]' marker for active shader, got: %s", combined)
-	}
-}
-

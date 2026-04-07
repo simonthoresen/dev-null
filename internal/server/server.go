@@ -577,92 +577,94 @@ func (a *Server) registerBuiltins() {
 		},
 	})
 
+	// --- Canvas commands ---
+
 	a.registry.Register(domain.Command{
-		Name:        "canvas",
-		Description: "Canvas rendering. /canvas scale <n> | /canvas off | /canvas info",
+		Name:        "canvas-scale",
+		Description: "Set canvas pixel density (e.g. 4, 8, 16)",
 		AdminOnly:   true,
-		Complete: func(before []string) []string {
-			if len(before) == 0 {
-				return []string{"scale", "off", "info"}
-			}
-			return nil
-		},
 		Handler: func(ctx domain.CommandContext, args []string) {
-			if len(args) == 0 {
-				args = []string{"info"}
+			if len(args) < 1 {
+				ctx.Reply("Usage: /canvas-scale <pixels-per-cell>")
+				return
 			}
-			switch args[0] {
-			case "scale":
-				if len(args) < 2 {
-					ctx.Reply("Usage: /canvas scale <pixels-per-cell> (e.g. 4, 8, 16)")
-					return
-				}
-				n, err := strconv.Atoi(args[1])
-				if err != nil || n < domain.MinCanvasScale || n > domain.MaxCanvasScale {
-					ctx.Reply(fmt.Sprintf("Scale must be %d-%d.", domain.MinCanvasScale, domain.MaxCanvasScale))
-					return
-				}
-				a.state.Lock()
-				a.state.CanvasScale = n
-				a.state.Unlock()
-				// Estimate bandwidth for the console's dimensions.
-				viewW := 120 // typical console width
-				viewH := viewW * 9 / 16
-				bw := render.CanvasBandwidthMbps(viewW, viewH, n, 10)
-				ctx.Reply(fmt.Sprintf("Canvas scale set to %d (%dx%d px). ~%.1f Mbps/user at %dx%d viewport.",
-					n, viewW*n, viewH*n, bw, viewW, viewH))
-			case "off":
-				a.state.Lock()
-				a.state.CanvasScale = 0
-				a.state.Unlock()
-				ctx.Reply("Canvas rendering disabled.")
-			case "info":
-				a.state.RLock()
-				scale := a.state.CanvasScale
-				game := a.state.ActiveGame
-				a.state.RUnlock()
-				if scale == 0 {
-					ctx.Reply("Canvas rendering: off. Use /canvas scale <n> to enable.")
-					return
-				}
-				hasCanvas := game != nil && game.HasCanvasMode()
-				viewW := 120
-				viewH := viewW * 9 / 16
-				bw := render.CanvasBandwidthMbps(viewW, viewH, scale, 10)
-				status := "no game loaded"
-				if game != nil {
-					if hasCanvas {
-						status = "active (game has renderCanvas)"
-					} else {
-						status = "game has no renderCanvas hook"
-					}
-				}
-				ctx.Reply(fmt.Sprintf("Canvas scale: %d (%dx%d px). ~%.1f Mbps/user. %s",
-					scale, viewW*scale, viewH*scale, bw, status))
-			default:
-				ctx.Reply("Usage: /canvas scale <n> | /canvas off | /canvas info")
+			n, err := strconv.Atoi(args[0])
+			if err != nil || n < domain.MinCanvasScale || n > domain.MaxCanvasScale {
+				ctx.Reply(fmt.Sprintf("Scale must be %d-%d.", domain.MinCanvasScale, domain.MaxCanvasScale))
+				return
 			}
+			a.state.Lock()
+			a.state.CanvasScale = n
+			a.state.Unlock()
+			viewW := 120
+			viewH := viewW * 9 / 16
+			bw := render.CanvasBandwidthMbps(viewW, viewH, n, 10)
+			ctx.Reply(fmt.Sprintf("Canvas scale set to %d (%dx%d px). ~%.1f Mbps/user at %dx%d viewport.",
+				n, viewW*n, viewH*n, bw, viewW, viewH))
 		},
 	})
 
 	a.registry.Register(domain.Command{
-		Name:        "game",
-		Description: "Game management. /game list|load|unload|suspend|resume",
-		Complete:    a.gameCommandComplete,
-		Handler:     a.gameCommandHandler,
-	})
-
-	// /games → /game list, /load <name> → /game load <name>
-	a.registry.Register(domain.Command{
-		Name:        "games",
-		Description: "Alias for /game (list available games)",
+		Name:        "canvas-off",
+		Description: "Disable canvas rendering",
+		AdminOnly:   true,
 		Handler: func(ctx domain.CommandContext, args []string) {
-			a.registry.Dispatch("/game "+strings.Join(args, " "), ctx)
+			a.state.Lock()
+			a.state.CanvasScale = 0
+			a.state.Unlock()
+			ctx.Reply("Canvas rendering disabled.")
 		},
 	})
+
 	a.registry.Register(domain.Command{
-		Name:        "load",
-		Description: "Alias for /game load <name>",
+		Name:        "canvas-info",
+		Description: "Show canvas rendering settings",
+		AdminOnly:   true,
+		Handler: func(ctx domain.CommandContext, args []string) {
+			a.state.RLock()
+			scale := a.state.CanvasScale
+			game := a.state.ActiveGame
+			a.state.RUnlock()
+			if scale == 0 {
+				ctx.Reply("Canvas rendering: off. Use /canvas-scale <n> to enable.")
+				return
+			}
+			hasCanvas := game != nil && game.HasCanvasMode()
+			viewW := 120
+			viewH := viewW * 9 / 16
+			bw := render.CanvasBandwidthMbps(viewW, viewH, scale, 10)
+			status := "no game loaded"
+			if game != nil {
+				if hasCanvas {
+					status = "active (game has renderCanvas)"
+				} else {
+					status = "game has no renderCanvas hook"
+				}
+			}
+			ctx.Reply(fmt.Sprintf("Canvas scale: %d (%dx%d px). ~%.1f Mbps/user. %s",
+				scale, viewW*scale, viewH*scale, bw, status))
+		},
+	})
+
+	// --- Game commands ---
+
+	a.registry.Register(domain.Command{
+		Name:        "game-list",
+		Description: "List available games",
+		Handler: func(ctx domain.CommandContext, args []string) {
+			gamesDir := filepath.Join(a.dataDir, "games")
+			available := engine.ListGames(gamesDir)
+			if len(available) == 0 {
+				ctx.Reply("No games found in games/")
+				return
+			}
+			ctx.Reply(a.formatGameList(gamesDir, available))
+		},
+	})
+
+	a.registry.Register(domain.Command{
+		Name:        "game-load",
+		Description: "Load a game by name or URL",
 		AdminOnly:   true,
 		Complete: func(before []string) []string {
 			if len(before) == 0 {
@@ -671,7 +673,92 @@ func (a *Server) registerBuiltins() {
 			return nil
 		},
 		Handler: func(ctx domain.CommandContext, args []string) {
-			a.registry.Dispatch("/game load "+strings.Join(args, " "), ctx)
+			if len(args) < 1 {
+				ctx.Reply("Usage: /game-load <name>")
+				return
+			}
+			var path string
+			if network.IsURL(args[0]) {
+				path = args[0]
+			} else {
+				path = engine.ResolveGamePath(filepath.Join(a.dataDir, "games"), args[0])
+			}
+			if err := a.loadGame(path); err != nil {
+				ctx.Reply(fmt.Sprintf("Failed to load game: %v", err))
+			}
+		},
+	})
+
+	a.registry.Register(domain.Command{
+		Name:        "game-unload",
+		Description: "Unload the active game",
+		AdminOnly:   true,
+		Handler: func(ctx domain.CommandContext, args []string) {
+			a.state.RLock()
+			active := a.state.GameName
+			a.state.RUnlock()
+			if active == "" {
+				ctx.Reply("No game is currently loaded.")
+				return
+			}
+			a.unloadGame()
+		},
+	})
+
+	a.registry.Register(domain.Command{
+		Name:        "game-suspend",
+		Description: "Save game state and unload",
+		AdminOnly:   true,
+		Handler: func(ctx domain.CommandContext, args []string) {
+			saveName := ""
+			if len(args) >= 1 {
+				saveName = args[0]
+			}
+			if saveName == "" {
+				saveName = a.clock.Now().Format(domain.TimeFormatFileSafe)
+			}
+			if err := a.suspendGame(saveName); err != nil {
+				ctx.Reply(fmt.Sprintf("Failed to suspend: %v", err))
+			}
+		},
+	})
+
+	a.registry.Register(domain.Command{
+		Name:        "game-resume",
+		Description: "Resume a suspended game (gameName/saveName)",
+		AdminOnly:   true,
+		Complete: func(before []string) []string {
+			if len(before) == 0 {
+				return state.ListSuspendNames(a.dataDir)
+			}
+			return nil
+		},
+		Handler: func(ctx domain.CommandContext, args []string) {
+			if len(args) < 1 {
+				saves := state.ListSuspends(a.dataDir, "")
+				if len(saves) == 0 {
+					ctx.Reply("No suspended games found. Usage: /game-resume <gameName/saveName>")
+					return
+				}
+				var lines []string
+				lines = append(lines, "Suspended games:")
+				for _, s := range saves {
+					lines = append(lines, fmt.Sprintf("  %s/%s  (%d teams, %s)",
+						s.GameName, s.SaveName, s.TeamCount, s.SavedAt.Format(domain.TimeFormatShort)))
+				}
+				lines = append(lines, "Usage: /game-resume <gameName/saveName>")
+				ctx.Reply(strings.Join(lines, "\n"))
+				return
+			}
+			ref := args[0]
+			parts := strings.SplitN(ref, "/", 2)
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				ctx.Reply("Usage: /game-resume <gameName/saveName>")
+				return
+			}
+			if err := a.resumeGame(parts[0], parts[1]); err != nil {
+				ctx.Reply(fmt.Sprintf("Failed to resume: %v", err))
+			}
 		},
 	})
 
@@ -729,126 +816,6 @@ func requireAdmin(ctx domain.CommandContext) bool {
 	return false
 }
 
-func (a *Server) gameCommandComplete(before []string) []string {
-	switch len(before) {
-	case 0:
-		return []string{"list", "load", "unload", "suspend", "resume"}
-	case 1:
-		switch before[0] {
-		case "load":
-			return engine.ListGames(filepath.Join(a.dataDir, "games"))
-		case "unload":
-			a.state.RLock()
-			name := a.state.GameName
-			a.state.RUnlock()
-			if name != "" {
-				return []string{strings.TrimSuffix(filepath.Base(name), ".js")}
-			}
-		case "resume":
-			return state.ListSuspendNames(a.dataDir)
-		}
-	}
-	return nil
-}
-
-func (a *Server) gameCommandHandler(ctx domain.CommandContext, args []string) {
-	gamesDir := filepath.Join(a.dataDir, "games")
-	if len(args) == 0 {
-		available := engine.ListGames(gamesDir)
-		if len(available) == 0 {
-			ctx.Reply("No games found in games/")
-			return
-		}
-		ctx.Reply(a.formatGameList(gamesDir, available))
-		return
-	}
-	switch args[0] {
-	case "list":
-		available := engine.ListGames(gamesDir)
-		if len(available) == 0 {
-			ctx.Reply("No games found in games/")
-			return
-		}
-		ctx.Reply(a.formatGameList(gamesDir, available))
-	case "load":
-		if requireAdmin(ctx) {
-			return
-		}
-		if len(args) < 2 {
-			ctx.Reply("Usage: /game load <name>")
-			return
-		}
-		var path string
-		if network.IsURL(args[1]) {
-			path = args[1]
-		} else {
-			path = engine.ResolveGamePath(filepath.Join(a.dataDir, "games"), args[1])
-		}
-		if err := a.loadGame(path); err != nil {
-			ctx.Reply(fmt.Sprintf("Failed to load game: %v", err))
-			return
-		}
-	case "unload":
-		if requireAdmin(ctx) {
-			return
-		}
-		a.state.RLock()
-		active := a.state.GameName
-		a.state.RUnlock()
-		if active == "" {
-			ctx.Reply("No game is currently loaded.")
-			return
-		}
-		a.unloadGame()
-	case "suspend":
-		if requireAdmin(ctx) {
-			return
-		}
-		saveName := ""
-		if len(args) >= 2 {
-			saveName = args[1]
-		}
-		if saveName == "" {
-			saveName = a.clock.Now().Format(domain.TimeFormatFileSafe)
-		}
-		if err := a.suspendGame(saveName); err != nil {
-			ctx.Reply(fmt.Sprintf("Failed to suspend: %v", err))
-			return
-		}
-	case "resume":
-		if requireAdmin(ctx) {
-			return
-		}
-		if len(args) < 2 {
-			saves := state.ListSuspends(a.dataDir, "")
-			if len(saves) == 0 {
-				ctx.Reply("No suspended games found. Usage: /game resume <gameName/saveName>")
-				return
-			}
-			var lines []string
-			lines = append(lines, "Suspended games:")
-			for _, s := range saves {
-				lines = append(lines, fmt.Sprintf("  %s/%s  (%d teams, %s)",
-					s.GameName, s.SaveName, s.TeamCount, s.SavedAt.Format(domain.TimeFormatShort)))
-			}
-			lines = append(lines, "Usage: /game resume <gameName/saveName>")
-			ctx.Reply(strings.Join(lines, "\n"))
-			return
-		}
-		ref := args[1]
-		parts := strings.SplitN(ref, "/", 2)
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-			ctx.Reply("Usage: /game resume <gameName/saveName>")
-			return
-		}
-		if err := a.resumeGame(parts[0], parts[1]); err != nil {
-			ctx.Reply(fmt.Sprintf("Failed to resume: %v", err))
-			return
-		}
-	default:
-		ctx.Reply(fmt.Sprintf("Unknown subcommand '%s'. Use: list, load, unload, suspend, resume", args[0]))
-	}
-}
 
 // formatGameList builds the game list output with team range info and compatibility markers.
 func (a *Server) formatGameList(gamesDir string, available []string) string {

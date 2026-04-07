@@ -59,17 +59,21 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 	menus := []domain.MenuDef{{Label: "&File", Items: fileItems}}
 
 	// View menu — rendering mode + local rendering toggle.
+	renderCmds := map[domain.RenderMode]string{
+		domain.RenderModeText:     "/render-text",
+		domain.RenderModeQuadrant: "/render-quadrant",
+		domain.RenderModeCanvas:   "/render-canvas",
+	}
 	viewItems := make([]domain.MenuItemDef, 0, 5)
 	for _, mode := range []domain.RenderMode{domain.RenderModeText, domain.RenderModeQuadrant, domain.RenderModeCanvas} {
 		mode := mode // capture
+		cmd := renderCmds[mode]
 		viewItems = append(viewItems, domain.MenuItemDef{
 			Label:    mode.Label(),
 			Toggle:   true,
 			Disabled: !m.canUseRenderMode(mode),
 			Checked:  func() bool { return m.renderMode == mode },
-			Handler: func(_ string) {
-				m.renderMode = mode
-			},
+			Handler:  func(_ string) { m.dispatchInput(cmd) },
 		})
 	}
 	viewItems = append(viewItems,
@@ -79,14 +83,7 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 			Toggle:   true,
 			Disabled: !m.IsEnhancedClient || m.IsTerminalClient,
 			Checked:  func() bool { return m.localRendering },
-			Handler: func(_ string) {
-				m.localRendering = !m.localRendering
-				m.localModeSent = false // re-send mode OSC next frame
-				if !m.localRendering {
-					m.gameSrcSent = false   // allow re-send if toggled back on
-					m.lastStateJSON = ""
-				}
-			},
+			Handler:  func(_ string) { m.dispatchInput("/render-local") },
 		},
 	)
 	menus = append(menus, domain.MenuDef{Label: "&View", Items: viewItems})
@@ -123,7 +120,7 @@ func (m *Model) pushGamesDialog(cursor int) {
 		CanLoad:     m.isAdmin(),
 		CanAdd:      m.isAdmin(),
 		OnLoad: func(name string) {
-			m.dispatchInput("/game load " + name)
+			m.dispatchInput("/game-load " + name)
 		},
 		Reload: m.pushGamesDialog,
 	})
@@ -135,7 +132,7 @@ func (m *Model) pushSavesDialog(cursor int) {
 		Overlay:  &m.overlay,
 		CanLoad:  m.isAdmin(),
 		OnLoad: func(gameName, saveName string) {
-			m.dispatchInput("/game resume " + gameName + "/" + saveName)
+			m.dispatchInput("/game-resume " + gameName + "/" + saveName)
 		},
 		Reload: m.pushSavesDialog,
 	})
@@ -154,11 +151,8 @@ func (m *Model) pushThemeDialog(cursor int) {
 		Overlay:          &m.overlay,
 		CurrentThemeName: m.themeName,
 		CanAdd:           m.isAdmin(),
-		OnSelect: func(name string, t *theme.Theme) {
-			m.theme = t
-			m.themeName = name
-			m.gameWindow = nil
-			m.persistClientConfig()
+		OnSelect: func(name string, _ *theme.Theme) {
+			m.dispatchInput("/theme-load " + name)
 		},
 		Reload: m.pushThemeDialog,
 	})
@@ -174,9 +168,9 @@ func (m *Model) pushPluginDialog(cursor int) {
 		CanAdd:  m.isAdmin(),
 		OnToggle: func(name string, load bool) {
 			if load {
-				m.handlePluginCommand("/plugin load " + name)
+				m.dispatchInput("/plugin-load " + name)
 			} else {
-				m.handlePluginCommand("/plugin unload " + name)
+				m.dispatchInput("/plugin-unload " + name)
 			}
 		},
 		Reload: m.pushPluginDialog,
@@ -193,9 +187,9 @@ func (m *Model) pushShaderDialog(cursor int) {
 		CanAdd:  m.isAdmin(),
 		OnToggle: func(name string, load bool) {
 			if load {
-				m.handleShaderCommand("/shader load " + name)
+				m.dispatchInput("/shader-load " + name)
 			} else {
-				m.handleShaderCommand("/shader unload " + name)
+				m.dispatchInput("/shader-unload " + name)
 			}
 		},
 		Reload: m.pushShaderDialog,
@@ -232,7 +226,7 @@ func (m *Model) pushSynthDialog(cursor int) {
 		ListTags:  tags,
 		Buttons:   []string{"Close"},
 		OnListEnter: func(idx int) {
-			m.handleSynthCommand("/synth " + names[idx])
+			m.dispatchInput("/synth-load " + names[idx])
 			m.overlay.PopDialog()
 			m.pushSynthDialog(idx)
 		},

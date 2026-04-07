@@ -352,23 +352,23 @@ func (m *Model) consoleMenus() []domain.MenuDef {
 			Label: "&View",
 			Items: []domain.MenuItemDef{
 				{Label: "&Debug", Toggle: true, Checked: func() bool { return m.filter[CatDebug] }, Handler: func(_ string) {
-					m.filter[CatDebug] = !m.filter[CatDebug]; m.rebuildVisibleLines()
+					m.submitInput("/view-debug")
 				}},
 				{Label: "&Info", Toggle: true, Checked: func() bool { return m.filter[CatInfo] }, Handler: func(_ string) {
-					m.filter[CatInfo] = !m.filter[CatInfo]; m.rebuildVisibleLines()
+					m.submitInput("/view-info")
 				}},
 				{Label: "&Warnings", Toggle: true, Checked: func() bool { return m.filter[CatWarn] }, Handler: func(_ string) {
-					m.filter[CatWarn] = !m.filter[CatWarn]; m.rebuildVisibleLines()
+					m.submitInput("/view-warnings")
 				}},
 				{Label: "&Errors", Toggle: true, Checked: func() bool { return m.filter[CatError] }, Handler: func(_ string) {
-					m.filter[CatError] = !m.filter[CatError]; m.rebuildVisibleLines()
+					m.submitInput("/view-errors")
 				}},
 				{Label: "---"},
 				{Label: "&Chat", Toggle: true, Checked: func() bool { return m.filter[CatChat] }, Handler: func(_ string) {
-					m.filter[CatChat] = !m.filter[CatChat]; m.rebuildVisibleLines()
+					m.submitInput("/view-chat")
 				}},
 				{Label: "C&ommands", Toggle: true, Checked: func() bool { return m.filter[CatCommand] }, Handler: func(_ string) {
-					m.filter[CatCommand] = !m.filter[CatCommand]; m.rebuildVisibleLines()
+					m.submitInput("/view-commands")
 				}},
 			},
 		},
@@ -393,10 +393,8 @@ func (m *Model) pushThemeDialog(cursor int) {
 		Overlay:          &m.overlay,
 		CurrentThemeName: m.themeName,
 		CanAdd:           true,
-		OnSelect: func(name string, t *theme.Theme) {
-			m.theme = t
-			m.themeName = name
-			m.persistServerConfig()
+		OnSelect: func(name string, _ *theme.Theme) {
+			m.submitInput("/theme-load " + name)
 		},
 		OnRemove: m.showThemeRemoveConfirm,
 		Reload:   m.pushThemeDialog,
@@ -413,9 +411,9 @@ func (m *Model) pushPluginDialog(cursor int) {
 		CanAdd:  true,
 		OnToggle: func(name string, load bool) {
 			if load {
-				m.handlePluginCommand("/plugin load " + name)
+				m.submitInput("/plugin-load " + name)
 			} else {
-				m.handlePluginCommand("/plugin unload " + name)
+				m.submitInput("/plugin-unload " + name)
 			}
 		},
 		OnRemove: m.showPluginRemoveConfirm,
@@ -433,9 +431,9 @@ func (m *Model) pushShaderDialog(cursor int) {
 		CanAdd:  true,
 		OnToggle: func(name string, load bool) {
 			if load {
-				m.handleShaderCommand("/shader load " + name)
+				m.submitInput("/shader-load " + name)
 			} else {
-				m.handleShaderCommand("/shader unload " + name)
+				m.submitInput("/shader-unload " + name)
 			}
 		},
 		OnRemove: m.showShaderRemoveConfirm,
@@ -455,7 +453,7 @@ func (m *Model) pushGamesDialog(cursor int) {
 		CanAdd:      true,
 		CanRemove:   true,
 		OnLoad: func(name string) {
-			m.submitInput("/game load " + name)
+			m.submitInput("/game-load " + name)
 		},
 		OnRemove: m.showGameRemoveConfirm,
 		Reload:   m.pushGamesDialog,
@@ -481,7 +479,7 @@ func (m *Model) showGameRemoveConfirm(name string, cursor int) {
 				active := m.api.State().GameName
 				m.api.State().RUnlock()
 				if strings.EqualFold(active, name) {
-					m.submitInput("/game unload")
+					m.submitInput("/game-unload")
 				}
 				if _, err := os.Stat(filepath.Join(gamesDir, name)); err == nil {
 					os.RemoveAll(filepath.Join(gamesDir, name))
@@ -500,7 +498,7 @@ func (m *Model) pushSavesDialog(cursor int) {
 		Overlay:   &m.overlay,
 		CanRemove: true,
 		OnLoad: func(gameName, saveName string) {
-			m.submitInput("/game resume " + gameName + "/" + saveName)
+			m.submitInput("/game-resume " + gameName + "/" + saveName)
 		},
 		OnRemove: m.showSaveRemoveConfirm,
 		Reload:   m.pushSavesDialog,
@@ -549,7 +547,7 @@ func (m *Model) showPluginRemoveConfirm(names []string, returnCursor int) {
 		OnClose: func(btn string) {
 			if btn == "Delete" {
 				for _, name := range names {
-					m.handlePluginCommand("/plugin unload " + name)
+					m.submitInput("/plugin-unload " + name)
 					ext := scriptExt(filepath.Join(m.api.DataDir(), "plugins"), name)
 					os.Remove(filepath.Join(m.api.DataDir(), "plugins", name+ext))
 				}
@@ -593,7 +591,7 @@ func (m *Model) showShaderRemoveConfirm(names []string, returnCursor int) {
 		OnClose: func(btn string) {
 			if btn == "Delete" {
 				for _, name := range names {
-					m.handleShaderCommand("/shader unload " + name)
+					m.submitInput("/shader-unload " + name)
 					ext := scriptExt(filepath.Join(m.api.DataDir(), "shaders"), name)
 					os.Remove(filepath.Join(m.api.DataDir(), "shaders", name+ext))
 				}

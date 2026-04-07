@@ -66,17 +66,7 @@ func (m *Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleTick(_ domain.TickMsg) (tea.Model, tea.Cmd) {
 	if len(m.InitCommands) > 0 {
 		for _, cmd := range m.InitCommands {
-			if strings.HasPrefix(cmd, "/plugin") {
-				m.handlePluginCommand(cmd)
-			} else if strings.HasPrefix(cmd, "/theme") {
-				m.handleThemeCommand(cmd)
-			} else if strings.HasPrefix(cmd, "/shader") {
-				m.handleShaderCommand(cmd)
-			} else if strings.HasPrefix(cmd, "/synth") {
-				m.handleSynthCommand(cmd)
-			} else if strings.HasPrefix(cmd, "/") {
-				m.dispatchPluginReply(cmd)
-			}
+			m.dispatchInput(cmd)
 		}
 		m.InitCommands = nil
 	}

@@ -10,29 +10,143 @@ import (
 )
 
 // dispatchInput processes submitted text (commands, chat, plugins).
-// Called by both the lobby and playing NCCommandInput controls.
 func (m *Model) dispatchInput(text string) {
 	if text == "" {
 		return
 	}
-	// Handle /plugin and /theme locally (per-player).
-	if strings.HasPrefix(text, "/plugin") {
-		m.handlePluginCommand(text)
-		return
-	}
-	if strings.HasPrefix(text, "/theme") {
-		m.handleThemeCommand(text)
-		return
-	}
-	if strings.HasPrefix(text, "/shader") {
-		m.handleShaderCommand(text)
-		return
-	}
-	if strings.HasPrefix(text, "/synth") {
-		m.handleSynthCommand(text)
-		return
-	}
 	if strings.HasPrefix(text, "/") {
+		cmd, arg := parseCommand(text)
+
+		// Local commands (per-player, not in server registry).
+		switch cmd {
+		case "/theme-list":
+			localcmd.HandleThemeList(m.api.DataDir(), m.theme.Name, m.pluginReply)
+			return
+		case "/theme-load":
+			if arg == "" {
+				m.pluginReply("Usage: /theme-load <name>")
+				return
+			}
+			if t, name := localcmd.HandleThemeLoad(arg, m.api.DataDir(), m.pluginReply); t != nil {
+				m.theme, m.themeName, m.gameWindow = t, name, nil
+				m.persistClientConfig()
+			}
+			return
+		case "/plugin-list":
+			localcmd.HandlePluginList(m.api.DataDir(), m.pluginNames, m.pluginReply)
+			return
+		case "/plugin-load":
+			if arg == "" {
+				m.pluginReply("Usage: /plugin-load <name>")
+				return
+			}
+			p, n, changed := localcmd.HandlePluginLoad(arg, m.api.DataDir(), m.api.Clock(),
+				m.plugins, m.pluginNames, m.pluginReply)
+			m.plugins, m.pluginNames = p, n
+			if changed {
+				m.persistClientConfig()
+			}
+			return
+		case "/plugin-unload":
+			if arg == "" {
+				m.pluginReply("Usage: /plugin-unload <name>")
+				return
+			}
+			p, n, changed := localcmd.HandlePluginUnload(arg, m.plugins, m.pluginNames, m.pluginReply)
+			m.plugins, m.pluginNames = p, n
+			if changed {
+				m.persistClientConfig()
+			}
+			return
+		case "/shader-list":
+			localcmd.HandleShaderList(m.api.DataDir(), m.shaderNames, m.pluginReply)
+			return
+		case "/shader-load":
+			if arg == "" {
+				m.pluginReply("Usage: /shader-load <name>")
+				return
+			}
+			s, n, changed := localcmd.HandleShaderLoad(arg, m.api.DataDir(), m.api.Clock(),
+				m.shaders, m.shaderNames, m.pluginReply)
+			m.shaders, m.shaderNames = s, n
+			if changed {
+				m.persistClientConfig()
+			}
+			return
+		case "/shader-unload":
+			if arg == "" {
+				m.pluginReply("Usage: /shader-unload <name>")
+				return
+			}
+			s, n, changed := localcmd.HandleShaderUnload(arg, m.shaders, m.shaderNames, m.pluginReply)
+			m.shaders, m.shaderNames = s, n
+			if changed {
+				m.persistClientConfig()
+			}
+			return
+		case "/shader-up":
+			if arg == "" {
+				m.pluginReply("Usage: /shader-up <name>")
+				return
+			}
+			s, n, changed := localcmd.HandleShaderUp(arg, m.shaders, m.shaderNames, m.pluginReply)
+			m.shaders, m.shaderNames = s, n
+			if changed {
+				m.persistClientConfig()
+			}
+			return
+		case "/shader-down":
+			if arg == "" {
+				m.pluginReply("Usage: /shader-down <name>")
+				return
+			}
+			s, n, changed := localcmd.HandleShaderDown(arg, m.shaders, m.shaderNames, m.pluginReply)
+			m.shaders, m.shaderNames = s, n
+			if changed {
+				m.persistClientConfig()
+			}
+			return
+		case "/synth-list":
+			m.handleSynthList()
+			return
+		case "/synth-load":
+			if arg == "" {
+				m.pluginReply("Usage: /synth-load <name>")
+				return
+			}
+			m.handleSynthLoad(arg)
+			return
+		// Render mode commands.
+		case "/render-text":
+			m.renderMode = domain.RenderModeText
+			return
+		case "/render-quadrant":
+			if m.canUseRenderMode(domain.RenderModeQuadrant) {
+				m.renderMode = domain.RenderModeQuadrant
+			} else {
+				m.pluginReply("Quadrant mode not available.")
+			}
+			return
+		case "/render-canvas":
+			if m.canUseRenderMode(domain.RenderModeCanvas) {
+				m.renderMode = domain.RenderModeCanvas
+			} else {
+				m.pluginReply("Canvas mode not available.")
+			}
+			return
+		case "/render-local":
+			if !m.IsEnhancedClient || m.IsTerminalClient {
+				m.pluginReply("Local rendering not available.")
+				return
+			}
+			m.localRendering = !m.localRendering
+			m.localModeSent = false
+			m.gameSrcSent = false
+			m.lastStateJSON = ""
+			return
+		}
+
+		// Server-side commands via registry.
 		player := m.api.State().GetPlayer(m.playerID)
 		isAdmin := player != nil && player.IsAdmin
 		ctx := domain.CommandContext{
@@ -52,7 +166,7 @@ func (m *Model) dispatchInput(text string) {
 		m.api.DispatchCommand(text, ctx)
 		return
 	}
-	// Regular chat
+	// Regular chat.
 	playerName := "unknown"
 	if p := m.api.State().GetPlayer(m.playerID); p != nil {
 		playerName = p.Name
@@ -77,30 +191,12 @@ func (m *Model) lobbyTabComplete(current string) (string, bool) {
 	return result, true
 }
 
-func (m *Model) handleThemeCommand(input string) {
-	t, name := localcmd.HandleTheme(input, m.api.DataDir(), m.theme.Name, m.pluginReply)
-	if t != nil {
-		m.theme, m.themeName, m.gameWindow = t, name, nil
-		m.persistClientConfig()
-	}
-}
-
 func (m *Model) pluginReply(text string) {
 	msg := domain.Message{IsReply: true, IsPrivate: true, ToID: m.playerID, Text: text}
 	m.api.SendToPlayer(m.playerID, domain.ChatMsg{Msg: msg})
 }
 
-func (m *Model) handlePluginCommand(input string) {
-	p, n, changed := localcmd.HandlePlugin(input, m.api.DataDir(), m.api.Clock(),
-		m.plugins, m.pluginNames, m.pluginReply)
-	m.plugins, m.pluginNames = p, n
-	if changed {
-		m.persistClientConfig()
-	}
-}
-
 // dispatchPluginReply handles a string returned by a plugin's onMessage hook.
-// If it starts with "/" it's treated as a command, otherwise as chat.
 func (m *Model) dispatchPluginReply(text string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -133,50 +229,48 @@ func (m *Model) dispatchPluginReply(text string) {
 	m.api.BroadcastChat(domain.Message{Author: playerName, Text: text, IsFromPlugin: true})
 }
 
-func (m *Model) handleSynthCommand(input string) {
-	parts := strings.Fields(input)
+// handleSynthList lists available SoundFonts.
+func (m *Model) handleSynthList() {
 	sf2Dir := filepath.Join(m.api.DataDir(), "soundfonts")
-
-	if len(parts) <= 1 {
-		// List available SoundFonts.
-		entries, _ := os.ReadDir(sf2Dir)
-		var names []string
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".sf2") {
-				name := strings.TrimSuffix(e.Name(), ".sf2")
-				tag := ""
-				if name == m.synthName {
-					tag = " [active]"
-				}
-				names = append(names, name+tag)
+	entries, _ := os.ReadDir(sf2Dir)
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sf2") {
+			name := strings.TrimSuffix(e.Name(), ".sf2")
+			tag := ""
+			if name == m.synthName {
+				tag = " [active]"
 			}
+			names = append(names, name+tag)
 		}
-		if len(names) == 0 {
-			m.pluginReply("No SoundFonts found in soundfonts/")
-		} else {
-			m.pluginReply("SoundFonts: " + strings.Join(names, ", "))
-		}
-		return
 	}
+	if len(names) == 0 {
+		m.pluginReply("No SoundFonts found in soundfonts/")
+	} else {
+		m.pluginReply("SoundFonts: " + strings.Join(names, ", "))
+	}
+}
 
-	name := parts[1]
+// handleSynthLoad selects a SoundFont by name.
+func (m *Model) handleSynthLoad(name string) {
+	sf2Dir := filepath.Join(m.api.DataDir(), "soundfonts")
 	sf2Path := filepath.Join(sf2Dir, name+".sf2")
 	if _, err := os.Stat(sf2Path); err != nil {
 		m.pluginReply("SoundFont not found: " + name)
 		return
 	}
-
 	m.synthName = name
-	m.synthSent = false // trigger OSC re-send next frame
+	m.synthSent = false
 	m.persistClientConfig()
 	m.pluginReply("SoundFont: " + name)
 }
 
-func (m *Model) handleShaderCommand(input string) {
-	s, n, changed := localcmd.HandleShader(input, m.api.DataDir(), m.api.Clock(),
-		m.shaders, m.shaderNames, m.pluginReply)
-	m.shaders, m.shaderNames = s, n
-	if changed {
-		m.persistClientConfig()
+// parseCommand splits "/cmd-name arg1 arg2" into ("/cmd-name", "arg1 arg2").
+func parseCommand(text string) (string, string) {
+	text = strings.TrimSpace(text)
+	idx := strings.IndexByte(text, ' ')
+	if idx < 0 {
+		return text, ""
 	}
+	return text[:idx], strings.TrimSpace(text[idx+1:])
 }

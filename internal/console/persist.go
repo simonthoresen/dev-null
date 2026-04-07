@@ -7,8 +7,8 @@ import (
 )
 
 // persistServerConfig rewrites ~/.dev-null/server.txt so that all
-// /theme, /plugin, and /shader lines are replaced by a leading block
-// that restores the current selections. All other lines are preserved.
+// /theme-load, /plugin-load, and /shader-load lines are replaced by a leading
+// block that restores the current selections. Other lines are preserved.
 func (m *Model) persistServerConfig() {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -18,25 +18,33 @@ func (m *Model) persistServerConfig() {
 	persistConfigFile(path, m.themeName, m.pluginNames, m.shaderNames)
 }
 
-// persistConfigFile rewrites the config file at path: strips every line whose
-// first non-space token is /theme, /plugin, or /shader, then prepends a fresh
-// block of those commands reflecting the current state.
+// managedPrefixes are command prefixes managed by persistConfigFile.
+var managedPrefixes = []string{
+	"/theme-", "/plugin-", "/shader-",
+	// Legacy prefixes (pre-flatten) — strip on upgrade.
+	"/theme ", "/plugin ", "/shader ",
+}
+
+// persistConfigFile rewrites the config file at path: strips managed lines,
+// then prepends a fresh block reflecting the current state.
 func persistConfigFile(path, themeName string, pluginNames, shaderNames []string) {
-	// Read existing content (ignore error — file may not exist yet).
 	var kept []string
 	if data, err := os.ReadFile(path); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			tok := strings.TrimSpace(line)
-			if strings.HasPrefix(tok, "/theme") ||
-				strings.HasPrefix(tok, "/plugin") ||
-				strings.HasPrefix(tok, "/shader") {
-				continue
+			managed := false
+			for _, prefix := range managedPrefixes {
+				if strings.HasPrefix(tok, prefix) {
+					managed = true
+					break
+				}
 			}
-			kept = append(kept, line)
+			if !managed {
+				kept = append(kept, line)
+			}
 		}
 	}
 
-	// Strip leading and trailing blank lines from the kept block.
 	for len(kept) > 0 && strings.TrimSpace(kept[0]) == "" {
 		kept = kept[1:]
 	}
@@ -44,19 +52,17 @@ func persistConfigFile(path, themeName string, pluginNames, shaderNames []string
 		kept = kept[:len(kept)-1]
 	}
 
-	// Build the managed block.
 	var managed []string
 	if themeName != "" {
-		managed = append(managed, "/theme "+themeName)
+		managed = append(managed, "/theme-load "+themeName)
 	}
 	for _, name := range pluginNames {
-		managed = append(managed, "/plugin load "+name)
+		managed = append(managed, "/plugin-load "+name)
 	}
 	for _, name := range shaderNames {
-		managed = append(managed, "/shader load "+name)
+		managed = append(managed, "/shader-load "+name)
 	}
 
-	// Combine: managed first, then a blank separator, then the rest.
 	var all []string
 	all = append(all, managed...)
 	if len(managed) > 0 && len(kept) > 0 {

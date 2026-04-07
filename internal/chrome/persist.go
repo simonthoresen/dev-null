@@ -7,8 +7,8 @@ import (
 )
 
 // persistClientConfig rewrites ~/.dev-null/client.txt so that all
-// /theme, /plugin, /shader, and /synth lines are replaced by a leading block
-// that restores the current selections. All other lines are preserved.
+// /theme-load, /plugin-load, /shader-load, and /synth-load lines are replaced
+// by a leading block that restores the current selections. Other lines are preserved.
 func (m *Model) persistClientConfig() {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -18,26 +18,34 @@ func (m *Model) persistClientConfig() {
 	persistConfigFile(path, m.themeName, m.synthName, m.pluginNames, m.shaderNames)
 }
 
-// persistConfigFile rewrites the config file at path: strips every line whose
-// first non-space token is /theme, /plugin, /shader, or /synth, then prepends
-// a fresh block of those commands reflecting the current state.
+// managedPrefixes are command prefixes managed by persistConfigFile.
+// Lines starting with any of these are stripped and re-generated.
+var managedPrefixes = []string{
+	"/theme-", "/plugin-", "/shader-", "/synth-",
+	// Legacy prefixes (pre-flatten) — strip on upgrade.
+	"/theme ", "/plugin ", "/shader ", "/synth ",
+}
+
+// persistConfigFile rewrites the config file at path: strips managed lines,
+// then prepends a fresh block reflecting the current state.
 func persistConfigFile(path, themeName, synthName string, pluginNames, shaderNames []string) {
-	// Read existing content (ignore error — file may not exist yet).
 	var kept []string
 	if data, err := os.ReadFile(path); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			tok := strings.TrimSpace(line)
-			if strings.HasPrefix(tok, "/theme") ||
-				strings.HasPrefix(tok, "/plugin") ||
-				strings.HasPrefix(tok, "/shader") ||
-				strings.HasPrefix(tok, "/synth") {
-				continue
+			managed := false
+			for _, prefix := range managedPrefixes {
+				if strings.HasPrefix(tok, prefix) {
+					managed = true
+					break
+				}
 			}
-			kept = append(kept, line)
+			if !managed {
+				kept = append(kept, line)
+			}
 		}
 	}
 
-	// Strip leading and trailing blank lines from the kept block.
 	for len(kept) > 0 && strings.TrimSpace(kept[0]) == "" {
 		kept = kept[1:]
 	}
@@ -45,19 +53,18 @@ func persistConfigFile(path, themeName, synthName string, pluginNames, shaderNam
 		kept = kept[:len(kept)-1]
 	}
 
-	// Build the managed block.
 	var managed []string
 	if themeName != "" {
-		managed = append(managed, "/theme "+themeName)
+		managed = append(managed, "/theme-load "+themeName)
 	}
 	if synthName != "" {
-		managed = append(managed, "/synth "+synthName)
+		managed = append(managed, "/synth-load "+synthName)
 	}
 	for _, name := range pluginNames {
-		managed = append(managed, "/plugin load "+name)
+		managed = append(managed, "/plugin-load "+name)
 	}
 	for _, name := range shaderNames {
-		managed = append(managed, "/shader load "+name)
+		managed = append(managed, "/shader-load "+name)
 	}
 
 	// Combine: managed first, then a blank separator, then the rest.
