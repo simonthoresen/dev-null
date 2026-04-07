@@ -1,14 +1,8 @@
 .PHONY: build build-server build-client build-testbed run-server run-server-lan run-server-local run-client run-client-local run-testbed run-testbed-onlcr test clean generate-manifest
 
-ifeq ($(OS),Windows_NT)
-  GIT_COMMIT  := $(shell git rev-parse --short HEAD 2>nul || echo dev)
-  BUILD_DATE  := $(shell git log -1 --format=%cI 2>nul || echo unknown)
-  GIT_REMOTE  := $(shell git remote get-url origin 2>nul || echo "")
-else
-  GIT_COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
-  BUILD_DATE  := $(shell git log -1 --format=%cI 2>/dev/null || echo unknown)
-  GIT_REMOTE  := $(shell git remote get-url origin 2>/dev/null || echo "")
-endif
+GIT_COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
+BUILD_DATE  := $(shell git log -1 --format=%cI 2>/dev/null || echo unknown)
+GIT_REMOTE  := $(shell git remote get-url origin 2>/dev/null || echo "")
 
 # Build all binaries into dist/ (strip debug info for smaller binaries)
 build: build-server build-client
