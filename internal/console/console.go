@@ -690,14 +690,7 @@ func (m *Model) View() tea.View {
 	m.api.State().RUnlock()
 	engine.ApplyShaders(m.shaders, buf, shaderElapsed)
 
-	content := buf.ToString(m.profile)
-	// Emit OSC 52 clipboard sequence if a command requested it.
-	// The terminal emulator handles the clipboard copy; GUI mode uses PopClipboard() instead.
-	if m.pendingClipboard != "" {
-		content = render.EncodeOSC52(m.pendingClipboard) + content
-		m.pendingClipboard = ""
-	}
-	view.SetContent(content)
+	view.SetContent(buf.ToString(m.profile))
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
 

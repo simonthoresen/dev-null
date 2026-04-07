@@ -1,10 +1,13 @@
 package console
 
 import (
+	"fmt"
+	"os"
 	"strings"
 
 	"dev-null/internal/domain"
 	"dev-null/internal/localcmd"
+	"dev-null/internal/render"
 )
 
 // tabComplete handles tab completion for the input control.
@@ -41,6 +44,9 @@ func (m *Model) consoleCtx() domain.CommandContext {
 		},
 		Clipboard: func(s string) {
 			m.pendingClipboard = s
+			// Write OSC 52 to stdout immediately for TUI mode.
+			// In GUI mode stdout isn't a terminal, but PopClipboard() handles it.
+			fmt.Fprint(os.Stdout, render.EncodeOSC52(s))
 		},
 	}
 }

@@ -2,6 +2,7 @@
 package clipboard
 
 import (
+	"log/slog"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -20,5 +21,11 @@ func Copy(text string) error {
 		cmd = exec.Command("xclip", "-selection", "clipboard")
 	}
 	cmd.Stdin = strings.NewReader(text)
-	return cmd.Run()
+	err := cmd.Run()
+	if err != nil {
+		slog.Error("clipboard copy failed", "error", err, "len", len(text))
+	} else {
+		slog.Debug("clipboard copy", "len", len(text))
+	}
+	return err
 }

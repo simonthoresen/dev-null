@@ -170,7 +170,7 @@ func (m *Model) View() tea.View {
 		}
 	}
 
-	// Emit OSC 52 clipboard sequence if a command requested it.
+	// Emit OSC 52 clipboard sequence for SSH players (the terminal handles it).
 	if m.pendingClipboard != "" {
 		oscPrefix += render.EncodeOSC52(m.pendingClipboard)
 		m.pendingClipboard = ""

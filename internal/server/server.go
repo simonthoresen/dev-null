@@ -440,7 +440,10 @@ func (a *Server) registerBuiltins() {
 				ctx.Reply(cmd)
 			}
 			if ctx.Clipboard != nil {
+				slog.Debug("invite: setting clipboard", "len", len(cmd))
 				ctx.Clipboard(cmd)
+			} else {
+				slog.Debug("invite: no clipboard callback")
 			}
 		},
 	})
