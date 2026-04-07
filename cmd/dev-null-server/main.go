@@ -241,6 +241,8 @@ func main() {
 		if err := backend.Run(consoleModel); err != nil {
 			fmt.Fprintf(os.Stderr, "console error: %v\n", err)
 		}
+		// Ensure context is cancelled when GUI window closes (covers window X button).
+		stop()
 	}
 
 	startBootStep("Initiating shutdown")
