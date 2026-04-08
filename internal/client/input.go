@@ -6,17 +6,17 @@ import (
 )
 
 // handleInput maps Ebitengine key events to SSH-compatible escape sequences.
-func (g *Game) handleInput() {
+func (r *ClientRenderer) handleInput() {
 	// Handle character input (typed text).
 	runes := ebiten.AppendInputChars(nil)
-	for _, r := range runes {
-		g.conn.Write([]byte(string(r)))
+	for _, ch := range runes {
+		r.conn.Write([]byte(string(ch)))
 	}
 
 	// Handle special keys.
 	for _, key := range specialKeys {
 		if inpututil.IsKeyJustPressed(key.ekey) {
-			g.conn.Write([]byte(key.seq))
+			r.conn.Write([]byte(key.seq))
 		}
 	}
 }

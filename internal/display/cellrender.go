@@ -148,44 +148,6 @@ func GameLayoutInt(outsideWidth, outsideHeight int) (int, int) {
 	return int(float64(outsideWidth) * s), int(float64(outsideHeight) * s)
 }
 
-// --- Shared Window struct (embedded by EbitenBackend and client.Game) ---
-
-// Window provides shared Ebitengine window management: DPI-scaled layout,
-// font, and resize detection. Embed in your ebiten.Game implementation.
-type Window struct {
-	FontFace text.Face
-	lastCols int
-	lastRows int
-}
-
-// NewWindow creates a Window with the DPI-scaled GUI font.
-func NewWindow() Window {
-	return Window{FontFace: InitGUIFont()}
-}
-
-// DetectResize checks if the window size changed and returns the new dimensions.
-func (w *Window) DetectResize() (cols, rows int, changed bool) {
-	ww, hh := ebiten.WindowSize()
-	cols = WindowCols(ww)
-	rows = WindowRows(hh)
-	changed = cols != w.lastCols || rows != w.lastRows
-	if changed {
-		w.lastCols = cols
-		w.lastRows = rows
-	}
-	return
-}
-
-// LayoutF implements ebiten.LayoutFer for HiDPI-aware rendering.
-func (w *Window) LayoutF(outsideWidth, outsideHeight float64) (float64, float64) {
-	return GameLayout(outsideWidth, outsideHeight)
-}
-
-// Layout implements ebiten.Game's Layout method.
-func (w *Window) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return GameLayoutInt(outsideWidth, outsideHeight)
-}
-
 // sharedPixel is a 1x1 white image reused for all background fills.
 // Colored via ColorScale to avoid per-cell image allocation.
 var sharedPixel *ebiten.Image

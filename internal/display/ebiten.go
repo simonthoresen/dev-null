@@ -7,148 +7,185 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
 
 	"dev-null/internal/clipboard"
+	"dev-null/internal/render"
 )
 
-// EbitenBackend runs a Bubble Tea model inside an Ebitengine window.
-// It translates Ebitengine input events to tea.Msg, drives Update/View,
-// and renders the resulting ImageBuffer as pixel cells.
-type EbitenBackend struct {
-	Window // shared DPI, layout, font, resize detection
-	opts   options
-	model  tea.Model
-
-	// Inbound message queue — fed by Send() and tea.Cmd goroutines.
-	msgCh chan tea.Msg
-
-	// Protects model access between Update() and Draw().
-	mu    sync.Mutex
-	dirty bool // true when model state changed since last Draw
-
-	// Cursor blink state.
-	cursorStart time.Time
+// Renderer provides game-specific logic to a Window.
+// Implement this for server (Bubble Tea model) or client (SSH connection).
+type Renderer interface {
+	// HandleInput processes keyboard/mouse input each frame.
+	HandleInput(w *Window)
+	// Draw renders the current frame (background is already filled black).
+	Draw(w *Window, screen *ebiten.Image)
+	// Resize is called when the window size changes (in cell units).
+	Resize(cols, rows int)
+	// ShouldClose returns true when the window should exit.
+	ShouldClose() bool
 }
 
-// NewEbitenBackend creates a backend that renders to an Ebitengine window.
-func NewEbitenBackend(opts ...Option) *EbitenBackend {
-	o := defaultOptions()
-	for _, fn := range opts {
-		fn(&o)
-	}
-	return &EbitenBackend{
-		Window:      NewWindow(),
-		opts:        o,
-		msgCh:       make(chan tea.Msg, 256),
-		dirty:       true, // force initial render
-		cursorStart: time.Now(),
-	}
+// Window is the single Ebitengine GUI implementation used by both server and
+// client. Plug in a Renderer for game-specific behavior.
+type Window struct {
+	FontFace text.Face
+	renderer Renderer
+	started  chan struct{}
+	lastCols int
+	lastRows int
 }
 
-// Run starts the Ebitengine game loop (blocking).
-func (e *EbitenBackend) Run(model tea.Model) error {
-	e.mu.Lock()
-	e.model = model
-	e.mu.Unlock()
+// RunWindow creates a Window with the given renderer and runs the Ebitengine
+// game loop (blocking). This is the single entry point for all GUI rendering.
+func RunWindow(renderer Renderer, title string, width, height int) error {
+	w := &Window{
+		FontFace: InitGUIFont(),
+		renderer: renderer,
+		started:  make(chan struct{}),
+		lastCols: WindowCols(width),
+		lastRows: WindowRows(height),
+	}
 
-	// Call Init and process any returned commands.
-	cmd := model.Init()
-	e.processCmd(cmd)
-
-	// Send initial window size.
-	cols := WindowCols(e.opts.windowWidth)
-	rows := WindowRows(e.opts.windowHeight)
-	e.Window.lastCols = cols
-	e.Window.lastRows = rows
-	e.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
-
-	ebiten.SetWindowSize(e.opts.windowWidth, e.opts.windowHeight)
-	ebiten.SetWindowTitle(e.opts.windowTitle)
+	ebiten.SetWindowSize(width, height)
+	ebiten.SetWindowTitle(title)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
-	return ebiten.RunGame(e)
-}
-
-// Send delivers a message to the model asynchronously.
-func (e *EbitenBackend) Send(msg tea.Msg) {
-	select {
-	case e.msgCh <- msg:
-	default:
-		// Drop message if queue is full (shouldn't happen in practice).
-	}
+	return ebiten.RunGame(w)
 }
 
 // Update implements ebiten.Game.
-func (e *EbitenBackend) Update() error {
+func (w *Window) Update() error {
+	// Signal that the game loop is running (first frame only).
+	select {
+	case <-w.started:
+	default:
+		close(w.started)
+		w.renderer.Resize(w.lastCols, w.lastRows)
+	}
+
+	if w.renderer.ShouldClose() {
+		return ebiten.Termination
+	}
+
 	// Handle window resize.
-	if cols, rows, changed := e.DetectResize(); changed {
-		e.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
+	if cols, rows, changed := w.detectResize(); changed {
+		w.renderer.Resize(cols, rows)
 	}
 
-	// Poll Ebitengine input → tea.Msg.
-	for _, msg := range PollKeyMessages() {
-		e.Send(msg)
-	}
-	for _, msg := range PollMouseMessages() {
-		e.Send(msg)
-	}
-
-	// Drain message queue and feed to model (limit per frame to avoid stalls).
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	for range 64 {
-		select {
-		case msg := <-e.msgCh:
-			if _, ok := msg.(tea.QuitMsg); ok {
-				return ebiten.Termination
-			}
-			// Reset cursor blink on any key press.
-			if _, ok := msg.(tea.KeyPressMsg); ok {
-				e.cursorStart = time.Now()
-			}
-			var cmd tea.Cmd
-			e.model, cmd = e.model.Update(msg)
-			e.processCmd(cmd)
-			e.dirty = true
-		default:
-			return nil
-		}
-	}
+	w.renderer.HandleInput(w)
 	return nil
 }
 
 // Draw implements ebiten.Game.
-func (e *EbitenBackend) Draw(screen *ebiten.Image) {
+func (w *Window) Draw(screen *ebiten.Image) {
 	screen.Fill(color.RGBA{R: 0, G: 0, B: 0, A: 255})
+	w.renderer.Draw(w, screen)
+}
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
+// LayoutF implements ebiten.LayoutFer for HiDPI-aware rendering.
+func (w *Window) LayoutF(outsideWidth, outsideHeight float64) (float64, float64) {
+	return GameLayout(outsideWidth, outsideHeight)
+}
 
-	// Call View() to update the render buffer and get cursor info.
-	view := e.model.View()
-	e.dirty = false
+// Layout implements ebiten.Game.
+func (w *Window) Layout(outsideWidth, outsideHeight int) (int, int) {
+	return GameLayoutInt(outsideWidth, outsideHeight)
+}
 
-	// Read the buffer directly (no ANSI round-trip).
-	if bv, ok := e.model.(BufferViewer); ok {
+// Started returns a channel that is closed when the game loop starts.
+// Useful for deferring work (like SSH reads) until the window exists.
+func (w *Window) Started() <-chan struct{} { return w.started }
+
+func (w *Window) detectResize() (cols, rows int, changed bool) {
+	ww, hh := ebiten.WindowSize()
+	cols = WindowCols(ww)
+	rows = WindowRows(hh)
+	changed = cols != w.lastCols || rows != w.lastRows
+	if changed {
+		w.lastCols = cols
+		w.lastRows = rows
+	}
+	return
+}
+
+// --- ServerRenderer: wraps a Bubble Tea model for the server GUI ---
+
+// ServerRenderer drives a Bubble Tea model inside a Window.
+// Used by the server console and --local --no-ssh mode.
+type ServerRenderer struct {
+	model tea.Model
+	msgCh chan tea.Msg
+
+	mu          sync.Mutex
+	cursorStart time.Time
+}
+
+// NewServerRenderer creates a renderer that drives the given Bubble Tea model.
+func NewServerRenderer() *ServerRenderer {
+	return &ServerRenderer{
+		msgCh:       make(chan tea.Msg, 256),
+		cursorStart: time.Now(),
+	}
+}
+
+// Run initializes the model and starts the Ebitengine window (blocking).
+func (r *ServerRenderer) Run(model tea.Model, title string, width, height int) error {
+	r.mu.Lock()
+	r.model = model
+	r.mu.Unlock()
+
+	cmd := model.Init()
+	r.processCmd(cmd)
+
+	// Send initial window size.
+	r.Send(tea.WindowSizeMsg{
+		Width:  WindowCols(width),
+		Height: WindowRows(height),
+	})
+
+	return RunWindow(r, title, width, height)
+}
+
+// Send delivers a message to the model asynchronously.
+func (r *ServerRenderer) Send(msg tea.Msg) {
+	select {
+	case r.msgCh <- msg:
+	default:
+	}
+}
+
+func (r *ServerRenderer) HandleInput(w *Window) {
+	for _, msg := range PollKeyMessages() {
+		r.Send(msg)
+	}
+	for _, msg := range PollMouseMessages() {
+		r.Send(msg)
+	}
+}
+
+func (r *ServerRenderer) Draw(w *Window, screen *ebiten.Image) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	view := r.model.View()
+
+	if bv, ok := r.model.(BufferViewer); ok {
 		if buf := bv.ViewBuffer(); buf != nil {
-			DrawImageBuffer(screen, buf, e.FontFace)
+			DrawImageBuffer(screen, buf, w.FontFace)
 		}
 	}
 
-	// Handle clipboard copy for GUI mode (no terminal to handle OSC 52).
-	if cv, ok := e.model.(ClipboardViewer); ok {
+	if cv, ok := r.model.(ClipboardViewer); ok {
 		if text := cv.PopClipboard(); text != "" {
 			go clipboard.Copy(text) //nolint:errcheck
 		}
 	}
 
-	// Draw blinking cursor from the View's cursor position.
+	// Draw blinking cursor.
 	if view.Cursor != nil {
-		elapsed := time.Since(e.cursorStart)
-		// 530ms on, 530ms off (standard terminal blink rate).
-		blinkOn := (elapsed.Milliseconds()/530)%2 == 0
-		if blinkOn {
+		elapsed := time.Since(r.cursorStart)
+		if (elapsed.Milliseconds()/530)%2 == 0 {
 			cx := view.Cursor.Position.X
 			cy := view.Cursor.Position.Y
 			op := &ebiten.DrawImageOptions{}
@@ -160,10 +197,35 @@ func (e *EbitenBackend) Draw(screen *ebiten.Image) {
 	}
 }
 
-// Layout and LayoutF are inherited from the embedded Window struct.
+func (r *ServerRenderer) Resize(cols, rows int) {
+	r.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
+}
 
-// processCmd runs a tea.Cmd in a goroutine, routing the result back via msgCh.
-func (e *EbitenBackend) processCmd(cmd tea.Cmd) {
+func (r *ServerRenderer) ShouldClose() bool {
+	// Drain message queue and feed to model.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for range 64 {
+		select {
+		case msg := <-r.msgCh:
+			if _, ok := msg.(tea.QuitMsg); ok {
+				return true
+			}
+			if _, ok := msg.(tea.KeyPressMsg); ok {
+				r.cursorStart = time.Now()
+			}
+			var cmd tea.Cmd
+			r.model, cmd = r.model.Update(msg)
+			r.processCmd(cmd)
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+func (r *ServerRenderer) processCmd(cmd tea.Cmd) {
 	if cmd == nil {
 		return
 	}
@@ -172,13 +234,20 @@ func (e *EbitenBackend) processCmd(cmd tea.Cmd) {
 		if msg == nil {
 			return
 		}
-		// Handle batch commands: if the result is a tea.BatchMsg, process each sub-cmd.
 		if batch, ok := msg.(tea.BatchMsg); ok {
 			for _, subCmd := range batch {
-				e.processCmd(subCmd)
+				r.processCmd(subCmd)
 			}
 			return
 		}
-		e.Send(msg)
+		r.Send(msg)
 	}()
+}
+
+// --- Helpers for external renderers ---
+
+// DrawCells renders an ImageBuffer to the screen using the window's font.
+// Convenience wrapper around DrawImageBuffer for use by Renderer implementations.
+func DrawCells(w *Window, screen *ebiten.Image, buf *render.ImageBuffer) {
+	DrawImageBuffer(screen, buf, w.FontFace)
 }

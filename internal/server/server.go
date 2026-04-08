@@ -427,7 +427,7 @@ func (a *Server) SetConsoleProgram(p *tea.Program) {
 
 // SetConsoleSender registers a message sender for the console (GUI mode).
 // Use this instead of SetConsoleProgram when the console runs in an
-// EbitenBackend rather than a tea.Program.
+// ServerRenderer rather than a tea.Program.
 func (a *Server) SetConsoleSender(s msgSender) {
 	a.consoleProgramMu.Lock()
 	a.consoleSender = s

@@ -117,16 +117,13 @@ func (a *Server) RunDirect(ctx context.Context, playerName, termOverride string,
 	}
 
 	// GUI mode: run chrome in an Ebitengine window.
-	backend := display.NewEbitenBackend(
-		display.WithWindowTitle("dev-null"),
-		display.WithWindowSize(1200, 800),
-	)
+	renderer := display.NewServerRenderer()
 
 	a.programsMu.Lock()
-	a.programs[playerID] = backend
+	a.programs[playerID] = renderer
 	a.programsMu.Unlock()
 
-	deliverGameState(backend)
+	deliverGameState(renderer)
 
-	return backend.Run(model)
+	return renderer.Run(model, "dev-null", 1200, 800)
 }

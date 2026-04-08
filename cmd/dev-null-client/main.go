@@ -13,7 +13,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"image/color"
 	"log"
 	"os"
 	"os/user"
@@ -26,6 +25,7 @@ import (
 
 	"dev-null/internal/client"
 	"dev-null/internal/datadir"
+	"dev-null/internal/display"
 	"dev-null/internal/engine"
 	"dev-null/internal/server"
 )
@@ -127,7 +127,7 @@ func main() {
 				return
 			}
 			dd := *dataDir
-			g := client.NewGame(c, 1200, 800, *player, dd)
+			g := client.NewClientRenderer(c, 1200, 800, *player, dd)
 			gameCh <- gameResult{game: g, cleanup: func() { c.Close(); cl() }}
 		} else {
 			fmt.Printf("Connecting to %s:%d as %s...\n", *host, *port, *player)
@@ -136,26 +136,20 @@ func main() {
 				gameCh <- gameResult{err: err}
 				return
 			}
-			g := client.NewGame(c, 1200, 800, *player, datadir.DefaultDataDir())
+			g := client.NewClientRenderer(c, 1200, 800, *player, datadir.DefaultDataDir())
 			gameCh <- gameResult{game: g, cleanup: func() { c.Close() }}
 		}
 	}()
 
 	fmt.Println("Connecting...")
 
-	// Set up window BEFORE any blocking — the main thread must enter
-	// Ebitengine's message loop immediately.
-	ebiten.SetWindowSize(1200, 800)
+	// Run the window with a lazy renderer that connects in the background.
+	title := "dev-null"
 	if *localMode {
-		ebiten.SetWindowTitle("dev-null (local)")
-	} else {
-		ebiten.SetWindowTitle("dev-null")
+		title = "dev-null (local)"
 	}
-	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
-
-	// Run a wrapper game that waits for the real game to connect.
-	wrapper := &lazyGame{gameCh: gameCh}
-	if err := ebiten.RunGame(wrapper); err != nil {
+	wrapper := &lazyRenderer{gameCh: gameCh}
+	if err := display.RunWindow(wrapper, title, 1200, 800); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -167,53 +161,54 @@ func main() {
 // dialLocal starts a headless server in a background goroutine and dials it.
 // Returns the SSH connection and a cleanup function that shuts down the server.
 type gameResult struct {
-	game    *client.Game
+	game    *client.ClientRenderer
 	cleanup func()
 	err     error
 }
 
-// lazyGame wraps a client.Game that connects in the background.
-// It shows a blank screen until the real game is ready, then delegates.
-// This ensures ebiten.RunGame enters its message loop immediately without
-// any SSH/network work on the main OS thread.
-type lazyGame struct {
+// lazyRenderer wraps a ClientRenderer that connects in the background.
+// It shows a blank screen until the connection is ready, then delegates.
+type lazyRenderer struct {
 	gameCh  <-chan gameResult
-	real    *client.Game
+	real    *client.ClientRenderer
 	cleanup func()
 }
 
-func (g *lazyGame) Update() error {
-	if g.real == nil {
+func (l *lazyRenderer) HandleInput(w *display.Window) {
+	if l.real != nil {
+		l.real.HandleInput(w)
+	}
+}
+
+func (l *lazyRenderer) Draw(w *display.Window, screen *ebiten.Image) {
+	if l.real != nil {
+		l.real.Draw(w, screen)
+	}
+}
+
+func (l *lazyRenderer) Resize(cols, rows int) {
+	if l.real != nil {
+		l.real.Resize(cols, rows)
+	}
+}
+
+func (l *lazyRenderer) ShouldClose() bool {
+	if l.real == nil {
+		// Check if connection arrived.
 		select {
-		case res := <-g.gameCh:
+		case res := <-l.gameCh:
 			if res.err != nil {
 				fmt.Fprintf(os.Stderr, "Connection failed: %v\n", res.err)
-				return ebiten.Termination
+				return true
 			}
-			g.real = res.game
-			g.cleanup = res.cleanup
+			l.real = res.game
+			l.cleanup = res.cleanup
 			fmt.Fprintln(os.Stderr, "Connected. Starting renderer...")
 		default:
-			// Still connecting — keep the event loop alive.
-			return nil
 		}
+		return false
 	}
-	return g.real.Update()
-}
-
-func (g *lazyGame) Draw(screen *ebiten.Image) {
-	if g.real == nil {
-		screen.Fill(color.RGBA{R: 20, G: 20, B: 40, A: 255})
-		return
-	}
-	g.real.Draw(screen)
-}
-
-func (g *lazyGame) Layout(w, h int) (int, int) {
-	if g.real != nil {
-		return g.real.Layout(w, h)
-	}
-	return w, h
+	return l.real.ShouldClose()
 }
 
 func dialLocal(address, dataDir, playerName string, port int, tickInterval time.Duration, gameName, resumeName, termFlag string, noGUI bool, password string) (*client.SSHConn, func(), error) {

@@ -168,16 +168,13 @@ func main() {
 		}
 	} else {
 		// GUI mode: run console in an Ebitengine window.
-		backend := display.NewEbitenBackend(
-			display.WithWindowTitle("dev-null server"),
-			display.WithWindowSize(1200, 800),
-		)
-		app.SetConsoleSender(backend)
+		renderer := display.NewServerRenderer()
+		app.SetConsoleSender(renderer)
 		go func() {
 			<-ctx.Done()
-			backend.Send(tea.QuitMsg{})
+			renderer.Send(tea.QuitMsg{})
 		}()
-		if err := backend.Run(consoleModel); err != nil {
+		if err := renderer.Run(consoleModel, "dev-null server", 1200, 800); err != nil {
 			fmt.Fprintf(os.Stderr, "console error: %v\n", err)
 		}
 		// Ensure context is cancelled when GUI window closes (covers window X button).

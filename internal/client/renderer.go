@@ -44,11 +44,13 @@ func getAudioCtx() *audio.Context {
 func cellW() int { return display.CellW }
 func cellH() int { return display.CellH }
 
-// Game implements ebiten.Game for the dev-null client.
-type Game struct {
-	display.Window // shared DPI, layout, font, resize detection
-	conn           *SSHConn
-	grid           *TerminalGrid
+// ClientRenderer implements display.Renderer for the SSH client.
+// It reads from an SSH connection, renders the ANSI stream or local game
+// state, and handles charmap sprites, canvas overlays, and audio.
+type ClientRenderer struct {
+	conn     *SSHConn
+	grid     *TerminalGrid
+	fontFace text.Face // set from Window.FontFace on first Draw
 
 	// Charmap state.
 	charmapDef  *render.CharMapDef
@@ -77,7 +79,7 @@ type Game struct {
 	assetTotal    int // expected asset count (from asset-manifest OSC)
 	assetReceived int // assets received so far
 
-	// Audio state. Keys are bare filenames (e.g. "music.ogg").
+	// Audio state. Keys are bare filenames (e.r. "music.ogg").
 	audioAssets  map[string][]byte        // raw decoded asset bytes
 	audioPlayers map[string]*audio.Player // currently playing audio players
 
@@ -92,21 +94,15 @@ type Game struct {
 	mu      sync.Mutex
 }
 
-// NewGame creates a new client game instance.
-func NewGame(conn *SSHConn, width, height int, playerID, dataDir string) *Game {
+// NewClientRenderer creates a new SSH client renderer.
+// Use with display.RunWindow to open the GUI.
+func NewClientRenderer(conn *SSHConn, width, height int, playerID, dataDir string) *ClientRenderer {
 	cols := display.WindowCols(width)
 	rows := display.WindowRows(height)
-	if cols < 1 {
-		cols = 1
-	}
-	if rows < 1 {
-		rows = 1
-	}
 
 	t := theme.Default()
 
-	g := &Game{
-		Window:        display.NewWindow(),
+	r := &ClientRenderer{
 		conn:          conn,
 		grid:          NewTerminalGrid(cols, rows),
 		spriteCache:   make(map[rune]*ebiten.Image),
@@ -119,122 +115,120 @@ func NewGame(conn *SSHConn, width, height int, playerID, dataDir string) *Game {
 		started:       make(chan struct{}),
 	}
 
-	// readLoop is started from the first Update() call, not here.
-	// On Windows, starting a blocking SSH read before ebiten.RunGame
-	// enters its event loop can prevent the window from appearing.
-	go g.readLoop()
+	// readLoop waits for Window.Started() before reading SSH data.
+	go r.readLoop()
 
-	return g
+	return r
 }
 
-func (g *Game) readLoop() {
+func (r *ClientRenderer) readLoop() {
 	// Wait for the game loop to start before reading SSH data.
 	// On Windows, blocking SSH reads before ebiten.RunGame's event loop
 	// can prevent window creation.
-	<-g.started
+	<-r.started
 	for {
-		n, err := g.conn.Read(g.readBuf)
+		n, err := r.conn.Read(r.readBuf)
 		if n > 0 {
 			data := make([]byte, n)
-			copy(data, g.readBuf[:n])
-			g.mu.Lock()
-			g.grid.Feed(data)
+			copy(data, r.readBuf[:n])
+			r.mu.Lock()
+			r.grid.Feed(data)
 
 			// Check for new charmap data.
-			if g.grid.CharmapJSON != nil {
-				g.loadCharmap(g.grid.CharmapJSON)
-				g.grid.CharmapJSON = nil
+			if r.grid.CharmapJSON != nil {
+				r.loadCharmap(r.grid.CharmapJSON)
+				r.grid.CharmapJSON = nil
 			}
-			if g.grid.AtlasData != nil {
-				g.loadAtlas(g.grid.AtlasData)
-				g.grid.AtlasData = nil
+			if r.grid.AtlasData != nil {
+				r.loadAtlas(r.grid.AtlasData)
+				r.grid.AtlasData = nil
 			}
-			if g.grid.FrameData != nil {
-				g.loadCanvasFrame(g.grid.FrameData)
-				g.grid.FrameData = nil
+			if r.grid.FrameData != nil {
+				r.loadCanvasFrame(r.grid.FrameData)
+				r.grid.FrameData = nil
 			}
 			// Game source files — load into local renderer.
-			if len(g.grid.GameSrcFiles) > 0 {
-				g.gameSrcFiles = g.grid.GameSrcFiles
-				g.grid.GameSrcFiles = nil
-				g.localRenderer.LoadGame(g.gameSrcFiles)
+			if len(r.grid.GameSrcFiles) > 0 {
+				r.gameSrcFiles = r.grid.GameSrcFiles
+				r.grid.GameSrcFiles = nil
+				r.localRenderer.LoadGame(r.gameSrcFiles)
 			}
 			// Game state delta — update local renderer.
-			if g.grid.StateData != nil {
-				g.gameStateJSON = decompressBytes(g.grid.StateData)
-				g.grid.StateData = nil
-				if g.gameStateJSON != nil {
-					g.localRenderer.SetState(g.gameStateJSON)
+			if r.grid.StateData != nil {
+				r.gameStateJSON = decompressBytes(r.grid.StateData)
+				r.grid.StateData = nil
+				if r.gameStateJSON != nil {
+					r.localRenderer.SetState(r.gameStateJSON)
 				}
 			}
 			// Render mode.
-			if g.grid.RenderMode != "" {
-				g.renderMode = g.grid.RenderMode
-				g.grid.RenderMode = ""
+			if r.grid.RenderMode != "" {
+				r.renderMode = r.grid.RenderMode
+				r.grid.RenderMode = ""
 			}
 			// Asset manifest — resets progress tracking and clears old assets/sounds.
-			if g.grid.AssetManifestTotal > 0 {
-				g.assetTotal = g.grid.AssetManifestTotal
-				g.assetReceived = 0
-				g.audioAssets = make(map[string][]byte)
-				g.stopSound("")
-				g.midiSynth.AllNotesOff()
-				g.grid.AssetManifestTotal = 0
+			if r.grid.AssetManifestTotal > 0 {
+				r.assetTotal = r.grid.AssetManifestTotal
+				r.assetReceived = 0
+				r.audioAssets = make(map[string][]byte)
+				r.stopSound("")
+				r.midiSynth.AllNotesOff()
+				r.grid.AssetManifestTotal = 0
 			}
 			// Incoming binary assets.
-			for _, a := range g.grid.AssetFiles {
-				if g.audioAssets == nil {
-					g.audioAssets = make(map[string][]byte)
+			for _, a := range r.grid.AssetFiles {
+				if r.audioAssets == nil {
+					r.audioAssets = make(map[string][]byte)
 				}
-				g.audioAssets[filepath.Base(a.Name)] = a.Data
-				g.assetReceived++
+				r.audioAssets[filepath.Base(a.Name)] = a.Data
+				r.assetReceived++
 			}
-			g.grid.AssetFiles = nil
+			r.grid.AssetFiles = nil
 			// Sound commands.
-			for _, cmd := range g.grid.SoundCmds {
+			for _, cmd := range r.grid.SoundCmds {
 				if cmd.Stop {
-					g.stopSound(cmd.Filename)
+					r.stopSound(cmd.Filename)
 				} else {
-					g.playSound(cmd.Filename, cmd.Loop)
+					r.playSound(cmd.Filename, cmd.Loop)
 				}
 			}
-			g.grid.SoundCmds = nil
+			r.grid.SoundCmds = nil
 			// MIDI events.
-			for _, ev := range g.grid.MidiEvents {
-				g.midiSynth.DispatchEvent(ev)
+			for _, ev := range r.grid.MidiEvents {
+				r.midiSynth.DispatchEvent(ev)
 			}
-			g.grid.MidiEvents = nil
+			r.grid.MidiEvents = nil
 			// SoundFont switch.
-			if g.grid.SynthName != "" {
-				sf2Path := filepath.Join(g.dataDir, "soundfonts", g.grid.SynthName+".sf2")
-				if err := g.midiSynth.LoadSoundFont(sf2Path); err == nil {
-					g.midiSynth.mu.Lock()
-					g.midiSynth.fontName = g.grid.SynthName
-					g.midiSynth.mu.Unlock()
+			if r.grid.SynthName != "" {
+				sf2Path := filepath.Join(r.dataDir, "soundfonts", r.grid.SynthName+".sf2")
+				if err := r.midiSynth.LoadSoundFont(sf2Path); err == nil {
+					r.midiSynth.mu.Lock()
+					r.midiSynth.fontName = r.grid.SynthName
+					r.midiSynth.mu.Unlock()
 				}
-				g.grid.SynthName = ""
+				r.grid.SynthName = ""
 			}
-			g.mu.Unlock()
+			r.mu.Unlock()
 		}
 		if err != nil {
-			g.mu.Lock()
-			g.connClosed = true
-			g.mu.Unlock()
+			r.mu.Lock()
+			r.connClosed = true
+			r.mu.Unlock()
 			return
 		}
 	}
 }
 
-func (g *Game) loadCharmap(jsonData []byte) {
+func (r *ClientRenderer) loadCharmap(jsonData []byte) {
 	var def render.CharMapDef
 	if err := json.Unmarshal(jsonData, &def); err != nil {
 		return
 	}
-	g.charmapDef = &def
-	g.spriteCache = make(map[rune]*ebiten.Image)
+	r.charmapDef = &def
+	r.spriteCache = make(map[rune]*ebiten.Image)
 }
 
-func (g *Game) loadAtlas(gzipData []byte) {
+func (r *ClientRenderer) loadAtlas(gzipData []byte) {
 	gz, err := gzip.NewReader(bytes.NewReader(gzipData))
 	if err != nil {
 		return
@@ -251,8 +245,8 @@ func (g *Game) loadAtlas(gzipData []byte) {
 		return
 	}
 
-	g.atlasImage = ebiten.NewImageFromImage(img)
-	g.spriteCache = make(map[rune]*ebiten.Image)
+	r.atlasImage = ebiten.NewImageFromImage(img)
+	r.spriteCache = make(map[rune]*ebiten.Image)
 }
 
 // decompressBytes decompresses gzipped data.
@@ -269,7 +263,7 @@ func decompressBytes(data []byte) []byte {
 	return raw
 }
 
-func (g *Game) loadCanvasFrame(gzipData []byte) {
+func (r *ClientRenderer) loadCanvasFrame(gzipData []byte) {
 	gz, err := gzip.NewReader(bytes.NewReader(gzipData))
 	if err != nil {
 		return
@@ -286,7 +280,7 @@ func (g *Game) loadCanvasFrame(gzipData []byte) {
 		return
 	}
 
-	g.canvasFrame = ebiten.NewImageFromImage(img)
+	r.canvasFrame = ebiten.NewImageFromImage(img)
 }
 
 // audioStream is the common interface implemented by all Ebitengine audio decoders.
@@ -297,13 +291,13 @@ type audioStream interface {
 
 // playSound plays the named audio file. If the file is not yet loaded (asset not received),
 // the call is silently dropped. If the sound is already playing, it is restarted.
-// Must be called with g.mu held.
-func (g *Game) playSound(filename string, loop bool) {
-	data, ok := g.audioAssets[filename]
+// Must be called with r.mu held.
+func (r *ClientRenderer) playSound(filename string, loop bool) {
+	data, ok := r.audioAssets[filename]
 	if !ok {
 		return // asset not yet received
 	}
-	g.stopSound(filename) // stop any existing player for this file
+	r.stopSound(filename) // stop any existing player for this file
 
 	ext := strings.ToLower(filepath.Ext(filename))
 	ctx := getAudioCtx()
@@ -341,35 +335,35 @@ func (g *Game) playSound(filename string, loop bool) {
 		return
 	}
 	player.Play()
-	if g.audioPlayers == nil {
-		g.audioPlayers = make(map[string]*audio.Player)
+	if r.audioPlayers == nil {
+		r.audioPlayers = make(map[string]*audio.Player)
 	}
-	g.audioPlayers[filename] = player
+	r.audioPlayers[filename] = player
 }
 
 // stopSound stops playback of the named audio file. An empty filename stops all sounds.
-// Must be called with g.mu held.
-func (g *Game) stopSound(filename string) {
-	if g.audioPlayers == nil {
+// Must be called with r.mu held.
+func (r *ClientRenderer) stopSound(filename string) {
+	if r.audioPlayers == nil {
 		return
 	}
 	if filename == "" {
-		for _, p := range g.audioPlayers {
+		for _, p := range r.audioPlayers {
 			p.Pause()
 			p.Close()
 		}
-		g.audioPlayers = make(map[string]*audio.Player)
+		r.audioPlayers = make(map[string]*audio.Player)
 		return
 	}
-	if p, ok := g.audioPlayers[filename]; ok {
+	if p, ok := r.audioPlayers[filename]; ok {
 		p.Pause()
 		p.Close()
-		delete(g.audioPlayers, filename)
+		delete(r.audioPlayers, filename)
 	}
 }
 
 // drawLoadingOverlay renders a centered progress bar when assets are still loading.
-func (g *Game) drawLoadingOverlay(screen *ebiten.Image) {
+func (r *ClientRenderer) drawLoadingOverlay(screen *ebiten.Image) {
 	w, h := screen.Bounds().Dx(), screen.Bounds().Dy()
 	barW := w / 2
 	barH := 16
@@ -384,8 +378,8 @@ func (g *Game) drawLoadingOverlay(screen *ebiten.Image) {
 	screen.DrawImage(bgImg, op)
 
 	// Fill bar.
-	if g.assetTotal > 0 {
-		fillW := barW * g.assetReceived / g.assetTotal
+	if r.assetTotal > 0 {
+		fillW := barW * r.assetReceived / r.assetTotal
 		if fillW > 0 {
 			fillImg := ebiten.NewImage(fillW, barH)
 			fillImg.Fill(color.RGBA{R: 80, G: 180, B: 80, A: 255})
@@ -396,116 +390,108 @@ func (g *Game) drawLoadingOverlay(screen *ebiten.Image) {
 	}
 
 	// Label.
-	label := fmt.Sprintf("Loading assets... %d/%d", g.assetReceived, g.assetTotal)
+	label := fmt.Sprintf("Loading assets... %d/%d", r.assetReceived, r.assetTotal)
 	dop := &text.DrawOptions{}
 	dop.GeoM.Translate(float64(bx), float64(by+barH+4))
 	dop.ColorScale.ScaleWithColor(color.RGBA{R: 200, G: 200, B: 200, A: 255})
-	text.Draw(screen, label, g.FontFace, dop)
+	text.Draw(screen, label, r.fontFace, dop)
 }
 
-func (g *Game) getSprite(r rune) *ebiten.Image {
-	if g.charmapDef == nil || g.atlasImage == nil {
+func (cr *ClientRenderer) getSprite(r rune) *ebiten.Image {
+	if cr.charmapDef == nil || cr.atlasImage == nil {
 		return nil
 	}
-	if cached, ok := g.spriteCache[r]; ok {
+	if cached, ok := cr.spriteCache[r]; ok {
 		return cached
 	}
-	entry := g.charmapDef.Lookup(r)
+	entry := cr.charmapDef.Lookup(r)
 	if entry == nil {
 		return nil
 	}
-	// Crop the sprite from the atlas.
-	sprite := g.atlasImage.SubImage(image.Rect(entry.X, entry.Y, entry.X+entry.W, entry.Y+entry.H)).(*ebiten.Image)
-	g.spriteCache[r] = sprite
+	sprite := cr.atlasImage.SubImage(image.Rect(entry.X, entry.Y, entry.X+entry.W, entry.Y+entry.H)).(*ebiten.Image)
+	cr.spriteCache[r] = sprite
 	return sprite
 }
 
-// Update implements ebiten.Game.
-func (g *Game) Update() error {
+// HandleInput implements display.Renderer.
+func (r *ClientRenderer) HandleInput(w *display.Window) {
 	// Signal readLoop that the game loop is running (first call only).
 	select {
-	case <-g.started:
+	case <-r.started:
 	default:
-		close(g.started)
+		close(r.started)
 	}
-
-	// Exit the game loop when the SSH connection closes (e.g. server shutdown).
-	g.mu.Lock()
-	closed := g.connClosed
-	g.mu.Unlock()
-	if closed {
-		return ebiten.Termination
-	}
-
-	// Deferred audio init: create the audio player now that the game loop is running.
-	g.midiSynth.ensurePlayer()
-
-	// Handle window resize.
-	if cols, rows, changed := g.DetectResize(); changed {
-		g.mu.Lock()
-		g.grid.Resize(cols, rows)
-		g.mu.Unlock()
-		_ = g.conn.SendWindowChange(cols, rows)
-	}
-
-	// Handle keyboard input.
-	g.handleInput()
-
-	return nil
+	r.midiSynth.ensurePlayer()
+	r.handleInput()
 }
 
-// Draw implements ebiten.Game.
-func (g *Game) Draw(screen *ebiten.Image) {
-	screen.Fill(color.RGBA{R: 0, G: 0, B: 0, A: 255})
+// ShouldClose implements display.Renderer.
+func (r *ClientRenderer) ShouldClose() bool {
+	r.mu.Lock()
+	closed := r.connClosed
+	r.mu.Unlock()
+	return closed
+}
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
+// Resize implements display.Renderer.
+func (r *ClientRenderer) Resize(cols, rows int) {
+	r.mu.Lock()
+	r.grid.Resize(cols, rows)
+	r.mu.Unlock()
+	_ = r.conn.SendWindowChange(cols, rows)
+}
+
+// Draw implements display.Renderer.
+func (r *ClientRenderer) Draw(w *display.Window, screen *ebiten.Image) {
+	r.fontFace = w.FontFace
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Full local rendering: if we have game JS + state and mode is not "remote",
 	// render the entire UI locally (NC chrome + game viewport) — no dependency on ANSI stream.
-	if g.localRenderer.IsLoaded() && g.gameStateJSON != nil && g.clientScreen != nil && g.renderMode != "remote" {
-		g.drawLocal(screen)
+	if r.localRenderer.IsLoaded() && r.gameStateJSON != nil && r.clientScreen != nil && r.renderMode != "remote" {
+		r.drawLocal(screen)
 		return
 	}
 
 	// Fallback: remote rendering from parsed ANSI stream.
-	g.drawRemote(screen)
+	r.drawRemote(screen)
 
 	// Loading overlay: shown while assets are still being received.
-	if g.assetTotal > 0 && g.assetReceived < g.assetTotal {
-		g.drawLoadingOverlay(screen)
+	if r.assetTotal > 0 && r.assetReceived < r.assetTotal {
+		r.drawLoadingOverlay(screen)
 	}
 }
 
 // drawLocal renders the full screen using the client's local JS runtime + NC widgets.
-func (g *Game) drawLocal(screen *ebiten.Image) {
-	cols := g.grid.Width
-	rows := g.grid.Height
+func (r *ClientRenderer) drawLocal(screen *ebiten.Image) {
+	cols := r.grid.Width
+	rows := r.grid.Height
 
 	var vpX, vpY, vpW, vpH int
 	renderFn := func(buf *render.ImageBuffer, x, y, w, h int) {
 		vpX, vpY, vpW, vpH = x, y, w, h
 		// Call the game's cell-based render locally.
-		g.localRenderer.RenderCells(g.playerID, w, h)
+		r.localRenderer.RenderCells(r.playerID, w, h)
 		// For now, just run the cell render into the buffer.
-		cellBuf := g.localRenderer.RenderCells(g.playerID, w, h)
+		cellBuf := r.localRenderer.RenderCells(r.playerID, w, h)
 		if cellBuf != nil {
 			buf.Blit(x, y, cellBuf)
 		}
 	}
 
 	// Render the full NC screen.
-	g.localBuf = g.clientScreen.RenderPlaying(cols, rows, g.chatLines, "Local render", renderFn)
+	r.localBuf = r.clientScreen.RenderPlaying(cols, rows, r.chatLines, "Local render", renderFn)
 
 	// Draw cell buffer to Ebitengine screen.
-	if g.localBuf != nil {
-		g.drawImageBuffer(screen, g.localBuf)
+	if r.localBuf != nil {
+		r.drawImageBuffer(screen, r.localBuf)
 	}
 
 	// Draw local canvas frame in the viewport if available.
-	if vpW > 0 && vpH > 0 && g.localRenderer.HasCanvas() {
-		scale := g.localRenderer.CanvasScale
-		canvasImg := g.localRenderer.RenderCanvas(g.playerID, vpW*scale, vpH*scale)
+	if vpW > 0 && vpH > 0 && r.localRenderer.HasCanvas() {
+		scale := r.localRenderer.CanvasScale
+		canvasImg := r.localRenderer.RenderCanvas(r.playerID, vpW*scale, vpH*scale)
 		if canvasImg != nil {
 			fop := &ebiten.DrawImageOptions{}
 			fw := float64(vpW*cellW()) / float64(canvasImg.Bounds().Dx())
@@ -518,23 +504,23 @@ func (g *Game) drawLocal(screen *ebiten.Image) {
 }
 
 // drawRemote renders from the parsed ANSI stream (server-rendered).
-func (g *Game) drawRemote(screen *ebiten.Image) {
-	vx := g.grid.ViewportX
-	vy := g.grid.ViewportY
-	vw := g.grid.ViewportW
-	vh := g.grid.ViewportH
+func (r *ClientRenderer) drawRemote(screen *ebiten.Image) {
+	vx := r.grid.ViewportX
+	vy := r.grid.ViewportY
+	vw := r.grid.ViewportW
+	vh := r.grid.ViewportH
 
 	// Local canvas rendering: if the local renderer has game JS + state,
 	// render canvas locally at the client's chosen scale (no server bandwidth cost).
-	if vw > 0 && vh > 0 && g.localRenderer.IsLoaded() && g.localRenderer.HasCanvas() && g.gameStateJSON != nil {
-		scale := g.localRenderer.CanvasScale
-		g.localCanvas = g.localRenderer.RenderCanvas(g.playerID, vw*scale, vh*scale)
+	if vw > 0 && vh > 0 && r.localRenderer.IsLoaded() && r.localRenderer.HasCanvas() && r.gameStateJSON != nil {
+		scale := r.localRenderer.CanvasScale
+		r.localCanvas = r.localRenderer.RenderCanvas(r.playerID, vw*scale, vh*scale)
 	}
 
 	// Draw canvas frame in the viewport (prefer local, fall back to server-sent).
-	canvasImg := g.localCanvas
+	canvasImg := r.localCanvas
 	if canvasImg == nil {
-		canvasImg = g.canvasFrame
+		canvasImg = r.canvasFrame
 	}
 	if canvasImg != nil && vw > 0 && vh > 0 {
 		vpPx := vx * cellW()
@@ -549,9 +535,9 @@ func (g *Game) drawRemote(screen *ebiten.Image) {
 		screen.DrawImage(canvasImg, fop)
 	}
 
-	for cy := 0; cy < g.grid.Height; cy++ {
-		for cx := 0; cx < g.grid.Width; cx++ {
-			cell := g.grid.At(cx, cy)
+	for cy := 0; cy < r.grid.Height; cy++ {
+		for cx := 0; cx < r.grid.Width; cx++ {
+			cell := r.grid.At(cx, cy)
 			if cell == nil {
 				continue
 			}
@@ -573,7 +559,7 @@ func (g *Game) drawRemote(screen *ebiten.Image) {
 
 			if inViewport && render.IsPUA(cell.Char) {
 				// Render sprite from charmap.
-				sprite := g.getSprite(cell.Char)
+				sprite := r.getSprite(cell.Char)
 				if sprite != nil {
 					sop := &ebiten.DrawImageOptions{}
 					// Scale sprite to fit cell.
@@ -588,7 +574,7 @@ func (g *Game) drawRemote(screen *ebiten.Image) {
 				dop := &text.DrawOptions{}
 				dop.GeoM.Translate(float64(px), float64(py))
 				dop.ColorScale.ScaleWithColor(cell.Fg)
-				text.Draw(screen, string(cell.Char), g.FontFace, dop)
+				text.Draw(screen, string(cell.Char), r.fontFace, dop)
 			}
 		}
 	}
@@ -596,8 +582,8 @@ func (g *Game) drawRemote(screen *ebiten.Image) {
 
 // Layout implements ebiten.Game.
 // drawImageBuffer renders an ImageBuffer to the Ebitengine screen.
-func (g *Game) drawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer) {
-	display.DrawImageBuffer(screen, buf, g.FontFace)
+func (r *ClientRenderer) drawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer) {
+	display.DrawImageBuffer(screen, buf, r.fontFace)
 }
 
 // Layout and LayoutF are inherited from the embedded display.Window struct.
