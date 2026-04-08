@@ -2,8 +2,6 @@ package client
 
 import (
 	"encoding/json"
-	"image"
-	"image/color"
 	"log"
 	"sync"
 
@@ -242,27 +240,3 @@ func newLocalJSBuffer(vm *goja.Runtime, buf *render.ImageBuffer, ox, oy, w, h in
 	}
 }
 
-// bufferToImage converts an ImageBuffer to an Ebitengine image by drawing
-// each cell as a colored rectangle (text rendering is done separately).
-func bufferToImage(buf *render.ImageBuffer) *image.RGBA {
-	img := image.NewRGBA(image.Rect(0, 0, buf.Width*cellW(), buf.Height*cellH()))
-	for y := 0; y < buf.Height; y++ {
-		for x := 0; x < buf.Width; x++ {
-			p := &buf.Pixels[y*buf.Width+x]
-			bg := color.RGBA{A: 255}
-			if p.Bg != nil {
-				r, g, b, _ := p.Bg.RGBA()
-				bg = color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 255}
-			}
-			// Fill the cell rectangle with bg color.
-			px := x * cellW()
-			py := y * cellH()
-			for dy := 0; dy < cellH(); dy++ {
-				for dx := 0; dx < cellW(); dx++ {
-					img.SetRGBA(px+dx, py+dy, bg)
-				}
-			}
-		}
-	}
-	return img
-}

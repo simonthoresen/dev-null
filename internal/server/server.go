@@ -811,17 +811,6 @@ func (a *Server) registerBuiltins() {
 
 }
 
-// requireAdmin checks admin privileges and replies with a denial if lacking.
-// Returns true if the caller should return (i.e. not admin).
-func requireAdmin(ctx domain.CommandContext) bool {
-	if !ctx.IsAdmin {
-		ctx.Reply("Permission denied (admin only)")
-		return true
-	}
-	return false
-}
-
-
 // formatGameList builds the game list output with team range info and compatibility markers.
 func (a *Server) formatGameList(gamesDir string, available []string) string {
 	a.state.RLock()

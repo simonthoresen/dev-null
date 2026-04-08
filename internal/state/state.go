@@ -9,7 +9,6 @@ import (
 
 const MaxChatHistory = 50
 
-var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
 // NetworkInfo holds detected network configuration.
 type NetworkInfo struct {
@@ -78,11 +77,6 @@ func (s *CentralState) RLock() { s.mu.RLock() }
 
 // RUnlock releases the read lock.
 func (s *CentralState) RUnlock() { s.mu.RUnlock() }
-
-func (s *CentralState) SpinnerChar() rune {
-	frame := int(s.ElapsedSec) % len(spinnerFrames)
-	return spinnerFrames[frame]
-}
 
 func (s *CentralState) AddChat(msg domain.Message) {
 	s.mu.Lock()

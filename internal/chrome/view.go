@@ -8,8 +8,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
-	"github.com/charmbracelet/x/ansi"
-
 	"dev-null/internal/console"
 	"dev-null/internal/domain"
 	"dev-null/internal/engine"
@@ -477,28 +475,3 @@ func (m *Model) defaultRenderEnding(buf *render.ImageBuffer, results []domain.Ga
 	}
 }
 
-func headerWithSpinner(text string, width int, spinner string) string {
-	if width <= 0 {
-		return ""
-	}
-	spinnerWidth := ansi.StringWidth(spinner)
-	if width <= spinnerWidth {
-		return truncateStyled(spinner, width)
-	}
-	left := truncateStyled(text, width-spinnerWidth-1)
-	spaces := width - ansi.StringWidth(left) - spinnerWidth
-	if spaces < 1 {
-		spaces = 1
-	}
-	return left + strings.Repeat(" ", spaces) + spinner
-}
-
-func truncateStyled(text string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if ansi.StringWidth(text) <= width {
-		return text
-	}
-	return ansi.Truncate(text, width, "")
-}
