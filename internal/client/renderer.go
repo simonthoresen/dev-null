@@ -418,6 +418,9 @@ func (g *Game) getSprite(r rune) *ebiten.Image {
 
 // Update implements ebiten.Game.
 func (g *Game) Update() error {
+	// Deferred audio init: create the audio player now that the game loop is running.
+	g.midiSynth.ensurePlayer()
+
 	// Handle window resize.
 	w, h := ebiten.WindowSize()
 	cols := w / cellW

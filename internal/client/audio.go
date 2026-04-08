@@ -26,6 +26,11 @@ type MidiSynth struct {
 	player *audio.Player
 	mu     sync.Mutex
 
+	// needsPlayer is set when the synth is loaded but the audio player hasn't
+	// been created yet. Player creation is deferred to the first Update() call
+	// because Ebitengine's audio.Player.Play() blocks before ebiten.RunGame.
+	needsPlayer bool
+
 	// Scheduled NoteOff events.
 	pendingOffs []scheduledOff
 
@@ -84,19 +89,34 @@ func (ms *MidiSynth) LoadSoundFont(path string) error {
 	ms.synth = synth
 	ms.pendingOffs = nil
 
-	// Create streaming audio player.
+	// Defer audio player creation until the game loop is running.
+	// Ebitengine's audio.Player.Play() blocks if called before ebiten.RunGame,
+	// so we mark the synth as needing a player and create it on first Update().
+	ms.needsPlayer = true
+	return nil
+}
+
+// ensurePlayer creates the audio player if deferred from LoadSoundFont.
+// Must be called from the game loop (after ebiten.RunGame has started).
+func (ms *MidiSynth) ensurePlayer() {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	if !ms.needsPlayer || ms.synth == nil {
+		return
+	}
+	ms.needsPlayer = false
+
 	stream := &synthStream{synth: ms}
 	ctx := getAudioCtx()
 	player, err := ctx.NewPlayer(stream)
 	if err != nil {
+		slog.Warn("MIDI synth: failed to create audio player", "err", err)
 		ms.synth = nil
-		return err
+		return
 	}
 	player.SetBufferSize(time.Millisecond * 50)
 	player.Play()
 	ms.player = player
-
-	return nil
 }
 
 // NoteOn triggers a note. If durationMs > 0, a NoteOff is scheduled automatically.
