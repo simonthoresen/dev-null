@@ -135,20 +135,22 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 		}
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	// Terminal modes (no-SSH, TUI) use signal.NotifyContext for graceful Ctrl+C.
+	// GUI mode does NOT — Ebitengine owns the lifecycle; window close is the exit
+	// signal, matching the non-local client path. signal.NotifyContext on Windows
+	// interferes with Ebitengine's window creation via SetConsoleCtrlHandler.
+	if noSSH || noGUI {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
 
-	if noSSH {
-		// No-SSH mode: connect chrome directly (no SSH transport).
-		// Useful for isolating rendering issues from transport issues.
-		if err := app.RunDirect(ctx, playerName, termFlag, noGUI); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+		if noSSH {
+			if err := app.RunDirect(ctx, playerName, termFlag, noGUI); err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
-		return
-	}
 
-	if noGUI {
 		// TUI + SSH: pipe SSH session to the terminal.
 		sshPort := port
 		if idx := strings.LastIndex(address, ":"); idx >= 0 {
@@ -164,6 +166,8 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	}
 
 	// GUI + SSH: start server, connect via SSH, run Ebitengine renderer.
+	// Server uses a plain cancel context — serverCancel shuts it down when
+	// the Ebitengine window closes (or the process is killed).
 	app.SetLocalPlayerName(playerName)
 	sshPort := port
 	if idx := strings.LastIndex(address, ":"); idx >= 0 {
@@ -172,10 +176,13 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 		}
 	}
 
+	serverCtx, serverCancel := context.WithCancel(context.Background())
+	defer serverCancel()
+
 	ready := make(chan struct{})
 	serverErr := make(chan error, 1)
 	go func() {
-		serverErr <- app.StartWithReady(ctx, ready)
+		serverErr <- app.StartWithReady(serverCtx, ready)
 	}()
 
 	select {
@@ -183,8 +190,6 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 	case err := <-serverErr:
 		fmt.Fprintf(os.Stderr, "server failed to start: %v\n", err)
 		os.Exit(1)
-	case <-ctx.Done():
-		return
 	}
 
 	conn, err := client.Dial("127.0.0.1", sshPort, playerName, false, termFlag, "", 0, 0)
@@ -205,8 +210,6 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-
-	stop()
 }
 
 // detectClientProfile returns the color profile for client-side terminal rendering.
