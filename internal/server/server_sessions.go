@@ -66,13 +66,6 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 		}
 	}
 
-	// --local server mode connects back with DEV_NULL_CLIENT=enhanced, but the
-	// output is a plain terminal — strip enhanced flags to match plain ssh behaviour.
-	if a.localPlayerName != "" && sess.User() == a.localPlayerName {
-		model.IsEnhancedClient = false
-		model.IsTerminalClient = false
-	}
-
 	opts, cp := a.sessionProgramOptions(sess)
 	model.ColorProfile = cp
 
@@ -195,9 +188,6 @@ func (a *Server) registerSession(sess ssh.Session) *domain.Player {
 	a.sessionsMu.Unlock()
 
 	a.state.AddPlayer(player)
-	if a.localPlayerName != "" && player.Name == a.localPlayerName {
-		a.state.SetPlayerAdmin(player.ID, true)
-	}
 	slog.Info("player joined", "player_id", player.ID, "name", player.Name)
 
 	joinMsg := domain.Message{
@@ -263,7 +253,6 @@ func (a *Server) unregisterSession(playerID string) {
 
 	a.programsMu.Lock()
 	delete(a.programs, playerID)
-	remaining := len(a.programs)
 	a.programsMu.Unlock()
 
 	a.sessionsMu.Lock()
@@ -272,11 +261,6 @@ func (a *Server) unregisterSession(playerID string) {
 
 	a.broadcastMsg(domain.PlayerLeftMsg{PlayerID: playerID})
 
-	// In headless --local mode, shut down when the last player leaves.
-	if remaining == 0 && a.localPlayerName != "" && a.shutdownFn != nil {
-		slog.Info("last player left, shutting down headless server")
-		a.shutdownFn()
-	}
 }
 
 func (a *Server) kickPlayer(playerID string) error {

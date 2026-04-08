@@ -72,7 +72,6 @@ type Server struct {
 	startingDone  chan struct{}   // closed to end starting phase early
 	gameOverTimer chan struct{}   // closed to end game-over phase early
 
-	localPlayerName string // non-empty in --local mode; that player gets auto-admin
 }
 
 func New(address, password, dataDir string, tickInterval time.Duration) (*Server, error) {
@@ -116,12 +115,6 @@ func New(address, password, dataDir string, tickInterval time.Duration) (*Server
 
 func (a *Server) SetShutdownFunc(fn func()) {
 	a.shutdownFn = fn
-}
-
-// SetLocalPlayerName marks a player name for auto-admin on connect.
-// Must be called before StartWithReady.
-func (a *Server) SetLocalPlayerName(name string) {
-	a.localPlayerName = name
 }
 
 func (a *Server) LogCh() <-chan string {
