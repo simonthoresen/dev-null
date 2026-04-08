@@ -115,9 +115,7 @@ func NewClientRenderer(conn *SSHConn, width, height int, playerID, dataDir strin
 		started:       make(chan struct{}),
 	}
 
-	// readLoop waits for Window.Started() before reading SSH data.
-	go r.readLoop()
-
+	// readLoop is started from HandleInput (first frame), not here.
 	return r
 }
 
@@ -415,11 +413,12 @@ func (cr *ClientRenderer) getSprite(r rune) *ebiten.Image {
 
 // HandleInput implements display.Renderer.
 func (r *ClientRenderer) HandleInput(w *display.Window) {
-	// Signal readLoop that the game loop is running (first call only).
+	// Start readLoop on first frame (game loop is running, window exists).
 	select {
 	case <-r.started:
 	default:
 		close(r.started)
+		go r.readLoop()
 	}
 	r.midiSynth.ensurePlayer()
 	r.handleInput()
