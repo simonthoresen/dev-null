@@ -39,13 +39,10 @@ func getAudioCtx() *audio.Context {
 	return sharedAudioCtx
 }
 
-// cellW and cellH are the pixel dimensions of a single terminal cell.
-// The client always uses the bitmap font (10x20), independent of the
-// GUI backend's font choice.
-const (
-	cellW = 10
-	cellH = 20
-)
+// cellW() and cellH() return the pixel dimensions of a single terminal cell.
+// These delegate to display.CellW/CellH which are set by GUIFontFace.
+func cellW() int { return display.CellW }
+func cellH() int { return display.CellH }
 
 // Game implements ebiten.Game for the dev-null client.
 type Game struct {
@@ -97,15 +94,30 @@ type Game struct {
 	mu      sync.Mutex
 }
 
-// DefaultFontFace returns the built-in bitmap font face for terminal rendering.
+// clientDPIScale caches the DPI scale factor on first call.
+var clientDPIScale float64
+
+func dpiScale() float64 {
+	if clientDPIScale == 0 {
+		clientDPIScale = ebiten.Monitor().DeviceScaleFactor()
+		if clientDPIScale < 1 {
+			clientDPIScale = 1
+		}
+	}
+	return clientDPIScale
+}
+
+// DefaultFontFace returns the GUI font face scaled for the monitor's DPI.
+// Cell dimensions (display.CellW, display.CellH) are updated to match.
 func DefaultFontFace() text.Face {
-	return display.DefaultFontFace()
+	return display.GUIFontFace(16 * dpiScale())
 }
 
 // NewGame creates a new client game instance.
 func NewGame(conn *SSHConn, fontFace text.Face, width, height int, playerID, dataDir string) *Game {
-	cols := width / cellW
-	rows := height / cellH
+	s := dpiScale()
+	cols := int(float64(width)*s) / cellW()
+	rows := int(float64(height)*s) / cellH()
 	if cols < 1 {
 		cols = 1
 	}
@@ -450,10 +462,12 @@ func (g *Game) Update() error {
 	// Deferred audio init: create the audio player now that the game loop is running.
 	g.midiSynth.ensurePlayer()
 
-	// Handle window resize.
+	// Handle window resize. WindowSize returns logical pixels;
+	// scale to physical to match cellW/cellH (font scaled by DPI).
 	w, h := ebiten.WindowSize()
-	cols := w / cellW
-	rows := h / cellH
+	s := dpiScale()
+	cols := int(float64(w)*s) / cellW()
+	rows := int(float64(h)*s) / cellH()
 	if cols < 1 {
 		cols = 1
 	}
@@ -530,10 +544,10 @@ func (g *Game) drawLocal(screen *ebiten.Image) {
 		canvasImg := g.localRenderer.RenderCanvas(g.playerID, vpW*scale, vpH*scale)
 		if canvasImg != nil {
 			fop := &ebiten.DrawImageOptions{}
-			fw := float64(vpW*cellW) / float64(canvasImg.Bounds().Dx())
-			fh := float64(vpH*cellH) / float64(canvasImg.Bounds().Dy())
+			fw := float64(vpW*cellW()) / float64(canvasImg.Bounds().Dx())
+			fh := float64(vpH*cellH()) / float64(canvasImg.Bounds().Dy())
 			fop.GeoM.Scale(fw, fh)
-			fop.GeoM.Translate(float64(vpX*cellW), float64(vpY*cellH))
+			fop.GeoM.Translate(float64(vpX*cellW()), float64(vpY*cellH()))
 			screen.DrawImage(canvasImg, fop)
 		}
 	}
@@ -559,10 +573,10 @@ func (g *Game) drawRemote(screen *ebiten.Image) {
 		canvasImg = g.canvasFrame
 	}
 	if canvasImg != nil && vw > 0 && vh > 0 {
-		vpPx := vx * cellW
-		vpPy := vy * cellH
-		vpPw := vw * cellW
-		vpPh := vh * cellH
+		vpPx := vx * cellW()
+		vpPy := vy * cellH()
+		vpPw := vw * cellW()
+		vpPh := vh * cellH()
 		fop := &ebiten.DrawImageOptions{}
 		fw := float64(vpPw) / float64(canvasImg.Bounds().Dx())
 		fh := float64(vpPh) / float64(canvasImg.Bounds().Dy())
@@ -578,11 +592,11 @@ func (g *Game) drawRemote(screen *ebiten.Image) {
 				continue
 			}
 
-			px := cx * cellW
-			py := cy * cellH
+			px := cx * cellW()
+			py := cy * cellH()
 
 			// Draw background.
-			bgImg := ebiten.NewImage(cellW, cellH)
+			bgImg := ebiten.NewImage(cellW(), cellH())
 			bgImg.Fill(cell.Bg)
 			op := &ebiten.DrawImageOptions{}
 			op.GeoM.Translate(float64(px), float64(py))
@@ -599,8 +613,8 @@ func (g *Game) drawRemote(screen *ebiten.Image) {
 				if sprite != nil {
 					sop := &ebiten.DrawImageOptions{}
 					// Scale sprite to fit cell.
-					sw := float64(cellW) / float64(sprite.Bounds().Dx())
-					sh := float64(cellH) / float64(sprite.Bounds().Dy())
+					sw := float64(cellW()) / float64(sprite.Bounds().Dx())
+					sh := float64(cellH()) / float64(sprite.Bounds().Dy())
 					sop.GeoM.Scale(sw, sh)
 					sop.GeoM.Translate(float64(px), float64(py))
 					screen.DrawImage(sprite, sop)
@@ -622,11 +636,14 @@ func (g *Game) drawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer) {
 	display.DrawImageBuffer(screen, buf, g.fontFace)
 }
 
-func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return outsideWidth, outsideHeight
+// LayoutF implements ebiten.LayoutFer for HiDPI-aware rendering.
+func (g *Game) LayoutF(outsideWidth, outsideHeight float64) (float64, float64) {
+	s := dpiScale()
+	return outsideWidth * s, outsideHeight * s
 }
 
-// LayoutF implements ebiten.LayoutFer for sub-pixel layout accuracy.
-func (g *Game) LayoutF(outsideWidth, outsideHeight float64) (float64, float64) {
-	return outsideWidth, outsideHeight
+// Layout implements ebiten.Game (required by interface, but LayoutF takes precedence).
+func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
+	s := dpiScale()
+	return int(float64(outsideWidth) * s), int(float64(outsideHeight) * s)
 }
