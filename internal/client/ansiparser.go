@@ -125,6 +125,24 @@ func (g *TerminalGrid) At(x, y int) *Cell {
 	return &g.Cells[y*g.Width+x]
 }
 
+// ToImageBuffer converts the grid to a render.ImageBuffer for DrawImageBuffer.
+func (g *TerminalGrid) ToImageBuffer() *render.ImageBuffer {
+	buf := &render.ImageBuffer{
+		Width:  g.Width,
+		Height: g.Height,
+		Pixels: make([]render.Pixel, g.Width*g.Height),
+	}
+	for i, cell := range g.Cells {
+		buf.Pixels[i] = render.Pixel{
+			Char: cell.Char,
+			Fg:   cell.Fg,
+			Bg:   cell.Bg,
+			Attr: cell.Attr,
+		}
+	}
+	return buf
+}
+
 // Clear resets all cells to blank with default colors.
 func (g *TerminalGrid) Clear() {
 	for i := range g.Cells {

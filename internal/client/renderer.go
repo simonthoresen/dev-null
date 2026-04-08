@@ -485,7 +485,7 @@ func (r *ClientRenderer) drawLocal(screen *ebiten.Image) {
 
 	// Draw cell buffer to Ebitengine screen.
 	if r.localBuf != nil {
-		r.drawImageBuffer(screen, r.localBuf)
+		r.drawImageBuffer(screen, r.localBuf, nil)
 	}
 
 	// Draw local canvas frame in the viewport if available.
@@ -535,55 +535,26 @@ func (r *ClientRenderer) drawRemote(screen *ebiten.Image) {
 		screen.DrawImage(canvasImg, fop)
 	}
 
-	for cy := 0; cy < r.grid.Height; cy++ {
-		for cx := 0; cx < r.grid.Width; cx++ {
-			cell := r.grid.At(cx, cy)
-			if cell == nil {
-				continue
-			}
-
-			px := cx * cellW()
-			py := cy * cellH()
-
-			// Draw background.
-			bgImg := ebiten.NewImage(cellW(), cellH())
-			bgImg.Fill(cell.Bg)
-			op := &ebiten.DrawImageOptions{}
-			op.GeoM.Translate(float64(px), float64(py))
-			screen.DrawImage(bgImg, op)
-
-			// Check if this is a PUA cell inside the viewport.
+	// Convert TerminalGrid to ImageBuffer and render via shared DrawImageBuffer.
+	buf := r.grid.ToImageBuffer()
+	spriteOpts := &display.DrawOptions{
+		SpriteFunc: func(char rune, cx, cy int) *ebiten.Image {
 			inViewport := vw > 0 && vh > 0 &&
 				cx >= vx && cx < vx+vw &&
 				cy >= vy && cy < vy+vh
-
-			if inViewport && render.IsPUA(cell.Char) {
-				// Render sprite from charmap.
-				sprite := r.getSprite(cell.Char)
-				if sprite != nil {
-					sop := &ebiten.DrawImageOptions{}
-					// Scale sprite to fit cell.
-					sw := float64(cellW()) / float64(sprite.Bounds().Dx())
-					sh := float64(cellH()) / float64(sprite.Bounds().Dy())
-					sop.GeoM.Scale(sw, sh)
-					sop.GeoM.Translate(float64(px), float64(py))
-					screen.DrawImage(sprite, sop)
-				}
-			} else if cell.Char != ' ' && cell.Char != 0 {
-				// Render text character.
-				dop := &text.DrawOptions{}
-				dop.GeoM.Translate(float64(px), float64(py))
-				dop.ColorScale.ScaleWithColor(cell.Fg)
-				text.Draw(screen, string(cell.Char), r.fontFace, dop)
+			if inViewport && render.IsPUA(char) {
+				return r.getSprite(char)
 			}
-		}
+			return nil
+		},
 	}
+	r.drawImageBuffer(screen, buf, spriteOpts)
 }
 
 // Layout implements ebiten.Game.
 // drawImageBuffer renders an ImageBuffer to the Ebitengine screen.
-func (r *ClientRenderer) drawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer) {
-	display.DrawImageBuffer(screen, buf, r.fontFace)
+func (r *ClientRenderer) drawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer, opts *display.DrawOptions) {
+	display.DrawImageBuffer(screen, buf, r.fontFace, opts)
 }
 
 // Layout and LayoutF are inherited from the embedded display.Window struct.

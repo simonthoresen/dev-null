@@ -157,10 +157,18 @@ func init() {
 	sharedPixel.Fill(color.White)
 }
 
+// DrawOptions configures optional behavior for DrawImageBuffer.
+type DrawOptions struct {
+	// SpriteFunc returns a sprite image for a character, or nil to render as text.
+	// Used by the client to render charmap PUA codepoints as sprites.
+	SpriteFunc func(char rune, cx, cy int) *ebiten.Image
+}
+
 // DrawImageBuffer renders an ImageBuffer to an Ebitengine screen image.
 // Each cell is drawn as a colored background rectangle, then foreground text.
-// Text is clipped to cell bounds via SubImage to prevent box-drawing glyph overflow.
-func DrawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer, fontFace text.Face) {
+// If opts.SpriteFunc is set, it is called for each cell — if it returns a
+// non-nil image, that image is drawn instead of the text glyph.
+func DrawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer, fontFace text.Face, opts *DrawOptions) {
 	for cy := 0; cy < buf.Height; cy++ {
 		for cx := 0; cx < buf.Width; cx++ {
 			p := &buf.Pixels[cy*buf.Width+cx]
@@ -177,6 +185,19 @@ func DrawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer, fontFace tex
 					R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 255,
 				})
 				screen.DrawImage(sharedPixel, op)
+			}
+
+			// Sprite override: if the caller provides a sprite for this cell, draw it.
+			if opts != nil && opts.SpriteFunc != nil {
+				if sprite := opts.SpriteFunc(p.Char, cx, cy); sprite != nil {
+					sop := &ebiten.DrawImageOptions{}
+					sw := float64(CellW) / float64(sprite.Bounds().Dx())
+					sh := float64(CellH) / float64(sprite.Bounds().Dy())
+					sop.GeoM.Scale(sw, sh)
+					sop.GeoM.Translate(float64(px), float64(py))
+					screen.DrawImage(sprite, sop)
+					continue
+				}
 			}
 
 			// Foreground text — clip to cell bounds so box-drawing glyphs

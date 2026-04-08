@@ -172,7 +172,7 @@ func (r *ServerRenderer) Draw(w *Window, screen *ebiten.Image) {
 
 	if bv, ok := r.model.(BufferViewer); ok {
 		if buf := bv.ViewBuffer(); buf != nil {
-			DrawImageBuffer(screen, buf, w.FontFace)
+			DrawImageBuffer(screen, buf, w.FontFace, nil)
 		}
 	}
 
@@ -248,6 +248,6 @@ func (r *ServerRenderer) processCmd(cmd tea.Cmd) {
 
 // DrawCells renders an ImageBuffer to the screen using the window's font.
 // Convenience wrapper around DrawImageBuffer for use by Renderer implementations.
-func DrawCells(w *Window, screen *ebiten.Image, buf *render.ImageBuffer) {
-	DrawImageBuffer(screen, buf, w.FontFace)
+func DrawCells(w *Window, screen *ebiten.Image, buf *render.ImageBuffer, opts *DrawOptions) {
+	DrawImageBuffer(screen, buf, w.FontFace, opts)
 }
