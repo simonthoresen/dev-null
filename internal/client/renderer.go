@@ -94,30 +94,16 @@ type Game struct {
 	mu      sync.Mutex
 }
 
-// clientDPIScale caches the DPI scale factor on first call.
-var clientDPIScale float64
-
-func dpiScale() float64 {
-	if clientDPIScale == 0 {
-		clientDPIScale = ebiten.Monitor().DeviceScaleFactor()
-		if clientDPIScale < 1 {
-			clientDPIScale = 1
-		}
-	}
-	return clientDPIScale
-}
-
 // DefaultFontFace returns the GUI font face scaled for the monitor's DPI.
 // Cell dimensions (display.CellW, display.CellH) are updated to match.
 func DefaultFontFace() text.Face {
-	return display.GUIFontFace(16 * dpiScale())
+	return display.InitGUIFont()
 }
 
 // NewGame creates a new client game instance.
 func NewGame(conn *SSHConn, fontFace text.Face, width, height int, playerID, dataDir string) *Game {
-	s := dpiScale()
-	cols := int(float64(width)*s) / cellW()
-	rows := int(float64(height)*s) / cellH()
+	cols := display.WindowCols(width)
+	rows := display.WindowRows(height)
 	if cols < 1 {
 		cols = 1
 	}
@@ -462,18 +448,10 @@ func (g *Game) Update() error {
 	// Deferred audio init: create the audio player now that the game loop is running.
 	g.midiSynth.ensurePlayer()
 
-	// Handle window resize. WindowSize returns logical pixels;
-	// scale to physical to match cellW/cellH (font scaled by DPI).
+	// Handle window resize.
 	w, h := ebiten.WindowSize()
-	s := dpiScale()
-	cols := int(float64(w)*s) / cellW()
-	rows := int(float64(h)*s) / cellH()
-	if cols < 1 {
-		cols = 1
-	}
-	if rows < 1 {
-		rows = 1
-	}
+	cols := display.WindowCols(w)
+	rows := display.WindowRows(h)
 
 	g.mu.Lock()
 	if cols != g.grid.Width || rows != g.grid.Height {
@@ -638,12 +616,10 @@ func (g *Game) drawImageBuffer(screen *ebiten.Image, buf *render.ImageBuffer) {
 
 // LayoutF implements ebiten.LayoutFer for HiDPI-aware rendering.
 func (g *Game) LayoutF(outsideWidth, outsideHeight float64) (float64, float64) {
-	s := dpiScale()
-	return outsideWidth * s, outsideHeight * s
+	return display.GameLayout(outsideWidth, outsideHeight)
 }
 
 // Layout implements ebiten.Game (required by interface, but LayoutF takes precedence).
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	s := dpiScale()
-	return int(float64(outsideWidth) * s), int(float64(outsideHeight) * s)
+	return display.GameLayoutInt(outsideWidth, outsideHeight)
 }

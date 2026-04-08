@@ -97,6 +97,57 @@ func updateCellSize(face text.Face) {
 	}
 }
 
+// --- Shared DPI / layout logic (used by EbitenBackend and client.Game) ---
+
+var dpiScale float64
+
+// DPIScale returns the monitor's device scale factor (cached on first call).
+func DPIScale() float64 {
+	if dpiScale == 0 {
+		dpiScale = ebiten.Monitor().DeviceScaleFactor()
+		if dpiScale < 1 {
+			dpiScale = 1
+		}
+	}
+	return dpiScale
+}
+
+// InitGUIFont loads the DPI-scaled GUI font and updates CellW/CellH.
+// Call once at startup before creating any Game.
+func InitGUIFont() text.Face {
+	return GUIFontFace(16 * DPIScale())
+}
+
+// WindowCols returns the number of cell columns for a logical window width.
+func WindowCols(logicalWidth int) int {
+	cols := int(float64(logicalWidth)*DPIScale()) / CellW
+	if cols < 1 {
+		return 1
+	}
+	return cols
+}
+
+// WindowRows returns the number of cell rows for a logical window height.
+func WindowRows(logicalHeight int) int {
+	rows := int(float64(logicalHeight)*DPIScale()) / CellH
+	if rows < 1 {
+		return 1
+	}
+	return rows
+}
+
+// GameLayout returns the game screen size in physical pixels for LayoutF.
+func GameLayout(outsideWidth, outsideHeight float64) (float64, float64) {
+	s := DPIScale()
+	return outsideWidth * s, outsideHeight * s
+}
+
+// GameLayoutInt returns the game screen size in physical pixels for Layout.
+func GameLayoutInt(outsideWidth, outsideHeight int) (int, int) {
+	s := DPIScale()
+	return int(float64(outsideWidth) * s), int(float64(outsideHeight) * s)
+}
+
 // sharedPixel is a 1x1 white image reused for all background fills.
 // Colored via ColorScale to avoid per-cell image allocation.
 var sharedPixel *ebiten.Image
