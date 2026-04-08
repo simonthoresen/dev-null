@@ -1,3 +1,4 @@
+SHELL := bash
 .PHONY: build build-server build-client build-testbed run-server run-server-lan run-client run-client-local run-testbed run-testbed-onlcr test clean generate-manifest winres
 
 GIT_COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
