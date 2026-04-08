@@ -74,6 +74,9 @@ type Game struct {
 	playerID      string        // this client's player ID
 	chatLines     []string      // chat messages (received from ANSI stream for now)
 
+	// Connection state.
+	connClosed bool // set by readLoop when SSH connection closes
+
 	// Asset loading progress.
 	assetTotal    int // expected asset count (from asset-manifest OSC)
 	assetReceived int // assets received so far
@@ -216,6 +219,9 @@ func (g *Game) readLoop() {
 			g.mu.Unlock()
 		}
 		if err != nil {
+			g.mu.Lock()
+			g.connClosed = true
+			g.mu.Unlock()
 			return
 		}
 	}
@@ -418,6 +424,14 @@ func (g *Game) getSprite(r rune) *ebiten.Image {
 
 // Update implements ebiten.Game.
 func (g *Game) Update() error {
+	// Exit the game loop when the SSH connection closes (e.g. server shutdown).
+	g.mu.Lock()
+	closed := g.connClosed
+	g.mu.Unlock()
+	if closed {
+		return ebiten.Termination
+	}
+
 	// Deferred audio init: create the audio player now that the game loop is running.
 	g.midiSynth.ensurePlayer()
 

@@ -112,15 +112,14 @@ func main() {
 // normal client. The server is invisible — no console UI, no admin terminal.
 // --game/--resume are sent as init commands over the SSH session.
 func runLocal(address, dataDir, playerName string, port int, tickInterval time.Duration, gameName, resumeName, termFlag string, noSSH, noGUI bool, password string) {
-	app, err := server.New(address, password, dataDir, tickInterval)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error creating server: %v\n", err)
-		os.Exit(1)
-	}
-
-	// --no-ssh: direct transport, no SSH session. Game/resume are preloaded
-	// server-side since there's no SSH env var channel for init commands.
+	// --no-ssh: direct transport, no SSH session. Server runs on main goroutine
+	// because RunDirect drives Bubble Tea or Ebitengine itself.
 	if noSSH {
+		app, err := server.New(address, password, dataDir, tickInterval)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error creating server: %v\n", err)
+			os.Exit(1)
+		}
 		if resumeName != "" {
 			parts := strings.SplitN(resumeName, "/", 2)
 			if len(parts) != 2 {
@@ -148,8 +147,6 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 
 	// --- SSH modes: start headless server, connect as normal client ---
 
-	app.SetLocalPlayerName(playerName)
-
 	sshPort := port
 	if idx := strings.LastIndex(address, ":"); idx >= 0 {
 		if p := address[idx+1:]; p != "" {
@@ -165,13 +162,22 @@ func runLocal(address, dataDir, playerName string, port int, tickInterval time.D
 		initCmds = append(initCmds, "/game-load "+gameName)
 	}
 
-	// Start headless server.
+	// Start headless server entirely in its own goroutine. On Windows,
+	// Ebitengine locks the main goroutine to OS thread 0 for window creation.
+	// Any server work (wish/crypto, net.Listen) on that thread can prevent
+	// the window from appearing.
 	serverCtx, serverCancel := context.WithCancel(context.Background())
 	defer serverCancel()
 
 	ready := make(chan struct{})
 	serverErr := make(chan error, 1)
 	go func() {
+		app, err := server.New(address, password, dataDir, tickInterval)
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		app.SetLocalPlayerName(playerName)
 		serverErr <- app.StartWithReady(serverCtx, ready)
 	}()
 
