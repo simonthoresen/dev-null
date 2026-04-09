@@ -3,6 +3,7 @@ package chrome
 import (
 	"fmt"
 	"image/color"
+	"io"
 	"strings"
 	"time"
 
@@ -121,6 +122,7 @@ type Model struct {
 
 	// Enhanced client protocol (dev-null-client with charmap/canvas/local-render support).
 	IsEnhancedClient bool
+	SessionWriter    io.Writer // direct session writer for OSC passthrough (bypasses renderer)
 	localRendering   bool     // true = send game JS + state for client-side rendering
 	localModeSent    bool     // true after the initial mode OSC has been sent
 	charmapSent      bool     // true after charmap+atlas OSC have been sent for the current game

@@ -86,14 +86,16 @@ func (m *Model) View() tea.View {
 	engine.ApplyShaders(m.shaders, buf, shaderElapsed)
 
 	// Enhanced client OSC protocol: send charmap data, game source, state, and viewport bounds.
-	var oscPrefix string
-	if m.IsEnhancedClient && m.inActiveGame && game != nil {
+	// OSC sequences are written directly to the session, bypassing Bubble Tea's cell renderer
+	// which would consume them as styled string content instead of passing them through.
+	if m.SessionWriter != nil && m.IsEnhancedClient && m.inActiveGame && game != nil {
+		var oscData string
 		// Send local/remote mode OSC once on game load or when toggled.
 		if !m.localModeSent {
 			if m.localRendering {
-				oscPrefix += render.EncodeModeOSC("local")
+				oscData += render.EncodeModeOSC("local")
 			} else {
-				oscPrefix += render.EncodeModeOSC("remote")
+				oscData += render.EncodeModeOSC("remote")
 			}
 			m.localModeSent = true
 		}
@@ -101,16 +103,16 @@ func (m *Model) View() tea.View {
 		// Send game source files once on game load (for client-side local rendering).
 		if m.localRendering && !m.gameSrcSent {
 			for _, sf := range game.GameSource() {
-				oscPrefix += render.EncodeGameSourceOSC(sf.Name, sf.Content)
+				oscData += render.EncodeGameSourceOSC(sf.Name, sf.Content)
 			}
 			m.gameSrcSent = true
 		}
 		if !m.charmapSent {
 			if cm := game.CharMap(); cm != nil {
-				oscPrefix += render.EncodeCharmapOSC(cm)
+				oscData += render.EncodeCharmapOSC(cm)
 				if cm.Atlas != "" {
 					atlasPath := filepath.Join(m.api.DataDir(), "charmaps", cm.Name, cm.Atlas)
-					oscPrefix += render.EncodeAtlasOSC(atlasPath)
+					oscData += render.EncodeAtlasOSC(atlasPath)
 				}
 			}
 			m.charmapSent = true
@@ -118,30 +120,30 @@ func (m *Model) View() tea.View {
 		if !m.assetsSent {
 			assets := game.GameAssets()
 			if len(assets) > 0 {
-				oscPrefix += render.EncodeAssetManifestOSC(len(assets))
+				oscData += render.EncodeAssetManifestOSC(len(assets))
 				for _, a := range assets {
-					oscPrefix += render.EncodeAssetOSC(a.Name, a.Data)
+					oscData += render.EncodeAssetOSC(a.Name, a.Data)
 				}
 			}
 			m.assetsSent = true
 		}
 		// Drain pending sound OSC commands (from JS playSound/stopSound via chatCh).
 		for _, osc := range m.pendingSoundOSC {
-			oscPrefix += osc
+			oscData += osc
 		}
 		m.pendingSoundOSC = nil
 		// Drain pending MIDI OSC events (from JS midiNote/midiProgram/midiCC via chatCh).
 		for _, osc := range m.pendingMidiOSC {
-			oscPrefix += osc
+			oscData += osc
 		}
 		m.pendingMidiOSC = nil
 		// Send synth selection OSC once on game load or when changed.
 		if !m.synthSent && m.synthName != "" {
-			oscPrefix += render.EncodeSynthOSC(m.synthName)
+			oscData += render.EncodeSynthOSC(m.synthName)
 			m.synthSent = true
 		}
 		if m.viewportW > 0 && m.viewportH > 0 {
-			oscPrefix += render.EncodeViewportOSC(m.viewportX, m.viewportY, m.viewportW, m.viewportH)
+			oscData += render.EncodeViewportOSC(m.viewportX, m.viewportY, m.viewportW, m.viewportH)
 
 			// Send Game.state if it changed since last frame (for local rendering).
 			if m.localRendering && phase == domain.PhasePlaying {
@@ -150,7 +152,7 @@ func (m *Model) View() tea.View {
 					gameState = srt.State()
 				}
 				if stateJSON := render.EncodeStateOSC(gameState); stateJSON != "" && stateJSON != m.lastStateJSON {
-					oscPrefix += stateJSON
+					oscData += stateJSON
 					m.lastStateJSON = stateJSON
 				}
 			}
@@ -163,17 +165,23 @@ func (m *Model) View() tea.View {
 				pixelW := m.viewportW * canvasScale
 				pixelH := m.viewportH * canvasScale
 				pngData := game.RenderCanvas(m.playerID, pixelW, pixelH)
-				oscPrefix += render.EncodeFrameOSC(pngData)
+				oscData += render.EncodeFrameOSC(pngData)
 			}
+		}
+		if oscData != "" {
+			m.SessionWriter.Write([]byte(oscData))
 		}
 	}
 
-	// Emit OSC 52 clipboard sequence for SSH players (the terminal handles it).
+	// Emit OSC 52 clipboard sequence — write directly to session for enhanced clients,
+	// or embed in view content for regular terminals (which handle OSC 52 natively).
 	if m.pendingClipboard != "" {
-		oscPrefix += render.EncodeOSC52(m.pendingClipboard)
+		if m.SessionWriter != nil {
+			m.SessionWriter.Write([]byte(render.EncodeOSC52(m.pendingClipboard)))
+		}
 		m.pendingClipboard = ""
 	}
-	view.SetContent(oscPrefix + buf.ToString(m.ColorProfile))
+	view.SetContent(buf.ToString(m.ColorProfile))
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
 
