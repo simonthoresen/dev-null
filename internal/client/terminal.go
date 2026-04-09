@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -198,7 +199,9 @@ func (tr *TerminalRunner) renderLoop() {
 
 			if output != lastOutput {
 				// Move cursor home and write the full frame.
-				io.WriteString(os.Stdout, "\x1b[H"+output)
+				// Use \r\n: terminal is in raw mode so \n alone doesn't
+				// reset the cursor column on Windows.
+				io.WriteString(os.Stdout, "\x1b[H"+strings.ReplaceAll(output, "\n", "\r\n"))
 				lastOutput = output
 			}
 		case <-tr.done:
