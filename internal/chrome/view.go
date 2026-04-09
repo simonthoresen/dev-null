@@ -158,12 +158,14 @@ func (m *Model) View() tea.View {
 			}
 
 			// Canvas frame: send PNG via OSC when render mode is Canvas (not for terminal clients).
+			// Use 2:1 height multiplier to match the terminal cell aspect ratio
+			// (cells are ~twice as tall as wide), preventing vertical stretch.
 			if m.renderMode == domain.RenderModeCanvas && phase == domain.PhasePlaying {
 				m.api.State().RLock()
 				canvasScale := m.api.State().CanvasScale
 				m.api.State().RUnlock()
 				pixelW := m.viewportW * canvasScale
-				pixelH := m.viewportH * canvasScale
+				pixelH := m.viewportH * canvasScale * 2
 				pngData := game.RenderCanvas(m.playerID, pixelW, pixelH)
 				oscData += render.EncodeFrameOSC(pngData)
 			}

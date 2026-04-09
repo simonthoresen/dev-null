@@ -511,9 +511,10 @@ func (r *ClientRenderer) drawRemote(screen *ebiten.Image) {
 
 	// Local canvas rendering: only when the server has local mode enabled
 	// (r.renderMode == "local") and we have game JS + state loaded.
+	// Render at the actual display pixel dimensions to avoid aspect distortion
+	// (terminal cells are non-square: CellW != CellH).
 	if r.renderMode == "local" && vw > 0 && vh > 0 && r.localRenderer.IsLoaded() && r.localRenderer.HasCanvas() && r.gameStateJSON != nil {
-		scale := r.localRenderer.CanvasScale
-		r.localCanvas = r.localRenderer.RenderCanvas(r.playerID, vw*scale, vh*scale)
+		r.localCanvas = r.localRenderer.RenderCanvas(r.playerID, vw*cellW(), vh*cellH())
 	} else {
 		r.localCanvas = nil
 	}
