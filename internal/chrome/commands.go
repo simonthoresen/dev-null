@@ -118,31 +118,16 @@ func (m *Model) dispatchInput(text string) {
 			return
 		// Render mode commands.
 		case "/render-text":
-			m.renderMode = domain.RenderModeText
+			m.setRenderMode(domain.RenderModeText)
 			return
 		case "/render-quadrant":
-			if m.canUseRenderMode(domain.RenderModeQuadrant) {
-				m.renderMode = domain.RenderModeQuadrant
-			} else {
-				m.pluginReply("Quadrant mode not available.")
-			}
+			m.setRenderMode(domain.RenderModeQuadrant)
 			return
 		case "/render-canvas":
-			if m.canUseRenderMode(domain.RenderModeCanvas) {
-				m.renderMode = domain.RenderModeCanvas
-			} else {
-				m.pluginReply("Canvas mode not available.")
-			}
+			m.setRenderMode(domain.RenderModeCanvas)
 			return
-		case "/render-local":
-			if !m.IsEnhancedClient {
-				m.pluginReply("Local rendering not available.")
-				return
-			}
-			m.localRendering = !m.localRendering
-			m.localModeSent = false
-			m.gameSrcSent = false
-			m.lastStateJSON = ""
+		case "/render-canvas-hd":
+			m.setRenderMode(domain.RenderModeCanvasHD)
 			return
 		}
 

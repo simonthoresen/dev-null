@@ -58,14 +58,15 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 	}
 	menus := []domain.MenuDef{{Label: "&File", Items: fileItems}}
 
-	// Graphics menu — rendering mode + local rendering toggle.
+	// Graphics menu — rendering mode selection.
 	renderCmds := map[domain.RenderMode]string{
 		domain.RenderModeText:     "/render-text",
 		domain.RenderModeQuadrant: "/render-quadrant",
 		domain.RenderModeCanvas:   "/render-canvas",
+		domain.RenderModeCanvasHD: "/render-canvas-hd",
 	}
-	viewItems := make([]domain.MenuItemDef, 0, 5)
-	for _, mode := range []domain.RenderMode{domain.RenderModeText, domain.RenderModeQuadrant, domain.RenderModeCanvas} {
+	viewItems := make([]domain.MenuItemDef, 0, 4)
+	for _, mode := range []domain.RenderMode{domain.RenderModeText, domain.RenderModeQuadrant, domain.RenderModeCanvas, domain.RenderModeCanvasHD} {
 		mode := mode // capture
 		cmd := renderCmds[mode]
 		viewItems = append(viewItems, domain.MenuItemDef{
@@ -76,16 +77,6 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 			Handler:  func(_ string) { m.dispatchInput(cmd) },
 		})
 	}
-	viewItems = append(viewItems,
-		domain.MenuItemDef{Label: "---"},
-		domain.MenuItemDef{
-			Label:    "&Local",
-			Toggle:   true,
-			Disabled: !m.IsEnhancedClient,
-			Checked:  func() bool { return m.localRendering },
-			Handler:  func(_ string) { m.dispatchInput("/render-local") },
-		},
-	)
 	menus = append(menus, domain.MenuDef{Label: "&Graphics", Items: viewItems})
 
 	if game != nil {

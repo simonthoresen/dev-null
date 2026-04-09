@@ -144,8 +144,7 @@ func (m *Model) handleGameLoaded(_ domain.GameLoadedMsg) (tea.Model, tea.Cmd) {
 	m.pendingMidiOSC = nil
 	m.synthSent = false
 	m.lastStateJSON = ""
-	m.localModeSent = false
-	m.localRendering = m.IsEnhancedClient // default on for enhanced clients
+	m.oscModeSent = false
 	m.renderMode = m.bestRenderMode()
 	m.invalidateMenuCache()
 	m.lobbyInput.Model.Blur()

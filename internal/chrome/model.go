@@ -116,15 +116,14 @@ type Model struct {
 	shaders     []domain.Shader
 	shaderNames []string // parallel to shaders; display names
 
-	// Per-player render mode (Text, Quadrant, Canvas).
-	// Auto-selected to the best available mode on game load; changeable via View menu.
+	// Per-player render mode (Text, Quadrant, Canvas, CanvasHD).
+	// Auto-selected to the best available mode on game load; changeable via Graphics menu.
 	renderMode domain.RenderMode
 
 	// Enhanced client protocol (dev-null-client with charmap/canvas/local-render support).
 	IsEnhancedClient bool
 	SessionWriter    io.Writer // direct session writer for OSC passthrough (bypasses renderer)
-	localRendering   bool     // true = send game JS + state for client-side rendering
-	localModeSent    bool     // true after the initial mode OSC has been sent
+	oscModeSent      bool     // true after the initial mode OSC has been sent
 	charmapSent      bool     // true after charmap+atlas OSC have been sent for the current game
 	gameSrcSent      bool     // true after game source files have been sent
 	assetsSent       bool     // true after game assets (audio/images) have been sent
@@ -438,6 +437,8 @@ func (m *Model) canUseRenderMode(mode domain.RenderMode) bool {
 		return game != nil && game.HasCanvasMode()
 	case domain.RenderModeCanvas:
 		return game != nil && game.HasCanvasMode() && m.IsEnhancedClient && canvasScale > 0
+	case domain.RenderModeCanvasHD:
+		return game != nil && game.HasCanvasMode() && m.IsEnhancedClient && canvasScale > 0
 	}
 	return false
 }
@@ -445,11 +446,28 @@ func (m *Model) canUseRenderMode(mode domain.RenderMode) bool {
 // bestRenderMode returns the highest-fidelity render mode available for the
 // current client and game. Called on game load to auto-select the best option.
 func (m *Model) bestRenderMode() domain.RenderMode {
-	// Try from highest to lowest fidelity.
-	for _, mode := range []domain.RenderMode{domain.RenderModeCanvas, domain.RenderModeQuadrant} {
+	for _, mode := range []domain.RenderMode{domain.RenderModeCanvasHD, domain.RenderModeCanvas, domain.RenderModeQuadrant} {
 		if m.canUseRenderMode(mode) {
 			return mode
 		}
 	}
 	return domain.RenderModeText
+}
+
+// setRenderMode switches to the given mode if available, handling OSC state
+// resets needed when transitioning between local and remote canvas modes.
+func (m *Model) setRenderMode(mode domain.RenderMode) {
+	if !m.canUseRenderMode(mode) {
+		m.pluginReply(mode.Label() + " mode not available.")
+		return
+	}
+	wasLocal := m.renderMode == domain.RenderModeCanvasHD
+	m.renderMode = mode
+	isLocal := mode == domain.RenderModeCanvasHD
+	// Reset OSC state when switching between local and non-local modes.
+	if wasLocal != isLocal {
+		m.oscModeSent = false
+		m.gameSrcSent = false
+		m.lastStateJSON = ""
+	}
 }
