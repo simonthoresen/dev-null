@@ -451,14 +451,9 @@ func (r *ClientRenderer) Draw(w *display.Window, screen *ebiten.Image) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Full local rendering: if we have game JS + state and mode is not "remote",
-	// render the entire UI locally (NC chrome + game viewport) — no dependency on ANSI stream.
-	if r.localRenderer.IsLoaded() && r.gameStateJSON != nil && r.clientScreen != nil && r.renderMode != "remote" {
-		r.drawLocal(screen)
-		return
-	}
-
-	// Fallback: remote rendering from parsed ANSI stream.
+	// Always use remote rendering: the server's ANSI stream provides the full chrome
+	// (menus, chat, overlays, status bar). Local rendering only enhances the game
+	// viewport — the local canvas is overlaid by drawRemote when available.
 	r.drawRemote(screen)
 
 	// Loading overlay: shown while assets are still being received.

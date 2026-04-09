@@ -142,7 +142,10 @@ func (m *Model) View() tea.View {
 			oscData += render.EncodeSynthOSC(m.synthName)
 			m.synthSent = true
 		}
-		if m.viewportW > 0 && m.viewportH > 0 {
+		// Suppress viewport/canvas OSC when menus or dialogs are active so the
+		// client doesn't draw the canvas over the overlay chrome.
+		overlayActive := m.overlay.IsActive()
+		if m.viewportW > 0 && m.viewportH > 0 && !overlayActive {
 			oscData += render.EncodeViewportOSC(m.viewportX, m.viewportY, m.viewportW, m.viewportH)
 
 			// Send Game.state if it changed since last frame (for local rendering).
