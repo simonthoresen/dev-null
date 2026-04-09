@@ -121,7 +121,6 @@ type Model struct {
 
 	// Enhanced client protocol (dev-null-client with charmap/canvas/local-render support).
 	IsEnhancedClient bool
-	IsTerminalClient bool     // true = enhanced but terminal-only (no charmap/canvas)
 	localRendering   bool     // true = send game JS + state for client-side rendering
 	localModeSent    bool     // true after the initial mode OSC has been sent
 	charmapSent      bool     // true after charmap+atlas OSC have been sent for the current game
@@ -436,7 +435,7 @@ func (m *Model) canUseRenderMode(mode domain.RenderMode) bool {
 	case domain.RenderModeQuadrant:
 		return game != nil && game.HasCanvasMode()
 	case domain.RenderModeCanvas:
-		return game != nil && game.HasCanvasMode() && m.IsEnhancedClient && !m.IsTerminalClient && canvasScale > 0
+		return game != nil && game.HasCanvasMode() && m.IsEnhancedClient && canvasScale > 0
 	}
 	return false
 }

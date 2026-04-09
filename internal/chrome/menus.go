@@ -81,7 +81,7 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 		domain.MenuItemDef{
 			Label:    "&Local",
 			Toggle:   true,
-			Disabled: !m.IsEnhancedClient || m.IsTerminalClient,
+			Disabled: !m.IsEnhancedClient,
 			Checked:  func() bool { return m.localRendering },
 			Handler:  func(_ string) { m.dispatchInput("/render-local") },
 		},

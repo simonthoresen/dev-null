@@ -51,10 +51,6 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 		if e == "DEV_NULL_CLIENT=enhanced" {
 			model.IsEnhancedClient = true
 		}
-		if e == "DEV_NULL_CLIENT=terminal" {
-			model.IsEnhancedClient = true
-			model.IsTerminalClient = true
-		}
 	}
 
 	// DEV_NULL_PASSWORD: auto-authenticate as admin on connect.

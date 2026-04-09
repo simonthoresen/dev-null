@@ -2,14 +2,10 @@ package display
 
 import (
 	"image/color"
-	"sync"
-	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 
-	"dev-null/internal/clipboard"
 	"dev-null/internal/render"
 )
 
@@ -110,141 +106,6 @@ func (w *Window) detectResize() (cols, rows int, changed bool) {
 		w.lastRows = rows
 	}
 	return
-}
-
-// --- ServerRenderer: wraps a Bubble Tea model for the server GUI ---
-
-// ServerRenderer drives a Bubble Tea model inside a Window.
-// Used by the server console and --local --no-ssh mode.
-type ServerRenderer struct {
-	model tea.Model
-	msgCh chan tea.Msg
-
-	mu          sync.Mutex
-	cursorStart time.Time
-}
-
-// NewServerRenderer creates a renderer that drives the given Bubble Tea model.
-func NewServerRenderer() *ServerRenderer {
-	return &ServerRenderer{
-		msgCh:       make(chan tea.Msg, 256),
-		cursorStart: time.Now(),
-	}
-}
-
-// Run initializes the model and starts the Ebitengine window (blocking).
-func (r *ServerRenderer) Run(model tea.Model, title string, width, height int, iconICO []byte) error {
-	r.mu.Lock()
-	r.model = model
-	r.mu.Unlock()
-
-	cmd := model.Init()
-	r.processCmd(cmd)
-
-	// Send initial window size.
-	r.Send(tea.WindowSizeMsg{
-		Width:  WindowCols(width),
-		Height: WindowRows(height),
-	})
-
-	return RunWindow(r, title, width, height, iconICO)
-}
-
-// Send delivers a message to the model asynchronously.
-func (r *ServerRenderer) Send(msg tea.Msg) {
-	select {
-	case r.msgCh <- msg:
-	default:
-	}
-}
-
-func (r *ServerRenderer) HandleInput(w *Window) {
-	for _, msg := range PollKeyMessages() {
-		r.Send(msg)
-	}
-	for _, msg := range PollMouseMessages() {
-		r.Send(msg)
-	}
-}
-
-func (r *ServerRenderer) Draw(w *Window, screen *ebiten.Image) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	view := r.model.View()
-
-	if bv, ok := r.model.(BufferViewer); ok {
-		if buf := bv.ViewBuffer(); buf != nil {
-			DrawImageBuffer(screen, buf, w.FontFace, nil)
-		}
-	}
-
-	if cv, ok := r.model.(ClipboardViewer); ok {
-		if text := cv.PopClipboard(); text != "" {
-			go clipboard.Copy(text) //nolint:errcheck
-		}
-	}
-
-	// Draw blinking cursor.
-	if view.Cursor != nil {
-		elapsed := time.Since(r.cursorStart)
-		if (elapsed.Milliseconds()/530)%2 == 0 {
-			cx := view.Cursor.Position.X
-			cy := view.Cursor.Position.Y
-			op := &ebiten.DrawImageOptions{}
-			op.GeoM.Scale(float64(CellW), float64(CellH))
-			op.GeoM.Translate(float64(cx*CellW), float64(cy*CellH))
-			op.ColorScale.ScaleWithColor(color.RGBA{R: 200, G: 200, B: 200, A: 180})
-			screen.DrawImage(sharedPixel, op)
-		}
-	}
-}
-
-func (r *ServerRenderer) Resize(cols, rows int) {
-	r.Send(tea.WindowSizeMsg{Width: cols, Height: rows})
-}
-
-func (r *ServerRenderer) ShouldClose() bool {
-	// Drain message queue and feed to model.
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for range 64 {
-		select {
-		case msg := <-r.msgCh:
-			if _, ok := msg.(tea.QuitMsg); ok {
-				return true
-			}
-			if _, ok := msg.(tea.KeyPressMsg); ok {
-				r.cursorStart = time.Now()
-			}
-			var cmd tea.Cmd
-			r.model, cmd = r.model.Update(msg)
-			r.processCmd(cmd)
-		default:
-			return false
-		}
-	}
-	return false
-}
-
-func (r *ServerRenderer) processCmd(cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	go func() {
-		msg := cmd()
-		if msg == nil {
-			return
-		}
-		if batch, ok := msg.(tea.BatchMsg); ok {
-			for _, subCmd := range batch {
-				r.processCmd(subCmd)
-			}
-			return
-		}
-		r.Send(msg)
-	}()
 }
 
 // --- Helpers for external renderers ---

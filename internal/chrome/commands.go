@@ -135,7 +135,7 @@ func (m *Model) dispatchInput(text string) {
 			}
 			return
 		case "/render-local":
-			if !m.IsEnhancedClient || m.IsTerminalClient {
+			if !m.IsEnhancedClient {
 				m.pluginReply("Local rendering not available.")
 				return
 			}

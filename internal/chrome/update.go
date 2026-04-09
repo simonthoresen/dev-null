@@ -82,7 +82,7 @@ func (m *Model) handleChat(msg domain.ChatMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Extract sound and MIDI OSC for graphical clients before any early-return.
-	if m.IsEnhancedClient && !m.IsTerminalClient {
+	if m.IsEnhancedClient {
 		if chatMsg.SoundStop {
 			m.pendingSoundOSC = append(m.pendingSoundOSC, render.EncodeStopSoundOSC(chatMsg.SoundFile))
 		} else if chatMsg.SoundFile != "" {

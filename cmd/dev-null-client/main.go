@@ -3,8 +3,6 @@
 // It connects via standard SSH but additionally supports charmap-based
 // sprite rendering: games that declare a charmap have their PUA codepoints
 // rendered as sprites from a sprite sheet instead of terminal glyphs.
-//
-// Use --no-gui for terminal mode: renders as ANSI to the current terminal.
 package main
 
 import (
@@ -15,9 +13,6 @@ import (
 	"os"
 	"os/user"
 	"strings"
-
-	"github.com/charmbracelet/colorprofile"
-	xterm "github.com/charmbracelet/x/term"
 
 	"dev-null/internal/client"
 	"dev-null/internal/datadir"
@@ -38,7 +33,6 @@ func main() {
 	host := flag.String("host", "localhost", "server hostname")
 	port := flag.Int("port", 23234, "server SSH port")
 	player := flag.String("player", defaultPlayer(), "player name")
-	noGUI := flag.Bool("no-gui", false, "run in terminal mode (TUI) instead of opening a graphical window")
 	gameName := flag.String("game", "", "game to load on connect (sends /game-load command)")
 	resumeName := flag.String("resume", "", "game/save to resume on connect, e.g. orbits/autosave (sends /game-resume command)")
 	password := flag.String("password", "", "admin password (authenticates as admin on connect)")
@@ -58,24 +52,11 @@ func main() {
 	}
 
 	fmt.Printf("Connecting to %s:%d as %s...\n", *host, *port, *player)
-	ptyW, ptyH := 0, 0
-	if *noGUI {
-		ptyW, ptyH, _ = xterm.GetSize(os.Stdin.Fd())
-	}
-	conn, err := client.Dial(*host, *port, *player, *noGUI, *termFlag, *password, ptyW, ptyH, initCommands)
+	conn, err := client.Dial(*host, *port, *player, *termFlag, *password, 0, 0, initCommands)
 	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
 	defer conn.Close()
-
-	if *noGUI {
-		profile := detectClientProfile(*termFlag)
-		if err := client.RunTerminal(conn, *player, profile); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
 
 	fmt.Println("Connected. Starting renderer...")
 	renderer := client.NewClientRenderer(conn, 1200, 800, *player, datadir.DefaultDataDir())
@@ -83,25 +64,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-// detectClientProfile returns the color profile for client-side terminal rendering.
-func detectClientProfile(termFlag string) colorprofile.Profile {
-	if termFlag != "" {
-		switch strings.ToLower(termFlag) {
-		case "truecolor", "24bit":
-			return colorprofile.TrueColor
-		case "256color", "256":
-			return colorprofile.ANSI256
-		case "ansi", "16color", "16":
-			return colorprofile.ANSI
-		case "ascii", "none", "no-color":
-			return colorprofile.ASCII
-		default:
-			fmt.Fprintf(os.Stderr, "unknown --term value %q (valid: truecolor, 256color, ansi, ascii)\n", termFlag)
-		}
-	}
-	return colorprofile.Detect(os.Stderr, os.Environ())
 }
 
 func defaultPlayer() string {

@@ -23,8 +23,6 @@ type SSHConn struct {
 
 // Dial connects to the server and sets up a PTY session.
 // It sends DEV_NULL_CLIENT=enhanced so the server knows we support charmaps.
-// If noGUI is true, it sends DEV_NULL_CLIENT=terminal instead (local
-// rendering in a terminal, no charmap/canvas support).
 // termOverride, if non-empty, is sent as DEV_NULL_TERM to request a specific
 // color profile for this session (values: truecolor, 256color, ansi, ascii).
 // ptyW and ptyH set the initial PTY dimensions; pass 0 for each to use the
@@ -32,7 +30,7 @@ type SSHConn struct {
 // race where the first frame is rendered at the wrong dimensions.
 // initCommands, if non-empty, are base64-encoded and sent as DEV_NULL_INIT
 // so the server dispatches them on the player's first tick.
-func Dial(host string, port int, player string, noGUI bool, termOverride, password string, ptyW, ptyH int, initCommands []string) (*SSHConn, error) {
+func Dial(host string, port int, player string, termOverride, password string, ptyW, ptyH int, initCommands []string) (*SSHConn, error) {
 	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 
 	config := &ssh.ClientConfig{
@@ -62,11 +60,7 @@ func Dial(host string, port int, player string, noGUI bool, termOverride, passwo
 	}
 
 	// Tell the server what kind of client we are.
-	clientType := "enhanced"
-	if noGUI {
-		clientType = "terminal"
-	}
-	if err := session.Setenv("DEV_NULL_CLIENT", clientType); err != nil {
+	if err := session.Setenv("DEV_NULL_CLIENT", "enhanced"); err != nil {
 		// Setenv may fail if the server doesn't accept this env var.
 		// Fall back silently — we'll still work, just without charmap support.
 		_ = err

@@ -260,31 +260,41 @@ if ($Local) {
     Write-RunLogLine "local server ready on port $Port (PID $($script:serverProc.Id))"
 }
 
-# ── build client args ────────────────────────────────────────────────────────
-
-$clientArgs = @()
-if ($NoGUI)    { $clientArgs += "--no-gui" }
-if ($Local) {
-    $clientArgs += "--host"; $clientArgs += "localhost"
-    $clientArgs += "--port"; $clientArgs += $Port
-    $clientArgs += "--password"; $clientArgs += $localPassword
-} else {
-    if ($Host_) { $clientArgs += "--host"; $clientArgs += $Host_ }
-    if ($Port)  { $clientArgs += "--port"; $clientArgs += $Port }
-}
-if ($Player)   { $clientArgs += "--player"; $clientArgs += $Player }
-if ($Term)     { $clientArgs += "--term";   $clientArgs += $Term }
-if ($Game)     { $clientArgs += "--game";   $clientArgs += $Game }
-if ($Resume)   { $clientArgs += "--resume"; $clientArgs += $Resume }
-$clientArgs += $positionals
-
 # ── launch client ────────────────────────────────────────────────────────────
 
 Push-Location $root
 try {
-    Write-RunLogLine "starting dev-null client (host=$Host_ port=$Port local=$Local no-gui=$NoGUI)"
-    & (Join-Path $root "dev-null-client.exe") @clientArgs
-    if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    if ($NoGUI) {
+        # Terminal mode: launch plain ssh instead of the GUI client binary.
+        Write-RunLogLine "starting ssh client (host=$Host_ port=$Port local=$Local)"
+        if ($Local) {
+            $env:DEV_NULL_PASSWORD = $localPassword
+            & ssh -p $Port -o SendEnv=DEV_NULL_PASSWORD -o StrictHostKeyChecking=no localhost
+        } else {
+            & ssh -p $Port $Host_
+        }
+        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    } else {
+        # GUI mode: build args and launch the graphical client binary.
+        $clientArgs = @()
+        if ($Local) {
+            $clientArgs += "--host"; $clientArgs += "localhost"
+            $clientArgs += "--port"; $clientArgs += $Port
+            $clientArgs += "--password"; $clientArgs += $localPassword
+        } else {
+            if ($Host_) { $clientArgs += "--host"; $clientArgs += $Host_ }
+            if ($Port)  { $clientArgs += "--port"; $clientArgs += $Port }
+        }
+        if ($Player)   { $clientArgs += "--player"; $clientArgs += $Player }
+        if ($Term)     { $clientArgs += "--term";   $clientArgs += $Term }
+        if ($Game)     { $clientArgs += "--game";   $clientArgs += $Game }
+        if ($Resume)   { $clientArgs += "--resume"; $clientArgs += $Resume }
+        $clientArgs += $positionals
+
+        Write-RunLogLine "starting dev-null client (host=$Host_ port=$Port local=$Local)"
+        & (Join-Path $root "dev-null-client.exe") @clientArgs
+        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    }
 } finally {
     Pop-Location
     Write-RunLogLine "client process finished"

@@ -21,7 +21,6 @@ import (
 
 	"dev-null/internal/console"
 	"dev-null/internal/datadir"
-	"dev-null/internal/display"
 	"dev-null/internal/engine"
 	"dev-null/internal/runlog"
 	"dev-null/internal/server"
@@ -47,7 +46,6 @@ func main() {
 	var portOverride string
 	var dataDir string
 	var lanMode bool
-	var noGUI bool
 	var tickInterval time.Duration
 	var termFlag string
 	flag.StringVar(&password, "password", "", "admin password (optional, can be set at runtime via /password)")
@@ -56,7 +54,6 @@ func main() {
 	flag.StringVar(&dataDir, "data-dir", datadir.DefaultDataDir(), "directory containing games/, logs/")
 	flag.BoolVar(&lanMode, "lan", false, "LAN-only server (no UPnP, no public IP, no Pinggy)")
 	var headless bool
-	flag.BoolVar(&noGUI, "no-gui", false, "run in terminal mode (TUI) instead of opening a graphical window")
 	flag.BoolVar(&headless, "headless", false, "run with no console UI (for --local subprocess mode)")
 	flag.DurationVar(&tickInterval, "tick-interval", 100*time.Millisecond, "server tick interval (e.g. 100ms, 50ms)")
 	flag.StringVar(&termFlag, "term", "", "force terminal color profile for all sessions: truecolor, 256color, ansi, ascii")
@@ -175,30 +172,15 @@ func main() {
 		consoleModel := console.NewModel(app, stop, bootProfile)
 		finishBootStep("DONE")
 
-		if noGUI {
-			// TUI mode: run console in the terminal via Bubble Tea.
-			program := tea.NewProgram(consoleModel, tea.WithFPS(60), tea.WithColorProfile(bootProfile))
-			app.SetConsoleProgram(program)
-			go func() {
-				<-ctx.Done()
-				program.Send(tea.QuitMsg{})
-			}()
-			if _, err := program.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "console error: %v\n", err)
-			}
-		} else {
-			// GUI mode: run console in an Ebitengine window.
-			renderer := display.NewServerRenderer()
-			app.SetConsoleSender(renderer)
-			go func() {
-				<-ctx.Done()
-				renderer.Send(tea.QuitMsg{})
-			}()
-			if err := renderer.Run(consoleModel, "dev-null server", 1200, 800, appIcon); err != nil {
-				fmt.Fprintf(os.Stderr, "console error: %v\n", err)
-			}
-			// Ensure context is cancelled when GUI window closes (covers window X button).
-			stop()
+		// TUI mode: run console in the terminal via Bubble Tea.
+		program := tea.NewProgram(consoleModel, tea.WithFPS(60), tea.WithColorProfile(bootProfile))
+		app.SetConsoleProgram(program)
+		go func() {
+			<-ctx.Done()
+			program.Send(tea.QuitMsg{})
+		}()
+		if _, err := program.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "console error: %v\n", err)
 		}
 	}
 

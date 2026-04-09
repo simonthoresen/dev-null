@@ -22,26 +22,28 @@ make run-client         # client: connect to a running server
 make run-client-local   # client: headless SSH server + graphical client
 make clean              # remove compiled binaries from dist/
 
-# Server — runs the SSH server + admin console.
-go run ./cmd/dev-null-server --data-dir dist             # GUI mode (default)
-go run ./cmd/dev-null-server --no-gui --data-dir dist    # TUI mode
+# Server — always runs as TUI (Bubble Tea in terminal).
+go run ./cmd/dev-null-server --data-dir dist    # TUI mode (only mode)
 go test ./...
 
 ssh -p 23234 localhost   # connect via plain SSH (host plays this way too)
 
-# Client — connects to a server.
+# Client — always GUI (Ebitengine graphical window).
 go run ./cmd/dev-null-client
 go run ./cmd/dev-null-client --host example.com --port 23234 --player alice
-go run ./cmd/dev-null-client --no-gui   # TUI mode: render in terminal instead of window
 go run ./cmd/dev-null-client --game orbits          # send /game-load on connect
 go run ./cmd/dev-null-client --resume orbits/autosave  # send /game-resume on connect
 
+# Terminal client — use plain ssh (no binary needed).
+ssh -p 23234 localhost
+
 # Local mode — the script starts a headless server + connects the client.
 # (--local is a script flag, not a binary flag)
+# --no-gui launches plain ssh instead of the GUI binary.
 .\start-client.ps1 --local
 .\start-client.ps1 --local --game orbits
 .\start-client.ps1 --local --resume orbits/autosave
-.\start-client.ps1 --local --no-gui --game orbits
+.\start-client.ps1 --local --no-gui   # launches ssh instead of GUI binary
 
 ```
 

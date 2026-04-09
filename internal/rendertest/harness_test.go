@@ -293,7 +293,6 @@ func renderChrome(
 
 	m := chrome.NewModel(api, playerID)
 	m.IsEnhancedClient = variant.isEnhancedClient
-	m.IsTerminalClient = variant.isTerminalClient
 	m.ColorProfile = profile
 
 	cur, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
@@ -346,40 +345,29 @@ type chromeVariant struct {
 	// label is a comment shown in the golden file header.
 	label            string
 	isEnhancedClient bool
-	isTerminalClient bool
 }
 
-// chromeVariants lists the four execution contexts the developer cares about,
+// chromeVariants lists the three execution contexts the developer cares about,
 // in order:
 //
 //	a) server --local (plain SSH pipe to local terminal)
 //	b) server + plain ssh client (SSH pipe to remote terminal)
-//	c) client --local (enhanced, terminal-mode client process)
-//	d) server + client.exe (enhanced graphical client)
+//	c) server + client.exe (enhanced graphical client)
 var chromeVariants = []chromeVariant{
 	{
 		name:             "server_local",
 		label:            "a) server --local (SSH pipe to local terminal)",
 		isEnhancedClient: false,
-		isTerminalClient: false,
 	},
 	{
 		name:             "server_ssh",
 		label:            "b) server + plain SSH client (SSH pipe to remote terminal)",
 		isEnhancedClient: false,
-		isTerminalClient: false,
-	},
-	{
-		name:             "client_local",
-		label:            "c) client --local (enhanced terminal-mode client)",
-		isEnhancedClient: true,
-		isTerminalClient: true,
 	},
 	{
 		name:             "client_remote",
-		label:            "d) server + client.exe (enhanced graphical client)",
+		label:            "c) server + client.exe (enhanced graphical client)",
 		isEnhancedClient: true,
-		isTerminalClient: false,
 	},
 }
 

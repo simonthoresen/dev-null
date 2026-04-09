@@ -105,7 +105,7 @@ func (m *Model) View() tea.View {
 			}
 			m.gameSrcSent = true
 		}
-		if !m.charmapSent && !m.IsTerminalClient {
+		if !m.charmapSent {
 			if cm := game.CharMap(); cm != nil {
 				oscPrefix += render.EncodeCharmapOSC(cm)
 				if cm.Atlas != "" {
@@ -115,7 +115,7 @@ func (m *Model) View() tea.View {
 			}
 			m.charmapSent = true
 		}
-		if !m.assetsSent && !m.IsTerminalClient {
+		if !m.assetsSent {
 			assets := game.GameAssets()
 			if len(assets) > 0 {
 				oscPrefix += render.EncodeAssetManifestOSC(len(assets))
@@ -156,7 +156,7 @@ func (m *Model) View() tea.View {
 			}
 
 			// Canvas frame: send PNG via OSC when render mode is Canvas (not for terminal clients).
-			if m.renderMode == domain.RenderModeCanvas && phase == domain.PhasePlaying && !m.IsTerminalClient {
+			if m.renderMode == domain.RenderModeCanvas && phase == domain.PhasePlaying {
 				m.api.State().RLock()
 				canvasScale := m.api.State().CanvasScale
 				m.api.State().RUnlock()
