@@ -509,14 +509,16 @@ func (r *ClientRenderer) drawRemote(screen *ebiten.Image) {
 	vw := r.grid.ViewportW
 	vh := r.grid.ViewportH
 
-	// Local canvas rendering: if the local renderer has game JS + state,
-	// render canvas locally at the client's chosen scale (no server bandwidth cost).
-	if vw > 0 && vh > 0 && r.localRenderer.IsLoaded() && r.localRenderer.HasCanvas() && r.gameStateJSON != nil {
+	// Local canvas rendering: only when the server has local mode enabled
+	// (r.renderMode == "local") and we have game JS + state loaded.
+	if r.renderMode == "local" && vw > 0 && vh > 0 && r.localRenderer.IsLoaded() && r.localRenderer.HasCanvas() && r.gameStateJSON != nil {
 		scale := r.localRenderer.CanvasScale
 		r.localCanvas = r.localRenderer.RenderCanvas(r.playerID, vw*scale, vh*scale)
+	} else {
+		r.localCanvas = nil
 	}
 
-	// Determine if we have a canvas frame to overlay.
+	// Determine if we have a canvas frame to overlay (prefer local, fall back to server-sent).
 	canvasImg := r.localCanvas
 	if canvasImg == nil {
 		canvasImg = r.canvasFrame
