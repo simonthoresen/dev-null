@@ -51,16 +51,24 @@ func main() {
 		initCommands = append(initCommands, "/game-load "+*gameName)
 	}
 
+	// Init font before dialing so CellW/CellH are set to their real values.
+	// This lets us request the correct PTY size from the very first frame,
+	// avoiding a size mismatch between the initial server render and the window.
+	const winW, winH = 1200, 800
+	display.InitGUIFont()
+	ptyW := display.WindowCols(winW)
+	ptyH := display.WindowRows(winH)
+
 	fmt.Printf("Connecting to %s:%d as %s...\n", *host, *port, *player)
-	conn, err := client.Dial(*host, *port, *player, *termFlag, *password, 0, 0, initCommands)
+	conn, err := client.Dial(*host, *port, *player, *termFlag, *password, ptyW, ptyH, initCommands)
 	if err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
 	defer conn.Close()
 
 	fmt.Println("Connected. Starting renderer...")
-	renderer := client.NewClientRenderer(conn, 1200, 800, *player, datadir.DefaultDataDir())
-	if err := display.RunWindow(renderer, "dev-null", 1200, 800, appIcon); err != nil {
+	renderer := client.NewClientRenderer(conn, winW, winH, *player, datadir.DefaultDataDir())
+	if err := display.RunWindow(renderer, "dev-null", winW, winH, appIcon); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
