@@ -219,6 +219,17 @@ func (g *TerminalGrid) Feed(data []byte) {
 			continue
 		}
 
+		if b == '\t' {
+			// Advance to next 8-column tab stop, clamped to last column.
+			next := ((g.CursorX/8) + 1) * 8
+			if next >= g.Width {
+				next = g.Width - 1
+			}
+			g.CursorX = next
+			i++
+			continue
+		}
+
 		// Regular character — check for a truncated multi-byte UTF-8 sequence
 		// before attempting to decode, so we don't corrupt the continuation bytes.
 		if b >= 0x80 {
@@ -260,16 +271,24 @@ func (g *TerminalGrid) Feed(data []byte) {
 // before the command byte was found (incomplete sequence).
 func (g *TerminalGrid) parseCSI(data []byte, start int) int {
 	i := start
-	// Collect parameter bytes (digits, semicolons, and private-mode '?').
+	// Collect parameter bytes (0x30-0x3F: digits, semicolons, private-mode prefixes like ?<=).
 	paramStart := i
-	for i < len(data) && ((data[i] >= '0' && data[i] <= '9') || data[i] == ';' || data[i] == '?') {
+	for i < len(data) && data[i] >= 0x30 && data[i] <= 0x3F {
+		i++
+	}
+	if i >= len(data) {
+		return -1 // incomplete: command byte not yet received
+	}
+	params := string(data[paramStart:i])
+
+	// Consume intermediate bytes (0x20-0x2F: space, !, ", #, $, %, &, ', (, ), *, +, ,, -, ., /).
+	for i < len(data) && data[i] >= 0x20 && data[i] <= 0x2F {
 		i++
 	}
 	if i >= len(data) {
 		return -1 // incomplete: command byte not yet received
 	}
 
-	params := string(data[paramStart:i])
 	cmd := data[i]
 	i++
 
@@ -337,6 +356,16 @@ func (g *TerminalGrid) parseCSI(data []byte, start int) int {
 		g.CursorX -= n
 		if g.CursorX < 0 {
 			g.CursorX = 0
+		}
+	case 'X': // ECH — Erase Character: erase N chars at cursor, cursor does NOT advance
+		n := 1
+		if params != "" {
+			n, _ = strconv.Atoi(params)
+		}
+		for x := g.CursorX; x < g.CursorX+n && x < g.Width; x++ {
+			if cell := g.At(x, g.CursorY); cell != nil {
+				*cell = Cell{Char: ' ', Fg: g.curFg, Bg: g.curBg}
+			}
 		}
 	}
 

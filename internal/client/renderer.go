@@ -124,6 +124,7 @@ func (r *ClientRenderer) readLoop() {
 	// On Windows, blocking SSH reads before ebiten.RunGame's event loop
 	// can prevent window creation.
 	<-r.started
+
 	for {
 		n, err := r.conn.Read(r.readBuf)
 		if n > 0 {
