@@ -81,6 +81,10 @@ type TerminalGrid struct {
 	curFg   color.RGBA
 	curBg   color.RGBA
 	curAttr render.PixelAttr
+
+	// partial holds carry-over bytes from an incomplete escape sequence or
+	// truncated multi-byte UTF-8 rune at the end of the previous Feed call.
+	partial []byte
 }
 
 var defaultFg = color.RGBA{R: 204, G: 204, B: 204, A: 255}
@@ -150,30 +154,54 @@ func (g *TerminalGrid) Clear() {
 	}
 	g.CursorX = 0
 	g.CursorY = 0
+	g.partial = nil
 }
 
-// Feed processes raw ANSI output from the server.
+// Feed processes raw ANSI output from the server. It is safe to call
+// repeatedly with streaming data — incomplete escape sequences and truncated
+// multi-byte UTF-8 runes at the end of a chunk are buffered and prepended to
+// the next call, so a sequence split across two SSH reads is handled correctly.
 func (g *TerminalGrid) Feed(data []byte) {
+	// Prepend any carry-over bytes from a previous incomplete sequence.
+	if len(g.partial) > 0 {
+		data = append(g.partial, data...)
+		g.partial = nil
+	}
+
 	i := 0
 	for i < len(data) {
 		b := data[i]
 
 		if b == '\x1b' {
-			// Escape sequence.
+			escStart := i
 			i++
 			if i >= len(data) {
-				break
+				// Lone ESC at end — save it; may be the start of a sequence.
+				g.partial = append(g.partial, data[escStart:]...)
+				return
 			}
 
 			switch data[i] {
 			case '[': // CSI sequence
 				i++
-				i = g.parseCSI(data, i)
+				newI := g.parseCSI(data, i)
+				if newI < 0 {
+					// Incomplete CSI — carry over from the opening ESC.
+					g.partial = append(g.partial, data[escStart:]...)
+					return
+				}
+				i = newI
 			case ']': // OSC sequence
 				i++
-				i = g.parseOSC(data, i)
+				newI := g.parseOSC(data, i)
+				if newI < 0 {
+					// Incomplete OSC — carry over from the opening ESC.
+					g.partial = append(g.partial, data[escStart:]...)
+					return
+				}
+				i = newI
 			default:
-				i++
+				i++ // unknown two-byte escape — skip
 			}
 			continue
 		}
@@ -191,7 +219,25 @@ func (g *TerminalGrid) Feed(data []byte) {
 			continue
 		}
 
-		// Regular character — decode UTF-8.
+		// Regular character — check for a truncated multi-byte UTF-8 sequence
+		// before attempting to decode, so we don't corrupt the continuation bytes.
+		if b >= 0x80 {
+			var needed int
+			switch {
+			case b&0xE0 == 0xC0:
+				needed = 2
+			case b&0xF0 == 0xE0:
+				needed = 3
+			case b&0xF8 == 0xF0:
+				needed = 4
+			}
+			if needed > 0 && i+needed > len(data) {
+				// Truncated multi-byte sequence at end of chunk — carry over.
+				g.partial = append(g.partial, data[i:]...)
+				return
+			}
+		}
+
 		r, size := decodeUTF8(data[i:])
 		if size == 0 {
 			i++
@@ -210,16 +256,17 @@ func (g *TerminalGrid) Feed(data []byte) {
 }
 
 // parseCSI parses a CSI (Control Sequence Introducer) sequence starting after "\x1b[".
-// Returns the index past the end of the sequence.
+// Returns the index past the end of the sequence, or -1 if the data ended
+// before the command byte was found (incomplete sequence).
 func (g *TerminalGrid) parseCSI(data []byte, start int) int {
 	i := start
-	// Collect parameter bytes (digits and semicolons).
+	// Collect parameter bytes (digits, semicolons, and private-mode '?').
 	paramStart := i
 	for i < len(data) && ((data[i] >= '0' && data[i] <= '9') || data[i] == ';' || data[i] == '?') {
 		i++
 	}
 	if i >= len(data) {
-		return i
+		return -1 // incomplete: command byte not yet received
 	}
 
 	params := string(data[paramStart:i])
@@ -372,8 +419,8 @@ func (g *TerminalGrid) parseOSC(data []byte, start int) int {
 		}
 	}
 	if end < 0 {
-		// Unterminated — skip to end.
-		return len(data)
+		// Unterminated — sequence incomplete; caller will carry over the bytes.
+		return -1
 	}
 
 	payload := string(data[i:end])
