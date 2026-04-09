@@ -82,6 +82,14 @@ type TerminalGrid struct {
 	curBg   color.RGBA
 	curAttr render.PixelAttr
 
+	// Saved cursor position (ESC 7 / ESC 8).
+	savedCursorX int
+	savedCursorY int
+
+	// Scroll region (DECSTBM). Zero values mean full screen.
+	scrollTop    int // 0-based inclusive top row
+	scrollBottom int // 0-based inclusive bottom row (0 = use Height-1)
+
 	// partial holds carry-over bytes from an incomplete escape sequence or
 	// truncated multi-byte UTF-8 rune at the end of the previous Feed call.
 	partial []byte
@@ -147,6 +155,102 @@ func (g *TerminalGrid) ToImageBuffer() *render.ImageBuffer {
 	return buf
 }
 
+// scrollRegionBottom returns the effective bottom row of the scroll region.
+func (g *TerminalGrid) scrollRegionBottom() int {
+	if g.scrollBottom > 0 {
+		return g.scrollBottom
+	}
+	return g.Height - 1
+}
+
+// scrollUp shifts lines up within the scroll region, inserting blank lines at the bottom.
+func (g *TerminalGrid) scrollUp(n int) {
+	top := g.scrollTop
+	bot := g.scrollRegionBottom()
+	for count := 0; count < n; count++ {
+		for y := top; y < bot; y++ {
+			for x := 0; x < g.Width; x++ {
+				if dst := g.At(x, y); dst != nil {
+					if src := g.At(x, y+1); src != nil {
+						*dst = *src
+					}
+				}
+			}
+		}
+		// Clear the bottom line.
+		for x := 0; x < g.Width; x++ {
+			if cell := g.At(x, bot); cell != nil {
+				*cell = Cell{Char: ' ', Fg: defaultFg, Bg: defaultBg}
+			}
+		}
+	}
+}
+
+// scrollDown shifts lines down within the scroll region, inserting blank lines at the top.
+func (g *TerminalGrid) scrollDown(n int) {
+	top := g.scrollTop
+	bot := g.scrollRegionBottom()
+	for count := 0; count < n; count++ {
+		for y := bot; y > top; y-- {
+			for x := 0; x < g.Width; x++ {
+				if dst := g.At(x, y); dst != nil {
+					if src := g.At(x, y-1); src != nil {
+						*dst = *src
+					}
+				}
+			}
+		}
+		// Clear the top line.
+		for x := 0; x < g.Width; x++ {
+			if cell := g.At(x, top); cell != nil {
+				*cell = Cell{Char: ' ', Fg: defaultFg, Bg: defaultBg}
+			}
+		}
+	}
+}
+
+// insertLines inserts n blank lines at the cursor row, shifting existing lines down.
+func (g *TerminalGrid) insertLines(n int) {
+	bot := g.scrollRegionBottom()
+	for count := 0; count < n; count++ {
+		for y := bot; y > g.CursorY; y-- {
+			for x := 0; x < g.Width; x++ {
+				if dst := g.At(x, y); dst != nil {
+					if src := g.At(x, y-1); src != nil {
+						*dst = *src
+					}
+				}
+			}
+		}
+		for x := 0; x < g.Width; x++ {
+			if cell := g.At(x, g.CursorY); cell != nil {
+				*cell = Cell{Char: ' ', Fg: defaultFg, Bg: defaultBg}
+			}
+		}
+	}
+}
+
+// deleteLines deletes n lines at the cursor row, shifting lines up from below.
+func (g *TerminalGrid) deleteLines(n int) {
+	bot := g.scrollRegionBottom()
+	for count := 0; count < n; count++ {
+		for y := g.CursorY; y < bot; y++ {
+			for x := 0; x < g.Width; x++ {
+				if dst := g.At(x, y); dst != nil {
+					if src := g.At(x, y+1); src != nil {
+						*dst = *src
+					}
+				}
+			}
+		}
+		for x := 0; x < g.Width; x++ {
+			if cell := g.At(x, bot); cell != nil {
+				*cell = Cell{Char: ' ', Fg: defaultFg, Bg: defaultBg}
+			}
+		}
+	}
+}
+
 // Clear resets all cells to blank with default colors.
 func (g *TerminalGrid) Clear() {
 	for i := range g.Cells {
@@ -200,9 +304,34 @@ func (g *TerminalGrid) Feed(data []byte) {
 					return
 				}
 				i = newI
+			case 'M': // RI — Reverse Index: cursor up one line, scroll down if at top
+				i++
+				if g.CursorY > g.scrollTop {
+					g.CursorY--
+				} else {
+					g.scrollDown(1)
+				}
+			case '7': // DECSC — Save Cursor
+				i++
+				g.savedCursorX = g.CursorX
+				g.savedCursorY = g.CursorY
+			case '8': // DECRC — Restore Cursor
+				i++
+				g.CursorX = g.savedCursorX
+				g.CursorY = g.savedCursorY
+			case 'H': // HTS — Horizontal Tab Set (not cursor position)
+				i++ // ignore — we don't track custom tab stops
 			default:
 				i++ // unknown two-byte escape — skip
 			}
+			continue
+		}
+
+		if b == '\b' {
+			if g.CursorX > 0 {
+				g.CursorX--
+			}
+			i++
 			continue
 		}
 
@@ -306,22 +435,61 @@ func (g *TerminalGrid) parseCSI(data []byte, start int) int {
 		}
 		g.CursorY = row - 1
 		g.CursorX = col - 1
-	case 'J': // Erase in display
+	case 'J': // ED — Erase in Display
 		n := 0
 		if params != "" {
 			n, _ = strconv.Atoi(params)
 		}
-		if n == 2 || n == 3 {
+		switch n {
+		case 0: // Erase below (cursor to end of screen).
+			for x := g.CursorX; x < g.Width; x++ {
+				if cell := g.At(x, g.CursorY); cell != nil {
+					*cell = Cell{Char: ' ', Fg: g.curFg, Bg: g.curBg}
+				}
+			}
+			for y := g.CursorY + 1; y < g.Height; y++ {
+				for x := 0; x < g.Width; x++ {
+					if cell := g.At(x, y); cell != nil {
+						*cell = Cell{Char: ' ', Fg: g.curFg, Bg: g.curBg}
+					}
+				}
+			}
+		case 1: // Erase above (start of screen to cursor).
+			for y := 0; y < g.CursorY; y++ {
+				for x := 0; x < g.Width; x++ {
+					if cell := g.At(x, y); cell != nil {
+						*cell = Cell{Char: ' ', Fg: g.curFg, Bg: g.curBg}
+					}
+				}
+			}
+			for x := 0; x <= g.CursorX; x++ {
+				if cell := g.At(x, g.CursorY); cell != nil {
+					*cell = Cell{Char: ' ', Fg: g.curFg, Bg: g.curBg}
+				}
+			}
+		case 2, 3: // Erase entire screen.
 			g.Clear()
 		}
-	case 'K': // Erase in line
+	case 'K': // EL — Erase in Line
 		n := 0
 		if params != "" {
 			n, _ = strconv.Atoi(params)
 		}
-		if n == 0 {
-			// Clear from cursor to end of line.
+		switch n {
+		case 0: // Clear from cursor to end of line.
 			for x := g.CursorX; x < g.Width; x++ {
+				if cell := g.At(x, g.CursorY); cell != nil {
+					*cell = Cell{Char: ' ', Fg: g.curFg, Bg: g.curBg}
+				}
+			}
+		case 1: // Clear from start of line to cursor.
+			for x := 0; x <= g.CursorX; x++ {
+				if cell := g.At(x, g.CursorY); cell != nil {
+					*cell = Cell{Char: ' ', Fg: g.curFg, Bg: g.curBg}
+				}
+			}
+		case 2: // Clear entire line.
+			for x := 0; x < g.Width; x++ {
 				if cell := g.At(x, g.CursorY); cell != nil {
 					*cell = Cell{Char: ' ', Fg: g.curFg, Bg: g.curBg}
 				}
@@ -384,8 +552,6 @@ func (g *TerminalGrid) parseCSI(data []byte, start int) int {
 		if params != "" {
 			n, _ = strconv.Atoi(params)
 		}
-		// Repeat the character that was last written at the cursor position.
-		// Look at the cell just before the cursor for the last written char.
 		prevX := g.CursorX - 1
 		if prevX >= 0 {
 			if prev := g.At(prevX, g.CursorY); prev != nil {
@@ -400,6 +566,82 @@ func (g *TerminalGrid) parseCSI(data []byte, start int) int {
 				}
 			}
 		}
+	case 'L': // IL — Insert Lines
+		n := 1
+		if params != "" {
+			n, _ = strconv.Atoi(params)
+		}
+		g.insertLines(n)
+	case 'M': // DL — Delete Lines
+		n := 1
+		if params != "" {
+			n, _ = strconv.Atoi(params)
+		}
+		g.deleteLines(n)
+	case 'S': // SU — Scroll Up
+		n := 1
+		if params != "" {
+			n, _ = strconv.Atoi(params)
+		}
+		g.scrollUp(n)
+	case 'T': // SD — Scroll Down
+		// Only handle numeric params (not mouse tracking responses which have ';').
+		if !strings.Contains(params, ";") {
+			n := 1
+			if params != "" {
+				n, _ = strconv.Atoi(params)
+			}
+			g.scrollDown(n)
+		}
+	case 'P': // DCH — Delete Character
+		n := 1
+		if params != "" {
+			n, _ = strconv.Atoi(params)
+		}
+		y := g.CursorY
+		for x := g.CursorX; x < g.Width; x++ {
+			src := x + n
+			if cell := g.At(x, y); cell != nil {
+				if srcCell := g.At(src, y); srcCell != nil {
+					*cell = *srcCell
+				} else {
+					*cell = Cell{Char: ' ', Fg: g.curFg, Bg: g.curBg}
+				}
+			}
+		}
+	case '@': // ICH — Insert Character
+		n := 1
+		if params != "" {
+			n, _ = strconv.Atoi(params)
+		}
+		y := g.CursorY
+		// Shift characters right from end of line.
+		for x := g.Width - 1; x >= g.CursorX+n; x-- {
+			if cell := g.At(x, y); cell != nil {
+				if srcCell := g.At(x-n, y); srcCell != nil {
+					*cell = *srcCell
+				}
+			}
+		}
+		// Clear inserted positions.
+		for x := g.CursorX; x < g.CursorX+n && x < g.Width; x++ {
+			if cell := g.At(x, y); cell != nil {
+				*cell = Cell{Char: ' ', Fg: g.curFg, Bg: g.curBg}
+			}
+		}
+	case 'r': // DECSTBM — Set Scrolling Region
+		top, bottom := 1, g.Height
+		parts := strings.Split(params, ";")
+		if len(parts) >= 1 && parts[0] != "" {
+			top, _ = strconv.Atoi(parts[0])
+		}
+		if len(parts) >= 2 && parts[1] != "" {
+			bottom, _ = strconv.Atoi(parts[1])
+		}
+		g.scrollTop = top - 1
+		g.scrollBottom = bottom - 1
+		g.CursorX = 0
+		g.CursorY = 0
 	}
 
 	return i
