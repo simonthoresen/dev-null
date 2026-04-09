@@ -135,10 +135,13 @@ var Game = {
     renderCanvas: function(ctx, playerID, w, h) {
         var cam = getCamera(playerID);
 
-        // World-to-screen transform
+        // World-to-screen transform — scale is normalized so the field of view
+        // matches the cell renderer regardless of pixel resolution (quadrant 2x,
+        // canvas 8x, etc.). The cell renderer uses 0.1 world-units-per-cell;
+        // dividing by 1200 keeps the same FOV for a ~120-column viewport.
         var cx = w / 2;
         var cy = h / 2;
-        var scale = cam.zoom;
+        var scale = cam.zoom * w / 1200;
         var tiltFactor = 1 - Math.abs(cam.tilt) * 0.6;
 
         function toScreen(wx, wy) {
@@ -211,50 +214,6 @@ var Game = {
             MOON.radius * scale * 0.45
         );
 
-        // HUD overlay
-        var teamIdx = Game.state.players[playerID] || 0;
-        var teamColor = Game.state.teamColors[teamIdx] || "#FFFFFF";
-        ctx.setFillStyle("#000000AA");
-        ctx.fillRect(4, 4, 260, 22);
-        ctx.setFillStyle(teamColor);
-        ctx.fillText("Team " + (teamIdx + 1) + " | WASD:move  Up/Down:tilt  +/-:zoom", 8, 20);
-
-        // Minimap (bottom-right corner)
-        var mmSize = 80;
-        var mmX = w - mmSize - 8;
-        var mmY = h - mmSize - 8;
-        ctx.setFillStyle("#00001180");
-        ctx.fillRect(mmX, mmY, mmSize, mmSize);
-        ctx.setStrokeStyle("#333366");
-        ctx.strokeRect(mmX, mmY, mmSize, mmSize);
-
-        var mmScale = mmSize / (PLANET.orbitRadius * 3);
-        var mmCx = mmX + mmSize / 2;
-        var mmCy = mmY + mmSize / 2;
-
-        // Minimap sun
-        ctx.setFillStyle(SUN.color);
-        ctx.fillCircle(mmCx, mmCy, 3);
-
-        // Minimap planet
-        ctx.setFillStyle(PLANET.color);
-        ctx.fillCircle(mmCx + planetWX * mmScale, mmCy + planetWY * mmScale, 2);
-
-        // Minimap moon
-        ctx.setFillStyle(MOON.color);
-        ctx.fillCircle(mmCx + moonWX * mmScale, mmCy + moonWY * mmScale, 1);
-
-        // Minimap camera viewport indicator
-        ctx.setStrokeStyle(teamColor);
-        ctx.setLineWidth(1);
-        var vpHalfW = (w / 2) / scale * mmScale;
-        var vpHalfH = (h / 2) / scale * mmScale;
-        ctx.strokeRect(
-            mmCx + cam.x * mmScale - vpHalfW,
-            mmCy + cam.y * mmScale - vpHalfH,
-            vpHalfW * 2,
-            vpHalfH * 2
-        );
     },
 
     statusBar: function(playerID) {
