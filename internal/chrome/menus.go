@@ -58,7 +58,8 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 	}
 	menus := []domain.MenuDef{{Label: "&File", Items: fileItems}}
 
-	// Graphics menu — HD toggle for enhanced clients with a canvas game only.
+	// Graphics menu — HD toggle for enhanced clients with a canvas game.
+	// Shown in both lobby and playing views whenever a canvas game is loaded.
 	if m.IsEnhancedClient && m.canUseRenderMode(domain.RenderModeCanvasHD) {
 		viewItems := []domain.MenuItemDef{
 			{

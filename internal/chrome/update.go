@@ -138,13 +138,17 @@ func (m *Model) handleChat(msg domain.ChatMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleGameLoaded(_ domain.GameLoadedMsg) (tea.Model, tea.Cmd) {
 	m.inActiveGame = true
 	m.gameSrcSent = false
+	// Preserve the player's explicit render preference; only fall back if the
+	// current mode is incompatible with the newly loaded game.
+	if !m.canUseRenderMode(m.renderMode) {
+		m.renderMode = m.bestRenderMode()
+	}
 	m.assetsSent = false
 	m.pendingSoundOSC = nil
 	m.pendingMidiOSC = nil
 	m.synthSent = false
 	m.lastStateJSON = ""
 	m.oscModeSent = false
-	m.renderMode = m.bestRenderMode()
 	m.invalidateMenuCache()
 	m.lobbyInput.Model.Blur()
 	m.playingWindow.FocusIdx = 0
