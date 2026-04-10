@@ -7,12 +7,14 @@ import (
 	"image/color"
 	"math"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/hajimehoshi/bitmapfont/v4"
 
+	"dev-null/internal/datadir"
 	"dev-null/internal/render"
 )
 
@@ -29,24 +31,34 @@ func DefaultFontFace() text.Face {
 	return text.NewGoXFace(bitmapfont.Face)
 }
 
-// GUIFontFace loads a system monospace TTF font suitable for the GUI backend.
-// On Windows it tries Cascadia Mono then Consolas; falls back to the bitmap font.
+// GUIFontFace loads a monospace TTF font suitable for the GUI backend.
+// Search order: bundled fonts dir (install dir or dev dist/fonts/), then
+// Windows system fonts, then bitmap fallback.
 // Cell dimensions (CellW, CellH) are updated to match the loaded font.
 func GUIFontFace(size float64) text.Face {
 	if size <= 0 {
 		size = 16
 	}
 
+	// Build candidate paths: bundled font takes priority over system fonts.
+	var candidates []string
+	installDir := datadir.InstallDir()
+	candidates = append(candidates, filepath.Join(installDir, "fonts", "CascadiaMono.ttf"))
+	// Dev fallback: when running via "go run" from repo root, fonts live in dist/fonts/.
+	if installDir == "." {
+		candidates = append(candidates, filepath.Join("dist", "fonts", "CascadiaMono.ttf"))
+	}
 	if runtime.GOOS == "windows" {
-		// Try fonts in preference order.
-		for _, path := range []string{
+		candidates = append(candidates,
 			`C:\Windows\Fonts\CascadiaMono.ttf`,
 			`C:\Windows\Fonts\consola.ttf`,
-		} {
-			if face := loadTTF(path, size); face != nil {
-				updateCellSize(face)
-				return face
-			}
+		)
+	}
+
+	for _, path := range candidates {
+		if face := loadTTF(path, size); face != nil {
+			updateCellSize(face)
+			return face
 		}
 	}
 
