@@ -175,7 +175,7 @@ Game rendering is automatic based on connection type and game capability:
 | GUI client | string-only | Text (rendered as terminal) |
 | GUI client | canvas game | Quadrant (default) or Canvas HD (opt-in toggle) |
 
-**Canvas HD** (`RenderModeCanvasHD`): sends game JS source + state JSON each frame; client renders the canvas locally at full pixel resolution. Requires enhanced client (`DEV_NULL_CLIENT=enhanced`) and `CanvasScale > 0`.
+**Canvas HD** (`RenderModeCanvasHD`): sends game JS source + state JSON each frame; client renders the canvas locally at its own window pixel resolution. Requires enhanced client (`DEV_NULL_CLIENT=enhanced`).
 
 **Quadrant** (`RenderModeQuadrant`): server calls `RenderCanvasImage()` and converts to Unicode quadrant block characters (▖▗▘▙). Works on any terminal.
 

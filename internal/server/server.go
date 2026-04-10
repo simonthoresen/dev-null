@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -580,72 +579,6 @@ func (a *Server) registerBuiltins() {
 		},
 	})
 
-	// --- Canvas commands ---
-
-	a.registry.Register(domain.Command{
-		Name:        "canvas-scale",
-		Description: "Set canvas pixel density (e.g. 4, 8, 16)",
-		AdminOnly:   true,
-		Handler: func(ctx domain.CommandContext, args []string) {
-			if len(args) < 1 {
-				ctx.Reply("Usage: /canvas-scale <pixels-per-cell>")
-				return
-			}
-			n, err := strconv.Atoi(args[0])
-			if err != nil || n < domain.MinCanvasScale || n > domain.MaxCanvasScale {
-				ctx.Reply(fmt.Sprintf("Scale must be %d-%d.", domain.MinCanvasScale, domain.MaxCanvasScale))
-				return
-			}
-			a.state.Lock()
-			a.state.CanvasScale = n
-			a.state.Unlock()
-			viewW := 120
-			viewH := viewW * 9 / 16
-			ctx.Reply(fmt.Sprintf("Canvas scale set to %d (%dx%d px at %dx%d viewport).",
-				n, viewW*n, viewH*n, viewW, viewH))
-		},
-	})
-
-	a.registry.Register(domain.Command{
-		Name:        "canvas-off",
-		Description: "Disable canvas rendering",
-		AdminOnly:   true,
-		Handler: func(ctx domain.CommandContext, args []string) {
-			a.state.Lock()
-			a.state.CanvasScale = 0
-			a.state.Unlock()
-			ctx.Reply("Canvas rendering disabled.")
-		},
-	})
-
-	a.registry.Register(domain.Command{
-		Name:        "canvas-info",
-		Description: "Show canvas rendering settings",
-		AdminOnly:   true,
-		Handler: func(ctx domain.CommandContext, args []string) {
-			a.state.RLock()
-			scale := a.state.CanvasScale
-			game := a.state.ActiveGame
-			a.state.RUnlock()
-			if scale == 0 {
-				ctx.Reply("Canvas rendering: off. Use /canvas-scale <n> to enable.")
-				return
-			}
-			hasCanvas := game != nil && game.HasCanvasMode()
-			viewW := 120
-			viewH := viewW * 9 / 16
-			status := "no game loaded"
-			if game != nil {
-				if hasCanvas {
-					status = "active (game has renderCanvas)"
-				} else {
-					status = "game has no renderCanvas hook"
-				}
-			}
-			ctx.Reply(fmt.Sprintf("Canvas scale: %d (%dx%d px at %dx%d viewport). %s",
-				scale, viewW*scale, viewH*scale, viewW, viewH, status))
-		},
-	})
 
 	// --- Game commands ---
 

@@ -16,17 +16,15 @@ func (m *Model) invalidateMenuCache() {
 	m.menuCache = nil
 }
 
-// cachedMenus returns the menu tree, rebuilding when the active game or canvas scale changes.
+// cachedMenus returns the menu tree, rebuilding when the active game changes.
 func (m *Model) cachedMenus() []domain.MenuDef {
 	m.api.State().RLock()
 	game := m.api.State().ActiveGame
-	canvasScale := m.api.State().CanvasScale
 	m.api.State().RUnlock()
 
-	if m.menuCache != nil && m.menuCacheGame == game && m.menuCacheScale == canvasScale {
+	if m.menuCache != nil && m.menuCacheGame == game {
 		return m.menuCache
 	}
-	m.menuCacheScale = canvasScale
 
 	fileItems := []domain.MenuItemDef{
 		{Label: "&Games...", Handler: func(_ string) { m.pushGamesDialog(0) }},

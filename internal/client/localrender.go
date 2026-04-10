@@ -21,15 +21,11 @@ type LocalRenderer struct {
 	renderFn goja.Callable // Game.render(buf, playerID, x, y, w, h)
 	canvasFn goja.Callable // Game.renderCanvas(ctx, playerID, w, h)
 
-	// Canvas scale — controlled locally by the client.
-	CanvasScale int
 }
 
 // NewLocalRenderer creates a renderer ready to receive game source and state.
 func NewLocalRenderer() *LocalRenderer {
-	return &LocalRenderer{
-		CanvasScale: 8, // default
-	}
+	return &LocalRenderer{}
 }
 
 // LoadGame loads game JS source files into the goja VM.

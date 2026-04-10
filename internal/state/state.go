@@ -52,9 +52,6 @@ type CentralState struct {
 
 	Net NetworkInfo
 
-	// CanvasScale is the pixels-per-cell scaling factor for canvas rendering.
-	// 0 = canvas rendering disabled. Typical values: 4, 8, 16.
-	CanvasScale int
 }
 
 // New creates a new CentralState with the given admin password.
@@ -63,7 +60,6 @@ func New(password string) *CentralState {
 		AdminPassword: password,
 		StartTime:     time.Now(),
 		Players:       make(map[string]*domain.Player),
-		CanvasScale:   8,
 	}
 }
 

@@ -141,7 +141,7 @@ type Game interface {
 	Layout(playerID string, width, height int) *WidgetNode
 	// RenderCanvas calls the game's renderCanvas(ctx, w, h) hook if defined.
 	// Returns the rendered image as PNG bytes, or nil if the game has no canvas hook.
-	// The canvas dimensions are viewport cells × canvasScale pixels per cell.
+	// The canvas dimensions match the client's actual pixel viewport.
 	RenderCanvas(playerID string, width, height int) []byte
 	// RenderCanvasImage is like RenderCanvas but returns the raw *image.RGBA
 	// instead of PNG bytes. Used by quadrant rendering to avoid encode/decode overhead.

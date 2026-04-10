@@ -183,10 +183,6 @@ const (
 	// per-player display buffer (separate from the server's MaxChatHistory).
 	MaxChatDisplayLines = 200
 
-	// Canvas scale bounds for /canvas scale <n>.
-	MinCanvasScale = 1
-	MaxCanvasScale = 32
-
 	// MaxPlayerNameLen caps the length of sanitized player names.
 	MaxPlayerNameLen = 50
 )
@@ -202,8 +198,8 @@ const (
 	// (2x2 pixels per terminal cell). Requires the game to define renderCanvas.
 	RenderModeQuadrant
 	// RenderModeCanvasHD renders canvas locally on the client from game JS + state.
-	// Only state JSON is sent over the wire (lightweight). Requires enhanced client,
-	// game with renderCanvas, and canvasScale > 0.
+	// Client renders at its own window resolution. Requires enhanced client and
+	// a game with renderCanvas.
 	RenderModeCanvasHD
 )
 

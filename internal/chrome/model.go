@@ -155,7 +155,6 @@ type Model struct {
 	// Cached menu tree — rebuilt only on invalidation.
 	menuCache      []domain.MenuDef
 	menuCacheGame  domain.Game // game pointer when cache was built (nil = no game)
-	menuCacheScale int         // canvasScale when cache was built
 
 	// Game NC window — built from WidgetNode tree via reconciler.
 	// Preserves interactive control state (focus, cursor, scroll) across frames.
@@ -426,7 +425,6 @@ func (m *Model) resizeViewports() {
 func (m *Model) canUseRenderMode(mode domain.RenderMode) bool {
 	m.api.State().RLock()
 	game := m.api.State().ActiveGame
-	canvasScale := m.api.State().CanvasScale
 	m.api.State().RUnlock()
 
 	switch mode {
@@ -435,7 +433,7 @@ func (m *Model) canUseRenderMode(mode domain.RenderMode) bool {
 	case domain.RenderModeQuadrant:
 		return game != nil && game.HasCanvasMode()
 	case domain.RenderModeCanvasHD:
-		return game != nil && game.HasCanvasMode() && m.IsEnhancedClient && canvasScale > 0
+		return game != nil && game.HasCanvasMode() && m.IsEnhancedClient
 	}
 	return false
 }

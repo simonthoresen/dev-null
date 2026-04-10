@@ -398,8 +398,7 @@ func (r *ClientRenderer) drawLocal(screen *ebiten.Image) {
 
 	// Draw local canvas frame in the viewport if available.
 	if vpW > 0 && vpH > 0 && r.localRenderer.HasCanvas() {
-		scale := r.localRenderer.CanvasScale
-		canvasImg := r.localRenderer.RenderCanvas(r.playerID, vpW*scale, vpH*scale)
+		canvasImg := r.localRenderer.RenderCanvas(r.playerID, vpW*cellW(), vpH*cellH())
 		if canvasImg != nil {
 			fop := &ebiten.DrawImageOptions{}
 			fw := float64(vpW*cellW()) / float64(canvasImg.Bounds().Dx())
