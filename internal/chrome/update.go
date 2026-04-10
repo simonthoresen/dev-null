@@ -138,9 +138,10 @@ func (m *Model) handleChat(msg domain.ChatMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleGameLoaded(_ domain.GameLoadedMsg) (tea.Model, tea.Cmd) {
 	m.inActiveGame = true
 	m.gameSrcSent = false
-	// Preserve the player's explicit render preference; only fall back if the
-	// current mode is incompatible with the newly loaded game.
-	if !m.canUseRenderMode(m.renderMode) {
+	// Use the best available mode, but respect an explicit upgrade (e.g. CanvasHD
+	// chosen before the game loaded). Only reset if the mode is incompatible or
+	// worse than the auto-selected default (e.g. Text for a canvas game on SSH).
+	if !m.canUseRenderMode(m.renderMode) || m.renderMode < m.bestRenderMode() {
 		m.renderMode = m.bestRenderMode()
 	}
 	m.assetsSent = false
