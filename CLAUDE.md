@@ -134,7 +134,6 @@ On first run or version upgrade, `datadir.Bootstrap()` copies bundled assets fro
 | `dist/start-server.ps1` | PowerShell launcher: auto-updates from GitHub Releases, starts pinggy-helper, then dev-null-server.exe |
 | `dist/start-client.ps1` | PowerShell launcher: auto-updates from GitHub Releases, starts dev-null-client.exe |
 | `install.ps1` | One-liner installer: downloads latest release zip, extracts to a folder, creates desktop shortcuts |
-| `winget/` | Winget manifest templates for Windows Package Manager submission |
 | `.github/workflows/release.yml` | CI: builds binaries, publishes rolling `latest` on main push, versioned releases on `v*` tags |
 
 ## UI Rule — No Bespoke Rendering
