@@ -44,41 +44,70 @@ func colorDist(r1, g1, b1, r2, g2, b2 uint8) uint32 {
 // ImageToQuadrants converts an RGBA image into quadrant block characters and
 // writes them into buf at position (bx, by) spanning (w, h) cells.
 //
-// The image should be (w*2) x (h*2) pixels — each 2x2 pixel block becomes one
-// terminal cell. If the image dimensions don't match exactly, pixels are clipped
-// or cells are left empty.
+// The image should be (w*2) x (h*N) pixels where N ≥ 2. Each cell maps to a
+// 2×N pixel block; the block is split vertically in half and each half is
+// box-averaged to produce the two quadrant rows. N=2 is lossless (1 pixel per
+// quadrant sub-pixel); N=4 corrects for typical 1:2 terminal cell aspect ratio
+// so that game pixels come out visually square.
 //
-// For each 2x2 block, the 4 pixel colors are partitioned into two groups (fg/bg)
-// by finding the pair of colors that best separates the block. The quadrant
-// character encodes which positions are "foreground".
+// For each 2×2 (after vertical averaging) block, the 4 sub-pixel colors are
+// partitioned into two groups (fg/bg) by finding the pair of colors that best
+// separates the block. The quadrant character encodes which positions are
+// "foreground".
 func ImageToQuadrants(img *image.RGBA, buf *ImageBuffer, bx, by, w, h int) {
 	imgW := img.Bounds().Dx()
 	imgH := img.Bounds().Dy()
 	minX := img.Bounds().Min.X
 	minY := img.Bounds().Min.Y
 
+	// Pixels per cell in each dimension. halfH rows are averaged per quadrant row.
+	cellPxW := imgW / w
+	cellPxH := imgH / h
+	if cellPxW < 2 {
+		cellPxW = 2
+	}
+	if cellPxH < 2 {
+		cellPxH = 2
+	}
+	halfH := cellPxH / 2
+
 	for cy := 0; cy < h; cy++ {
 		for cx := 0; cx < w; cx++ {
-			// Pixel coordinates for the 2x2 block.
-			px := minX + cx*2
-			py := minY + cy*2
-
-			// Read the 4 pixels (clamp to image bounds).
+			// Compute box-averaged RGBA for each of the 4 quadrant positions.
+			// Layout: index 0=UL, 1=UR, 2=LL, 3=LR (matches original pixel order).
 			var pr, pg, pb [4]uint8
 			var pa [4]uint8
-			coords := [4][2]int{{px, py}, {px + 1, py}, {px, py + 1}, {px + 1, py + 1}}
-			for i, c := range coords {
-				if c[0] < minX+imgW && c[1] < minY+imgH {
-					off := (c[1]-minY)*img.Stride + (c[0]-minX)*4
-					pr[i] = img.Pix[off+0]
-					pg[i] = img.Pix[off+1]
-					pb[i] = img.Pix[off+2]
-					pa[i] = img.Pix[off+3]
+
+			for qi := 0; qi < 4; qi++ {
+				qxOff := qi & 1  // 0 for UL/LL, 1 for UR/LR
+				qyOff := qi >> 1 // 0 for UL/UR, 1 for LL/LR
+
+				baseX := minX + cx*cellPxW + qxOff
+				baseY := minY + cy*cellPxH + qyOff*halfH
+
+				// Box-average halfH rows for this quadrant sub-pixel (X is always 1 pixel wide).
+				var rSum, gSum, bSum, aSum, count uint32
+				for dy := 0; dy < halfH; dy++ {
+					px := baseX
+					py := baseY + dy
+					if px < minX+imgW && py < minY+imgH {
+						off := (py-minY)*img.Stride + (px-minX)*4
+						rSum += uint32(img.Pix[off+0])
+						gSum += uint32(img.Pix[off+1])
+						bSum += uint32(img.Pix[off+2])
+						aSum += uint32(img.Pix[off+3])
+						count++
+					}
 				}
-				// else: stays (0,0,0,0) = transparent black
+				if count > 0 {
+					pr[qi] = uint8(rSum / count)
+					pg[qi] = uint8(gSum / count)
+					pb[qi] = uint8(bSum / count)
+					pa[qi] = uint8(aSum / count)
+				}
 			}
 
-			// Check if all 4 pixels are the same color.
+			// Check if all 4 sub-pixels are the same color.
 			// Light cells render as space (bg = that color); dark cells as full block (fg = that color).
 			// This makes stripped ANSI output match visual intent: white areas stay blank.
 			allSame := pr[0] == pr[1] && pr[0] == pr[2] && pr[0] == pr[3] &&

@@ -331,7 +331,7 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 			if inner != nil {
 				inner(gbuf, x, y, w, h)
 			}
-			img := game.RenderCanvasImage(m.playerID, w*2, h*2)
+			img := game.RenderCanvasImage(m.playerID, w*2, h*4)
 			if img != nil {
 				render.ImageToQuadrants(img, gbuf, x, y, w, h)
 			}

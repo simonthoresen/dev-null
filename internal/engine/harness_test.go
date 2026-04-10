@@ -300,7 +300,7 @@ func renderGameCase(t *testing.T, tc gameCase, profile colorprofile.Profile, bas
 
 	case "canvas":
 		renderFn = func(rbuf *render.ImageBuffer, rx, ry, rw, rh int) {
-			img := game.RenderCanvasImage(playerID, rw*2, rh*2)
+			img := game.RenderCanvasImage(playerID, rw*2, rh*4)
 			if img == nil {
 				return
 			}
