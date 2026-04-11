@@ -12,9 +12,9 @@ import (
 	"log"
 	"os"
 	"os/user"
-	"strconv"
 	"strings"
 
+	"dev-null/internal/bootstep"
 	"dev-null/internal/client"
 	"dev-null/internal/datadir"
 	"dev-null/internal/display"
@@ -53,20 +53,7 @@ func main() {
 		initCommands = append(initCommands, "/game-load "+*gameName)
 	}
 
-	// Terminal width for boot-step output; DEV_NULL_TERM_WIDTH is set by the launcher script.
-	termW := 80
-	if s := os.Getenv("DEV_NULL_TERM_WIDTH"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 {
-			termW = n
-		}
-	}
-	bootDots := func(label string) string {
-		n := termW - len(label) - 10 // 10 = 1 space + " [ DONE ]" (9)
-		if n < 1 {
-			n = 1
-		}
-		return strings.Repeat(".", n)
-	}
+	bootstep.Init(*termFlag)
 
 	// Init font before dialing so CellW/CellH are set to their real values.
 	// This lets us request the correct PTY size from the very first frame,
@@ -76,30 +63,18 @@ func main() {
 	ptyW := display.WindowCols(winW)
 	ptyH := display.WindowRows(winH)
 
-	bootEnd := func(label, dots, status string) {
-		color := "\033[32m" // green = DONE
-		if status == "FAIL" {
-			color = "\033[31m" // red
-		}
-		fmt.Printf("\r%s %s [ %s%s\033[0m ]\n", label, dots, color, status)
-	}
-
-	label1 := fmt.Sprintf("Connecting to %s:%d as %s", *host, *port, *player)
-	dots1 := bootDots(label1)
-	fmt.Printf("%s %s", label1, dots1)
+	bootstep.Start(fmt.Sprintf("Connecting to %s:%d as %s", *host, *port, *player))
 	conn, err := client.Dial(*host, *port, *player, *termFlag, *password, ptyW, ptyH, initCommands)
 	if err != nil {
-		bootEnd(label1, dots1, "FAIL")
+		bootstep.Finish("FAIL")
 		log.Fatalf("Failed to connect: %v", err)
 	}
-	bootEnd(label1, dots1, "DONE")
+	bootstep.Finish("DONE")
 	defer conn.Close()
 
-	const label2 = "Starting renderer"
-	dots2 := bootDots(label2)
-	fmt.Printf("%s %s", label2, dots2)
+	bootstep.Start("Starting renderer")
 	renderer := client.NewClientRenderer(conn, winW, winH, *player, datadir.InstallDir(), *dataDirFlag)
-	bootEnd(label2, dots2, "DONE")
+	bootstep.Finish("DONE")
 
 	if err := display.RunWindow(renderer, "dev-null", winW, winH, appIcon); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

@@ -14,11 +14,10 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/ssh"
-	xterm "github.com/charmbracelet/x/term"
 	"log/slog"
 
+	"dev-null/internal/bootstep"
 	"dev-null/internal/console"
 	"dev-null/internal/datadir"
 	"dev-null/internal/engine"
@@ -39,7 +38,6 @@ func main() {
 	// Logging is configured after flag parsing (needs --data-dir).
 	// For now, set build info early.
 	engine.SetBuildInfo(buildDate, buildRemote)
-	initBootTermWidth()
 
 	var password string
 	var address string
@@ -58,7 +56,8 @@ func main() {
 	flag.DurationVar(&tickInterval, "tick-interval", 100*time.Millisecond, "server tick interval (e.g. 100ms, 50ms)")
 	flag.StringVar(&termFlag, "term", "", "force terminal color profile for all sessions: truecolor, 256color, ansi, ascii")
 	flag.Parse()
-	bootProfile = detectConsoleProfile(termFlag)
+	bootstep.Init(termFlag)
+	bootProfile := bootstep.Profile()
 
 	// Bootstrap bundled assets from install dir to data dir on first
 	// run or version upgrade. Skipped in dev mode and when --data-dir
@@ -113,42 +112,42 @@ func main() {
 	}
 
 	// --- Interactive mode: full boot sequence with console UI ---
-	startBootStep("SSH server")
-	finishBootStep("DONE")
+	bootstep.Start("SSH server")
+	bootstep.Finish("DONE")
 
 	app.InstallConsoleSlogHandler()
 	app.OpenChatLog()
 	defer app.CloseChatLog()
 
 	if lanMode {
-		startBootStep("UPnP port mapping")
-		finishBootStep("SKIP")
-		startBootStep("Public IP detection")
-		finishBootStep("SKIP")
+		bootstep.Start("UPnP port mapping")
+		bootstep.Finish("SKIP")
+		bootstep.Start("Public IP detection")
+		bootstep.Finish("SKIP")
 	} else {
-		startBootStep("UPnP port mapping")
+		bootstep.Start("UPnP port mapping")
 		if app.SetupUPnP(port) {
-			finishBootStep("DONE")
+			bootstep.Finish("DONE")
 		} else {
-			finishBootStep("SKIP")
+			bootstep.Finish("SKIP")
 		}
 
-		startBootStep("Public IP detection")
+		bootstep.Start("Public IP detection")
 		if app.SetupPublicIP() != "" {
-			finishBootStep("DONE")
+			bootstep.Finish("DONE")
 		} else {
-			finishBootStep("SKIP")
+			bootstep.Finish("SKIP")
 		}
 	}
 
-	startBootStep("Pinggy tunnel")
+	bootstep.Start("Pinggy tunnel")
 	pinggyStatusFile := os.Getenv("DEV_NULL_PINGGY_STATUS_FILE")
 	if lanMode || pinggyStatusFile == "" {
-		finishBootStep("SKIP")
+		bootstep.Finish("SKIP")
 		go app.LogInviteCommand()
 	} else {
 		app.EnablePinggyLogBridge(ctx, pinggyStatusFile)
-		finishBootStep("DONE")
+		bootstep.Finish("DONE")
 	}
 
 	// Start server in background
@@ -168,9 +167,9 @@ func main() {
 	}()
 
 	{
-		startBootStep("Starting console")
+		bootstep.Start("Starting console")
 		consoleModel := console.NewModel(app, stop, bootProfile)
-		finishBootStep("DONE")
+		bootstep.Finish("DONE")
 
 		// TUI mode: run console in the terminal via Bubble Tea.
 		program := tea.NewProgram(consoleModel, tea.WithFPS(60), tea.WithColorProfile(bootProfile))
@@ -184,134 +183,17 @@ func main() {
 		}
 	}
 
-	startBootStep("Initiating shutdown")
-	finishBootStep("DONE")
-	startBootStep("Shutting down network")
-	finishBootStep("DONE")
-	startBootStep("Stopping SSH server")
+	bootstep.Start("Initiating shutdown")
+	bootstep.Finish("DONE")
+	bootstep.Start("Shutting down network")
+	bootstep.Finish("DONE")
+	bootstep.Start("Stopping SSH server")
 	if err := <-serverErr; err == nil || errors.Is(err, ssh.ErrServerClosed) {
-		finishBootStep("DONE")
+		bootstep.Finish("DONE")
 	} else {
-		finishBootStep("FAIL")
+		bootstep.Finish("FAIL")
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-// bootProfile is the color profile for boot-step output, set from --term.
-var bootProfile = colorprofile.TrueColor
-
-var currentBootLabel string
-
-// statusTokenWidth is the fixed display width of every status token: "[ DONE ]" = 8.
-const statusTokenWidth = 8
-
-// statusToken returns a fixed-width 11-char token with the status text centered.
-func statusToken(status string) string {
-	const inner = 4 // widest status (DONE/FAIL/SKIP) is 4 chars
-	pad := inner - len(status)
-	if pad < 0 {
-		pad = 0
-	}
-	left := pad / 2
-	right := pad - left
-	return "[ " + strings.Repeat(" ", left) + status + strings.Repeat(" ", right) + " ]"
-}
-
-// colorizedToken colors only the status text inside the brackets.
-// Returns a plain token when bootProfile has no color support.
-func colorizedToken(token, status string) string {
-	if bootProfile <= colorprofile.ASCII {
-		return token
-	}
-	var code string
-	switch status {
-	case "DONE":
-		code = "\033[92m"
-	case "FAIL":
-		code = "\033[91m"
-	case "SKIP":
-		code = "\033[93m"
-	default:
-		return token
-	}
-	// token is "[ <padded> ]" — color only the inner text, not the brackets
-	const inner = 4
-	pad := inner - len(status)
-	if pad < 0 {
-		pad = 0
-	}
-	left := pad / 2
-	right := pad - left
-	return "[ " + strings.Repeat(" ", left) + code + status + "\033[0m" + strings.Repeat(" ", right) + " ]"
-}
-
-var cachedTermWidth int
-
-func bootTermWidth() int {
-	if cachedTermWidth > 0 {
-		return cachedTermWidth
-	}
-	w, _, err := xterm.GetSize(os.Stdout.Fd())
-	if err != nil || w < 40 {
-		w = 80
-	}
-	cachedTermWidth = w
-	return w
-}
-
-func initBootTermWidth() {
-	// If the parent process (start.ps1) passed a width, use it for
-	// consistent alignment between PS1 and Go boot steps.
-	if s := os.Getenv("DEV_NULL_TERM_WIDTH"); s != "" {
-		if w, err := fmt.Sscanf(s, "%d", &cachedTermWidth); err != nil || w != 1 || cachedTermWidth < 40 {
-			cachedTermWidth = 0
-		}
-	}
-}
-
-// bootDots returns the number of dots to fill between label and status token.
-// layout: label + " " + dots + " " + token
-func bootDots(label string, w int) int {
-	dots := w - len(label) - 1 - 1 - statusTokenWidth
-	if dots < 1 {
-		dots = 1
-	}
-	return dots
-}
-
-// startBootStep prints the step label with dots but no status.
-// finishBootStep must be called after the operation completes.
-func startBootStep(label string) {
-	currentBootLabel = label
-	w := bootTermWidth()
-	fmt.Printf("%s %s", label, strings.Repeat(".", bootDots(label, w)))
-}
-
-// finishBootStep overwrites the current boot step line with the final status.
-func finishBootStep(status string) {
-	w := bootTermWidth()
-	token := statusToken(status)
-	dots := bootDots(currentBootLabel, w)
-	fmt.Printf("\r%s %s %s\n", currentBootLabel, strings.Repeat(".", dots), colorizedToken(token, status))
-}
-
-// detectConsoleProfile returns the color profile for the server console.
-// It auto-detects from the operator's terminal env, then applies the --term override.
-func detectConsoleProfile(termFlag string) colorprofile.Profile {
-	if termFlag != "" {
-		switch strings.ToLower(termFlag) {
-		case "truecolor", "24bit":
-			return colorprofile.TrueColor
-		case "256color", "256":
-			return colorprofile.ANSI256
-		case "ansi", "16color", "16":
-			return colorprofile.ANSI
-		case "ascii", "none", "no-color":
-			return colorprofile.ASCII
-		default:
-			fmt.Fprintf(os.Stderr, "unknown --term value %q (valid: truecolor, 256color, ansi, ascii)\n", termFlag)
-		}
-	}
-	return colorprofile.Detect(os.Stderr, os.Environ())
-}
