@@ -65,25 +65,80 @@ if ([string]::IsNullOrWhiteSpace($name)) {
     $name = $env:USERNAME
 }
 
-# Locate dev-null-client.exe: check PATH first, then the desktop shortcut.
-$clientExe = $null
-$clientCmd = Get-Command "dev-null-client.exe" -ErrorAction SilentlyContinue
-if ($clientCmd) {
-    $clientExe = $clientCmd.Source
-} else {
+# Locate the dev-null install directory by checking known locations.
+function Find-InstallDir {
+    # 1. PATH
+    $cmd = Get-Command "dev-null-client.exe" -ErrorAction SilentlyContinue
+    if ($cmd) { return Split-Path $cmd.Source -Parent }
+
+    # 2. Desktop shortcut
     $shortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "DevNull Client.lnk"
     if (Test-Path $shortcut) {
         $shell = New-Object -ComObject WScript.Shell
         $lnk   = $shell.CreateShortcut($shortcut)
-        # Arguments looks like: -ExecutionPolicy Bypass -File "C:\...\start-client.ps1"
         if ($lnk.Arguments -match '-File\s+"([^"]+)"') {
-            $candidate = Join-Path (Split-Path $Matches[1] -Parent) "dev-null-client.exe"
-            if (Test-Path $candidate) { $clientExe = $candidate }
+            $dir = Split-Path $Matches[1] -Parent
+            if (Test-Path (Join-Path $dir "dev-null-client.exe")) { return $dir }
         }
     }
-    if (-not $clientExe) {
-        $candidate = Join-Path $env:ProgramFiles "DevNull" "dev-null-client.exe"
-        if (Test-Path $candidate) { $clientExe = $candidate }
+
+    # 3. %LocalAppData%\DevNull  (default install location)
+    $candidate = Join-Path $env:LocalAppData "DevNull"
+    if (Test-Path (Join-Path $candidate "dev-null-client.exe")) { return $candidate }
+
+    # 4. %ProgramFiles%\DevNull  (legacy / system-wide install)
+    $candidate = Join-Path $env:ProgramFiles "DevNull"
+    if (Test-Path (Join-Path $candidate "dev-null-client.exe")) { return $candidate }
+
+    return $null
+}
+
+$installDir  = Find-InstallDir
+$clientExe   = $null
+$startScript = $null
+
+if ($installDir) {
+    $clientExe = Join-Path $installDir "dev-null-client.exe"
+    $s = Join-Path $installDir "start-client.ps1"
+    if (Test-Path $s) { $startScript = $s }
+} else {
+    Write-Host ""
+    Write-Host "dev-null client is not installed." -ForegroundColor Yellow
+    $answer = Read-Host "Install it now? [Y/n]"
+    if ($answer -eq '' -or $answer -match '^[Yy]') {
+        $installDir = Join-Path $env:LocalAppData "DevNull"
+        Write-Host "Installing to $installDir ..." -ForegroundColor Cyan
+        & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/simonthoresen/dev-null/main/install.ps1'))) -InstallDir $installDir
+        # Re-check after install.
+        $installDir = Find-InstallDir
+        if ($installDir) {
+            $clientExe = Join-Path $installDir "dev-null-client.exe"
+            $s = Join-Path $installDir "start-client.ps1"
+            if (Test-Path $s) { $startScript = $s }
+        }
+    }
+}
+
+# Quick TCP reachability check — used as pre-flight before launching the GUI client
+# so unreachable endpoints are skipped silently instead of showing an error dialog.
+function Test-TcpEndpoint {
+    param([string]$HostName, [int]$Port, [int]$TimeoutMs = 3000)
+    $tcp = $null
+    try {
+        $tcp = [System.Net.Sockets.TcpClient]::new()
+        $ar  = $tcp.BeginConnect($HostName, $Port, $null, $null)
+        return $ar.AsyncWaitHandle.WaitOne($TimeoutMs) -and $tcp.Connected
+    } catch { return $false }
+    finally { if ($tcp) { try { $tcp.Close() } catch {} } }
+}
+
+# Read init commands from ~/.dev-null/client.txt if it exists (SSH fallback only).
+$devNullInit = ""
+$initFile = Join-Path $HOME ".dev-null" "client.txt"
+if (Test-Path $initFile) {
+    $initContent = Get-Content $initFile -Raw -ErrorAction SilentlyContinue
+    if ($initContent) {
+        $devNullInit = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($initContent))
     }
 }
 
@@ -91,21 +146,25 @@ foreach ($ep in $endpoints) {
     Write-Host "Trying $($ep.Host):$($ep.Port) ..." -ForegroundColor DarkGray
 
     if ($clientExe) {
-        & $clientExe --host $ep.Host --port $ep.Port --player $name
-    } else {
-        # Ensure the SSH client advertises proper terminal capabilities.
-        $env:TERM = "xterm-256color"
-        $env:LANG = "en_US.UTF-8"
-        $env:COLORTERM = "truecolor"
+        # TCP pre-flight: skip silently if the endpoint is unreachable.
+        if (-not (Test-TcpEndpoint -HostName $ep.Host -Port $ep.Port)) { continue }
 
-        # Read init commands from ~/.dev-null/client.txt if it exists.
-        $initFile = Join-Path $HOME ".dev-null" "client.txt"
-        if (Test-Path $initFile) {
-            $initContent = Get-Content $initFile -Raw -ErrorAction SilentlyContinue
-            if ($initContent) {
-                $env:DEV_NULL_INIT = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($initContent))
-            }
+        if ($startScript) {
+            powershell.exe -ExecutionPolicy Bypass -File $startScript `
+                --host $ep.Host --port $ep.Port --player $name --no-update
+        } else {
+            & $clientExe --host $ep.Host --port $ep.Port --player $name
         }
+    } else {
+        # SSH fallback: set terminal environment variables then restore them on exit.
+        $prev_TERM      = $env:TERM
+        $prev_LANG      = $env:LANG
+        $prev_COLOR     = $env:COLORTERM
+        $prev_INIT      = $env:DEV_NULL_INIT
+        $env:TERM       = "xterm-256color"
+        $env:LANG       = "en_US.UTF-8"
+        $env:COLORTERM  = "truecolor"
+        if ($devNullInit) { $env:DEV_NULL_INIT = $devNullInit }
 
         $sshOpts = @(
             "-tt",
@@ -118,6 +177,11 @@ foreach ($ep in $endpoints) {
             "-o", "SendEnv=DEV_NULL_INIT"
         )
         ssh @sshOpts -p $ep.Port "${name}@$($ep.Host)"
+
+        if ($null -eq $prev_TERM)  { Remove-Item Env:TERM          -ErrorAction SilentlyContinue } else { $env:TERM = $prev_TERM }
+        if ($null -eq $prev_LANG)  { Remove-Item Env:LANG          -ErrorAction SilentlyContinue } else { $env:LANG = $prev_LANG }
+        if ($null -eq $prev_COLOR) { Remove-Item Env:COLORTERM     -ErrorAction SilentlyContinue } else { $env:COLORTERM = $prev_COLOR }
+        if ($null -eq $prev_INIT)  { Remove-Item Env:DEV_NULL_INIT -ErrorAction SilentlyContinue } else { $env:DEV_NULL_INIT = $prev_INIT }
     }
 
     if ($LASTEXITCODE -eq 0) { exit 0 }

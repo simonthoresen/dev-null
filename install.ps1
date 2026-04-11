@@ -3,7 +3,7 @@
 #    or: save this file and run it directly
 
 param(
-    [string]$InstallDir = (Join-Path $PWD "dev-null")
+    [string]$InstallDir = (Join-Path $env:LocalAppData "DevNull")
 )
 
 $repo = "simonthoresen/dev-null"
@@ -62,6 +62,7 @@ $public.TargetPath       = "powershell.exe"
 $public.Arguments        = "-ExecutionPolicy Bypass -File `"$startServerPs1`""
 $public.WorkingDirectory = $InstallDir
 $public.Description      = "Start the dev-null server (online multiplayer)"
+$public.IconLocation     = (Join-Path $InstallDir "dev-null-server.exe") + ",0"
 $public.Save()
 
 $private = $shell.CreateShortcut((Join-Path $desktop "DevNull Server (LAN).lnk"))
@@ -69,6 +70,7 @@ $private.TargetPath       = "powershell.exe"
 $private.Arguments        = "-ExecutionPolicy Bypass -File `"$startServerPs1`" --lan"
 $private.WorkingDirectory = $InstallDir
 $private.Description      = "Start the dev-null server (LAN only, no Pinggy)"
+$private.IconLocation     = (Join-Path $InstallDir "dev-null-server.exe") + ",0"
 $private.Save()
 
 $client = $shell.CreateShortcut((Join-Path $desktop "DevNull Client.lnk"))
@@ -76,6 +78,7 @@ $client.TargetPath       = "powershell.exe"
 $client.Arguments        = "-ExecutionPolicy Bypass -File `"$startClientPs1`""
 $client.WorkingDirectory = $InstallDir
 $client.Description      = "Start the dev-null graphical client"
+$client.IconLocation     = (Join-Path $InstallDir "dev-null-client.exe") + ",0"
 $client.Save()
 
 Write-Host ""
