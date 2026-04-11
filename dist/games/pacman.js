@@ -865,13 +865,20 @@ var Game = {
     renderCanvas: function(ctx, playerID, w, h) {
         var st = Game.state;
 
-        var pacFrac   = Math.min(st.pacMoveTimer   / st.SPD_PAC,   1.0);
-        var ghostFrac = Math.min(st.ghostMoveTimer / st.SPD_GHOST, 1.0);
+        // Use module-level constants — st.SPD_PAC/SPD_GHOST are not in the
+        // synced JSON so reading them from state would give undefined → NaN.
+        var pacFrac   = Math.min(st.pacMoveTimer   / SPD_PAC,   1.0);
+        var ghostFrac = Math.min(st.ghostMoveTimer / SPD_GHOST, 1.0);
         var t         = st.animTimer;
 
-        var CELL  = Math.floor(Math.min(w / VIEW_W, h / VIEW_H));
-        if (CELL < 4) CELL = 4;
+        // Choose a cell size that fills the canvas as much as possible.
+        // Fit the full maze (MW×MH) if there's enough room; otherwise zoom in.
+        var CELL  = Math.max(4, Math.floor(Math.min(w / MW, h / MH)));
         var halfC = CELL * 0.5;
+
+        // How many maze cells fit in the canvas at this cell size
+        var viewW = Math.min(MW, Math.floor(w / CELL));
+        var viewH = Math.min(MH, Math.floor(h / CELL));
 
         var me = st.players[playerID];
         var camWX, camWY;
@@ -884,10 +891,25 @@ var Game = {
             camWX = MW / 2; camWY = MH / 2;
         }
 
-        var startWX = camWX - VIEW_W * 0.5;
-        var startWY = camWY - VIEW_H * 0.5;
-        var offX = (w - VIEW_W * CELL) * 0.5;
-        var offY = (h - VIEW_H * CELL) * 0.5;
+        // Camera: show full maze if it fits, otherwise follow the player
+        var startWX, startWY;
+        if (viewW >= MW) {
+            startWX = 0;
+        } else {
+            startWX = camWX - viewW * 0.5;
+            if (startWX < 0) startWX = 0;
+            if (startWX + viewW > MW) startWX = MW - viewW;
+        }
+        if (viewH >= MH) {
+            startWY = 0;
+        } else {
+            startWY = camWY - viewH * 0.5;
+            if (startWY < 0) startWY = 0;
+            if (startWY + viewH > MH) startWY = MH - viewH;
+        }
+
+        var offX = (w - viewW * CELL) * 0.5;
+        var offY = (h - viewH * CELL) * 0.5;
 
         function toSX(wx) { return offX + (wx - startWX) * CELL; }
         function toSY(wy) { return offY + (wy - startWY) * CELL; }
@@ -899,8 +921,8 @@ var Game = {
         // Maze tiles
         var mx0 = Math.floor(startWX) - 1;
         var my0 = Math.floor(startWY) - 1;
-        var mx1 = mx0 + VIEW_W + 3;
-        var my1 = my0 + VIEW_H + 3;
+        var mx1 = mx0 + viewW + 3;
+        var my1 = my0 + viewH + 3;
 
         for (var my = my0; my <= my1; my++) {
             if (my < 0 || my >= MH) continue;
