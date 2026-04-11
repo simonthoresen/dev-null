@@ -4,31 +4,42 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"dev-null/internal/domain"
 )
 
-// persistClientConfig rewrites ~/.dev-null/client.txt so that all
-// /theme-load, /plugin-load, /shader-load, and /synth-load lines are replaced
-// by a leading block that restores the current selections. Other lines are preserved.
+// persistClientConfig rewrites ~/.dev-null/client.txt so that all managed
+// command lines are replaced by a leading block that restores the current
+// selections. Other lines are preserved.
 func (m *Model) persistClientConfig() {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
 	path := filepath.Join(home, ".dev-null", "client.txt")
-	persistConfigFile(path, m.themeName, m.synthName, m.pluginNames, m.shaderNames)
+	// Serialize the graphics preference as a command.
+	// RenderModeBlocks (Blocks) is the default — omit it so new sessions get it naturally.
+	var renderPref string
+	switch m.graphicsPref {
+	case domain.RenderModeAscii:
+		renderPref = "/render-ascii"
+	case domain.RenderModePixels:
+		renderPref = "/render-pixels"
+	}
+	persistConfigFile(path, m.themeName, m.synthName, renderPref, m.pluginNames, m.shaderNames)
 }
 
 // managedPrefixes are command prefixes managed by persistConfigFile.
 // Lines starting with any of these are stripped and re-generated.
 var managedPrefixes = []string{
-	"/theme-", "/plugin-", "/shader-", "/synth-",
+	"/theme-", "/plugin-", "/shader-", "/synth-", "/render-",
 	// Legacy prefixes (pre-flatten) — strip on upgrade.
 	"/theme ", "/plugin ", "/shader ", "/synth ",
 }
 
 // persistConfigFile rewrites the config file at path: strips managed lines,
 // then prepends a fresh block reflecting the current state.
-func persistConfigFile(path, themeName, synthName string, pluginNames, shaderNames []string) {
+func persistConfigFile(path, themeName, synthName, renderPref string, pluginNames, shaderNames []string) {
 	var kept []string
 	if data, err := os.ReadFile(path); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
@@ -59,6 +70,9 @@ func persistConfigFile(path, themeName, synthName string, pluginNames, shaderNam
 	}
 	if synthName != "" {
 		managed = append(managed, "/synth-load "+synthName)
+	}
+	if renderPref != "" {
+		managed = append(managed, renderPref)
 	}
 	for _, name := range pluginNames {
 		managed = append(managed, "/plugin-load "+name)

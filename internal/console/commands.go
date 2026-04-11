@@ -2,12 +2,14 @@ package console
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
 	"dev-null/internal/domain"
 	"dev-null/internal/localcmd"
 	"dev-null/internal/render"
+	"dev-null/internal/runlog"
 )
 
 // tabComplete handles tab completion for the input control.
@@ -153,30 +155,33 @@ func (m *Model) submitInput(text string) {
 			m.persistServerConfig()
 		}
 		return
-	// View toggle commands.
-	case "/view-debug":
-		m.filter[CatDebug] = !m.filter[CatDebug]
-		m.rebuildVisibleLines()
+	case "/set-log-level":
+		if arg == "" {
+			m.appendLog(fmt.Sprintf("log level: %s", logLevelName(runlog.GetLevel())))
+			return
+		}
+		level, ok := parseLogLevel(arg)
+		if !ok {
+			m.appendLog("Usage: /set-log-level <debug|info|warn|error>")
+			return
+		}
+		runlog.SetLevel(level)
+		m.appendLog(fmt.Sprintf("log level set to: %s", logLevelName(level)))
 		return
-	case "/view-info":
-		m.filter[CatInfo] = !m.filter[CatInfo]
+
+	case "/show-log-level":
+		if arg == "" {
+			m.appendLog(fmt.Sprintf("show level: %s", logLevelName(m.showLevel)))
+			return
+		}
+		level, ok := parseLogLevel(arg)
+		if !ok {
+			m.appendLog("Usage: /show-log-level <debug|info|warn|error>")
+			return
+		}
+		m.showLevel = level
 		m.rebuildVisibleLines()
-		return
-	case "/view-warnings":
-		m.filter[CatWarn] = !m.filter[CatWarn]
-		m.rebuildVisibleLines()
-		return
-	case "/view-errors":
-		m.filter[CatError] = !m.filter[CatError]
-		m.rebuildVisibleLines()
-		return
-	case "/view-chat":
-		m.filter[CatChat] = !m.filter[CatChat]
-		m.rebuildVisibleLines()
-		return
-	case "/view-commands":
-		m.filter[CatCommand] = !m.filter[CatCommand]
-		m.rebuildVisibleLines()
+		m.appendLog(fmt.Sprintf("show level set to: %s", logLevelName(level)))
 		return
 	}
 
@@ -209,4 +214,33 @@ func parseCommand(text string) (string, string) {
 		return text, ""
 	}
 	return text[:idx], strings.TrimSpace(text[idx+1:])
+}
+
+// parseLogLevel converts a level name to a slog.Level.
+func parseLogLevel(s string) (slog.Level, bool) {
+	switch strings.ToLower(s) {
+	case "debug":
+		return slog.LevelDebug, true
+	case "info":
+		return slog.LevelInfo, true
+	case "warn", "warning":
+		return slog.LevelWarn, true
+	case "error":
+		return slog.LevelError, true
+	}
+	return 0, false
+}
+
+// logLevelName returns the canonical short name for a slog.Level.
+func logLevelName(level slog.Level) string {
+	switch {
+	case level >= slog.LevelError:
+		return "error"
+	case level >= slog.LevelWarn:
+		return "warn"
+	case level >= slog.LevelInfo:
+		return "info"
+	default:
+		return "debug"
+	}
 }

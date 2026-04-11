@@ -7,6 +7,16 @@ import (
 	"sync/atomic"
 )
 
+// noBroadcastKey is a context key used to suppress player broadcast in SlogHandler.
+type noBroadcastKey struct{}
+
+var noBroadcastCtx = context.WithValue(context.Background(), noBroadcastKey{}, true)
+
+// NoBroadcastContext returns a context that prevents SlogHandler from forwarding
+// the record to players. Use with slog.InfoContext for operator-only log lines
+// (e.g. system messages already delivered via broadcastChat).
+func NoBroadcastContext() context.Context { return noBroadcastCtx }
+
 // inRenderPath is an atomic counter incremented when entering View/Render
 // and decremented on exit. When > 0, the console slog handler suppresses
 // messages to avoid the feedback loop: View -> slog -> console -> Update -> View.
@@ -48,16 +58,22 @@ type SlogLine struct {
 // console's slogCh channel, formatted with timestamp and level prefix.
 // It also forwards to a wrapped handler (the file handler) so logs go
 // to both the console and the log file.
+//
+// If onInfo is non-nil it is called with the record's message text for every
+// Info-or-above record that does NOT carry a NoBroadcastContext. This lets the
+// server forward server-side log lines to player chat without a separate call.
 type SlogHandler struct {
 	ch      chan<- SlogLine
 	wrapped slog.Handler
 	attrs   []slog.Attr
 	group   string
+	onInfo  func(string) // may be nil; called for level >= Info outside render path
 }
 
 // NewSlogHandler wraps an existing handler and tees records to ch.
-func NewSlogHandler(ch chan<- SlogLine, wrapped slog.Handler) slog.Handler {
-	return &SlogHandler{ch: ch, wrapped: wrapped}
+// Pass a non-nil onInfo to forward Info+ records to players; pass nil to disable.
+func NewSlogHandler(ch chan<- SlogLine, wrapped slog.Handler, onInfo func(string)) slog.Handler {
+	return &SlogHandler{ch: ch, wrapped: wrapped, onInfo: onInfo}
 }
 
 func (h *SlogHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -93,6 +109,12 @@ func (h *SlogHandler) Handle(ctx context.Context, r slog.Record) error {
 	default:
 	}
 
+	// Forward to players for Info+ records, unless the caller explicitly opted out
+	// (e.g. broadcastChat, which already delivered the message directly).
+	if h.onInfo != nil && r.Level >= slog.LevelInfo && ctx.Value(noBroadcastKey{}) == nil {
+		h.onInfo(r.Message)
+	}
+
 	return err
 }
 
@@ -102,6 +124,7 @@ func (h *SlogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 		wrapped: h.wrapped.WithAttrs(attrs),
 		attrs:   append(h.attrs, attrs...),
 		group:   h.group,
+		onInfo:  h.onInfo,
 	}
 }
 
@@ -111,6 +134,7 @@ func (h *SlogHandler) WithGroup(name string) slog.Handler {
 		wrapped: h.wrapped.WithGroup(name),
 		attrs:   h.attrs,
 		group:   name,
+		onInfo:  h.onInfo,
 	}
 }
 

@@ -125,7 +125,7 @@ func (a *Server) sessionProgramOptions(sess ssh.Session) ([]tea.ProgramOption, c
 			break
 		}
 	}
-	slog.Info("SSH session color profile", "profile", cp.String(), "envs_count", len(envs))
+	slog.Debug("SSH session color profile", "profile", cp.String(), "envs_count", len(envs))
 	opts := wishbubbletea.MakeOptions(sess)
 	opts = append(opts,
 		tea.WithFPS(60),
@@ -185,7 +185,7 @@ func (a *Server) registerSession(sess ssh.Session) *domain.Player {
 	a.sessionsMu.Unlock()
 
 	a.state.AddPlayer(player)
-	slog.Info("player joined", "player_id", player.ID, "name", player.Name)
+	slog.Info(player.Name+" joined.", "player_id", player.ID)
 
 	// Check if this player was disconnected from a running game.
 	// Do this BEFORE auto-team-creation so reconnecting players rejoin their
@@ -199,7 +199,7 @@ func (a *Server) registerSession(sess ssh.Session) *domain.Player {
 		game := a.state.ActiveGame
 		a.state.Unlock()
 		rejoined = true
-		a.serverLog(fmt.Sprintf("player %s rejoined game (was %s, now %s)", player.Name, oldID, player.ID))
+		slog.Info(player.Name+" rejoined the game.", "old_id", oldID, "new_id", player.ID)
 		// Refresh the teams cache so JS sees the updated player ID.
 		if jrt, ok := game.(*engine.Runtime); ok {
 			jrt.SetTeamsCache(a.buildTeamsCache())
@@ -213,11 +213,6 @@ func (a *Server) registerSession(sess ssh.Session) *domain.Player {
 		a.state.MovePlayerToTeam(player.ID, a.state.TeamCount())
 	}
 
-	joinMsg := domain.Message{
-		Author: "",
-		Text:   fmt.Sprintf("%s joined.", player.Name),
-	}
-	a.broadcastChat(joinMsg)
 	a.broadcastMsg(domain.PlayerJoinedMsg{Player: player})
 
 	a.broadcastMsg(domain.TeamUpdatedMsg{})
@@ -236,10 +231,7 @@ func (a *Server) registerSession(sess ssh.Session) *domain.Player {
 func (a *Server) unregisterSession(playerID string) {
 	player := a.state.GetPlayer(playerID)
 	if player != nil {
-		slog.Info("player left", "player_id", playerID, "name", player.Name)
-		a.broadcastChat(domain.Message{
-			Text: fmt.Sprintf("%s left.", player.Name),
-		})
+		slog.Info(player.Name+" left.", "player_id", playerID)
 	}
 
 	// Notify the game if this player was in the active game.

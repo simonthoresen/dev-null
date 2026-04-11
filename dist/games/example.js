@@ -96,7 +96,7 @@ var Game = {
         }
     },
 
-    render: function(buf, playerID, ox, oy, width, height) {
+    renderAscii: function(buf, playerID, ox, oy, width, height) {
         for (var y = 0; y < height; y++) {
             for (var x = 0; x < width; x++) {
                 var ch = ".";

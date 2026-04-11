@@ -806,7 +806,7 @@ var BOX_CHARS = [
 ];
 var CWALL = "#0000AA", CDOT = "#AAAAAA", CPOW = "#FF4444", CDOOR = "#FF88FF";
 
-Game.render = function(buf, playerID, ox, oy, width, height) {
+Game.renderAscii = function(buf, playerID, ox, oy, width, height) {
     var me = pls[playerID];
     var cx = (me && !me.dead) ? me.x : Math.floor(MW / 2);
     var cy = (me && !me.dead) ? me.y : Math.floor(MH / 2);

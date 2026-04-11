@@ -34,7 +34,7 @@ package engine
 //
 // Mode semantics:
 //
-//	text   — calls game.Render(buf, playerID, 0, 0, w, h); compare ANSI-stripped buf
+//	text   — calls game.RenderAscii(buf, playerID, 0, 0, w, h); compare ANSI-stripped buf
 //	canvas — calls game.RenderCanvasImage(playerID, w*2, h*2); converts to quadrant
 //	         block chars via render.ImageToQuadrants; compare ANSI-stripped result
 //	layout — calls game.Layout(playerID, w, h); reconciles via
@@ -294,7 +294,7 @@ func renderGameCase(t *testing.T, tc gameCase, profile colorprofile.Profile, bas
 	switch mode {
 	case "text":
 		renderFn = func(rbuf *render.ImageBuffer, rx, ry, rw, rh int) {
-			game.Render(rbuf, playerID, rx, ry, rw, rh)
+			game.RenderAscii(rbuf, playerID, rx, ry, rw, rh)
 		}
 		tree = &domain.WidgetNode{Type: "gameview"}
 
@@ -314,7 +314,7 @@ func renderGameCase(t *testing.T, tc gameCase, profile colorprofile.Profile, bas
 			t.Fatalf("test case %q: Layout returned nil (game may not define layout hook)", tc.name)
 		}
 		renderFn = func(rbuf *render.ImageBuffer, rx, ry, rw, rh int) {
-			game.Render(rbuf, playerID, rx, ry, rw, rh)
+			game.RenderAscii(rbuf, playerID, rx, ry, rw, rh)
 		}
 
 	default:
@@ -431,7 +431,7 @@ mode: text
 width: 10
 height: 3
 --- js
-var Game = { load: function(){}, render: function(buf){} };
+var Game = { load: function(){}, renderAscii: function(buf){} };
 ---
 ===
 hello

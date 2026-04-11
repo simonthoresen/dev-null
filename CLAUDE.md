@@ -165,22 +165,25 @@ Other mutexes (`programsMu`, `sessionsMu`, `consoleProgramMu`, `commandRegistry.
 
 ## Rendering Model
 
-Game rendering is automatic based on connection type and game capability:
+Game rendering is controlled by the player's graphics preference (Ascii/Blocks/Pixels), set via the always-visible Graphics menu. The effective mode degrades gracefully based on connection type and game capability:
 
-| Connection | Game type | Mode |
-|---|---|---|
-| SSH | string-only | Text (game's `Render()`) |
-| SSH | canvas game | Quadrant (canvas→Unicode blocks, server-side) |
-| GUI client | string-only | Text (rendered as terminal) |
-| GUI client | canvas game | Quadrant (default) or Canvas HD (opt-in toggle) |
+| Preference | Connection | Game type | Effective mode |
+|---|---|---|---|
+| Ascii | any | any | Ascii (game's `renderAscii()`) |
+| Blocks | SSH or GUI | canvas game | Blocks (canvas→Unicode quadrant blocks, server-side) |
+| Blocks | SSH or GUI | string-only | Ascii (fallback) |
+| Pixels | GUI client | canvas game | Pixels (client-side local rendering) |
+| Pixels | SSH | canvas game | Blocks (fallback — Pixels requires enhanced client) |
 
-**Canvas HD** (`RenderModeCanvasHD`): sends game JS source + state JSON each frame; client renders the canvas locally at its own window pixel resolution. Requires enhanced client (`DEV_NULL_CLIENT=enhanced`).
+**Pixels** (`RenderModePixels`): sends game JS source + state JSON each frame; client renders the canvas locally at its own window pixel resolution. Requires enhanced client (`DEV_NULL_CLIENT=enhanced`). Pixels option is disabled (greyed out) in the Graphics menu for SSH clients.
 
-**Quadrant** (`RenderModeQuadrant`): server calls `RenderCanvasImage()` and converts to Unicode quadrant block characters (▖▗▘▙). Works on any terminal.
+**Blocks** (`RenderModeBlocks`): server calls `RenderCanvasImage()` and converts to Unicode quadrant block characters (▖▗▘▙). Works on any terminal.
+
+**Ascii** (`RenderModeAscii`): always uses the game's text-based `renderAscii()` hook, even if `renderCanvas` is available.
 
 **No charmap/spritesheet system** — removed. Games that want custom graphics use canvas rendering.
 
-The Graphics menu is only shown to enhanced GUI clients with a canvas game loaded, offering only the Quadrant/Canvas HD toggle.
+The Graphics menu is always visible in the menu bar (lobby and playing views) for all clients. Preference is persisted to `~/.dev-null/client.txt` as `/render-ascii` or `/render-pixels`; Blocks (the default) is not written.
 
 ## Render Tests — Golden Files
 

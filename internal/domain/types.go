@@ -191,27 +191,27 @@ const (
 type RenderMode int
 
 const (
-	// RenderModeText renders using the game's text-based Render() function only.
+	// RenderModeAscii renders using the game's text-based renderAscii() function only.
 	// Always available for any game.
-	RenderModeText RenderMode = iota
-	// RenderModeQuadrant converts canvas output to Unicode quadrant block characters
+	RenderModeAscii RenderMode = iota
+	// RenderModeBlocks converts canvas output to Unicode quadrant block characters
 	// (2x2 pixels per terminal cell). Requires the game to define renderCanvas.
-	RenderModeQuadrant
-	// RenderModeCanvasHD renders canvas locally on the client from game JS + state.
+	RenderModeBlocks
+	// RenderModePixels renders canvas locally on the client from game JS + state.
 	// Client renders at its own window resolution. Requires enhanced client and
 	// a game with renderCanvas.
-	RenderModeCanvasHD
+	RenderModePixels
 )
 
 // Label returns a human-readable name for the mode.
 func (m RenderMode) Label() string {
 	switch m {
-	case RenderModeText:
-		return "Text"
-	case RenderModeQuadrant:
-		return "Quadrant"
-	case RenderModeCanvasHD:
-		return "Canvas &HD"
+	case RenderModeAscii:
+		return "Ascii"
+	case RenderModeBlocks:
+		return "Blocks"
+	case RenderModePixels:
+		return "Pixels"
 	default:
 		return "Unknown"
 	}

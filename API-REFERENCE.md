@@ -65,7 +65,7 @@ The zip is extracted to `dist/games/mygame/` and then loaded normally.
 
 ## Writing a game
 
-A game file must define a global `Game` object. `load` and `render` are required; all other hooks are optional.
+A game file must define a global `Game` object. `load` and `renderAscii` are required; all other hooks are optional.
 
 ```js
 var Game = {
@@ -91,20 +91,21 @@ var Game = {
     // buf.fill(x, y, w, h, ch, fg, bg) to write pixels directly. Colors are "#RRGGBB" strings or null.
     // Coordinates are relative to the buffer region (0,0 = top-left of the game viewport).
     // Called per player on every render tick. Must be pure rendering — no game state mutation.
-    render: function(buf, playerID, ox, oy, width, height) {
+    // Used when the player's graphics preference is Ascii, or as fallback when canvas is unavailable.
+    renderAscii: function(buf, playerID, ox, oy, width, height) {
         buf.writeString(0, 0, "Hello!", "#FFFFFF", null);
     },
 
     // Returns a declarative widget tree describing the game window.
     // If defined, the framework renders real themed NC panels/labels instead of
-    // using the raw render() string. Games can embed {type: "gameview"} nodes to
-    // include the raw render() output within the layout. If layout returns null
-    // or is not defined, the framework falls back to render(). See "Widget Tree Layout" below.
+    // using the raw renderAscii() output. Games can embed {type: "gameview"} nodes to
+    // include the raw renderAscii() output within the layout. If layout returns null
+    // or is not defined, the framework falls back to renderAscii(). See "Widget Tree Layout" below.
     layout: function(playerID, width, height) {
         return {
             type: 'hsplit',
             children: [
-                { type: 'gameview', weight: 1 },           // raw render() here
+                { type: 'gameview', weight: 1 },           // raw renderAscii() here
                 { type: 'panel', title: 'Info', width: 20, // NC panel on the right
                   children: [{ type: 'label', text: 'Score: 42' }] }
             ]
@@ -205,7 +206,7 @@ var Game = {
         if (key === "right") p.x++;
     },
 
-    render: function(buf, playerID, ox, oy, width, height) {
+    renderAscii: function(buf, playerID, ox, oy, width, height) {
         for (var y = 0; y < height; y++) {
             for (var x = 0; x < width; x++) {
                 var ch = ".";
@@ -222,7 +223,7 @@ var Game = {
 
     // Custom starting screen rendering. Optional — if omitted or returns false,
     // the framework renders a figlet game name centered in the viewport.
-    // Same buf API as render(). Return true to indicate custom rendering was done.
+    // Same buf API as renderAscii(). Return true to indicate custom rendering was done.
     // renderGameStart: function(buf, playerID, ox, oy, width, height) { ... return true; },
 
     // Custom ending screen rendering. Optional — if omitted or returns false,
@@ -414,7 +415,7 @@ LOBBY (game unloaded, back to teams + chat)
 - **Load**: Framework snapshots teams for the game (lobby stays independent), loads saved state, calls `init(savedState)`. `teams()` returns game teams.
 - **Splash screen**: If `renderSplash(buf, playerID, x, y, w, h)` is defined and returns true, that custom rendering is used. Otherwise, the framework renders the game name in figlet ASCII art centered in the viewport. The admin can press Enter to skip, or it auto-starts after 10s.
 - **Splash→Playing**: Framework calls `start()`. Game sets up its playing state.
-- **Playing**: Normal game mode — `update(dt)` is called once per tick, then `render()`/`layout()`, `onInput()`, `statusBar()`, `commandBar()` are called per player.
+- **Playing**: Normal game mode — `update(dt)` is called once per tick, then `renderAscii()`/`renderCanvas()`/`layout()`, `onInput()`, `statusBar()`, `commandBar()` are called per player.
 - **Game over**: Triggered when JS calls `gameOver(results, state)`. The framework renders a "GAME OVER" screen with the ranked results list. Players press Enter to acknowledge; after 15 seconds the game unloads automatically.
 - **Late joiners**: Players connecting during a game see the lobby and can chat. Lobby teams are independent — players can organize for the next round.
 - **Reconnect**: If a player disconnects mid-game and reconnects with the same name, they rejoin the game automatically. Game teams persist through disconnects.
@@ -549,7 +550,7 @@ Any playing game can be suspended — no opt-in flag is required.
 
 - `width` = full terminal width
 - `height` = `width * 9 / 16` (clamped down if terminal is too short to leave 5 rows for chat)
-- Return exactly `height` newline-separated rows from `render()`. Fewer rows are padded; more are clipped.
+- Return exactly `height` newline-separated rows from `renderAscii()`. Fewer rows are padded; more are clipped.
 - The menu bar is full width — `gameName` can use it entirely.
 
 ---
@@ -558,13 +559,13 @@ Any playing game can be suspended — no opt-in flag is required.
 
 **State is global and shared.** All players see the result of the same `Game` object — there is no per-player instance. Design your state with this in mind (`var players = {}`).
 
-**`render()` is called per player per tick.** Keep it fast and side-effect-free — no game state mutation. Put all game logic in `update(dt)` instead.
+**`renderAscii()` is called per player per tick.** Keep it fast and side-effect-free — no game state mutation. Put all game logic in `update(dt)` instead.
 
 **`update(dt)` is called once per tick.** The `dt` argument is seconds since the last update. All game logic — movement, timers, collision, gameOver() calls — belongs here. Always use `dt` for timing (accumulate elapsed time, count down timers by subtracting `dt`) — never count ticks.
 
 **Rendering is character-based.** Each character is one cell wide. For box-drawing or emoji that span multiple columns, count display width carefully — the framework does not reflow.
 
-**ImageBuffer API.** The `buf` parameter in `render()` supports these methods:
+**ImageBuffer API.** The `buf` parameter in `renderAscii()` supports these methods:
 
 | Method | Description |
 |--------|-------------|
@@ -576,7 +577,7 @@ Any playing game can be suspended — no opt-in flag is required.
 All methods accept an optional trailing `attr` parameter (bitmask): `ATTR_BOLD`, `ATTR_FAINT`, `ATTR_ITALIC`, `ATTR_UNDERLINE`, `ATTR_REVERSE`. Coordinates are relative to the viewport (0,0 = top-left).
 
 ```js
-render: function(buf, playerID, ox, oy, width, height) {
+renderAscii: function(buf, playerID, ox, oy, width, height) {
     buf.writeString(0, 0, "Hello, " + playerID, "#00FF00", null);
     buf.setChar(5, 2, "@", "#FFFF00", "#000080", ATTR_BOLD);
 }
@@ -600,13 +601,13 @@ GitHub blob URLs are automatically converted to raw download URLs. The file is c
 
 ## Widget Tree Layout (`layout`)
 
-If your game defines `layout(playerID, width, height)`, it should return a tree of widget nodes. The framework renders these as real themed NC-style panels with proper borders, respecting the player's current theme. This is optional — games that only define `render()` work unchanged.
+If your game defines `layout(playerID, width, height)`, it should return a tree of widget nodes. The framework renders these as real themed NC-style panels with proper borders, respecting the player's current theme. This is optional — games that only define `renderAscii()` work unchanged.
 
 ### Node types
 
 | Type | Description | Key properties |
 |------|-------------|----------------|
-| `gameview` | Renders the raw `render()` output in this region | (none — calls `render(buf, playerID, x, y, w, h)` with the computed sub-area) |
+| `gameview` | Renders the raw `renderAscii()` output in this region | (none — calls `renderAscii(buf, playerID, x, y, w, h)` with the computed sub-area) |
 | `panel` | Bordered NC panel with optional title | `title`, `children` |
 | `label` | Single line of text | `text`, `align` (`"left"`, `"center"`, `"right"`) |
 | `hsplit` | Horizontal split — children placed side by side | `children` |
@@ -631,7 +632,7 @@ layout: function(playerID, width, height) {
             {
                 type: 'vsplit', weight: 1,
                 children: [
-                    { type: 'gameview', weight: 1 },              // raw render() in the main area
+                    { type: 'gameview', weight: 1 },              // raw renderAscii() in the main area
                     { type: 'panel', title: 'Stats', height: 5,   // NC panel at bottom
                       children: [
                           { type: 'label', text: 'HP: ' + hp + '/' + maxHp },

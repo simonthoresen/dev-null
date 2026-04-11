@@ -212,7 +212,7 @@ var Game = {
         }
     },
 
-    render: function(buf, playerID, ox, oy, w, h) {
+    renderAscii: function(buf, playerID, ox, oy, w, h) {
         var p = Game.state.players[playerID];
         if (!p) return;
         if (p.dead) {

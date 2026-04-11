@@ -168,7 +168,7 @@ func (g *mockGame) GameSource() []domain.GameSourceFile                         
 func (g *mockGame) GameAssets() []domain.GameAsset                                { return nil }
 func (g *mockGame) Layout(string, int, int) *domain.WidgetNode                   { return nil }
 
-func (g *mockGame) Render(buf *render.ImageBuffer, _ string, x, y, w, h int) {
+func (g *mockGame) RenderAscii(buf *render.ImageBuffer, _ string, x, y, w, h int) {
 	// Draw a simple bordered box with fixed content.
 	if w < 4 || h < 3 {
 		return

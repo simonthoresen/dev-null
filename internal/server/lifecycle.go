@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"time"
 
@@ -35,8 +36,7 @@ func (a *Server) checkGameOver() {
 	a.state.Unlock()
 
 	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhaseEnding})
-	a.broadcastChat(domain.Message{Text: "Game over!"})
-	a.serverLog("game over — waiting for players to acknowledge")
+	slog.Info("Game over! Waiting for players to acknowledge.")
 
 	// Start 15s timeout for game-over acknowledgment.
 	a.gameOverTimer = make(chan struct{})
@@ -149,7 +149,7 @@ func (a *Server) loadGame(path string) error {
 	// Call Load — teams() now returns game participants via cached snapshot.
 	savedState, err := state.LoadGameState(a.dataDir, name)
 	if err != nil {
-		a.serverLog(fmt.Sprintf("warning: could not load saved state: %v", err))
+		slog.Warn("could not load saved state", "error", err)
 	}
 	rt.Load(savedState)
 
@@ -160,8 +160,7 @@ func (a *Server) loadGame(path string) error {
 
 	a.broadcastMsg(domain.GameLoadedMsg{Name: name})
 	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhaseStarting})
-	a.broadcastChat(domain.Message{Text: fmt.Sprintf("Game loaded: %s", name)})
-	a.serverLog(fmt.Sprintf("game loaded: %s (%s, starting)", name, path))
+	slog.Info(fmt.Sprintf("Game loaded: %s", name), "path", path)
 
 	// Start starting goroutine: waits up to 10s or until admin triggers start.
 	a.startingDone = make(chan struct{})
@@ -190,7 +189,7 @@ func (a *Server) startingTimer() {
 	a.lastUpdate = a.clock.Now()
 	a.lastUpdateMu.Unlock()
 	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhasePlaying})
-	a.serverLog("game started (playing)")
+	slog.Info("Game started!")
 
 	if game != nil {
 		game.Begin()
@@ -263,7 +262,7 @@ func (a *Server) unloadGame() {
 	// Save state returned by Unload.
 	if gameState != nil && gameName != "" {
 		if err := state.SaveGameState(a.dataDir, gameName, gameState); err != nil {
-			a.serverLog(fmt.Sprintf("warning: could not save game state: %v", err))
+			slog.Warn("could not save game state", "error", err)
 		} else {
 			a.serverLog(fmt.Sprintf("game state saved: %s", gameName))
 		}
@@ -271,8 +270,7 @@ func (a *Server) unloadGame() {
 
 	a.broadcastMsg(domain.GameUnloadedMsg{})
 	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhaseNone})
-	a.broadcastChat(domain.Message{Text: "Game unloaded."})
-	a.serverLog("game unloaded")
+	slog.Info("Game unloaded.")
 }
 
 // buildTeamsCache builds a pre-resolved teams snapshot for JS teams().
@@ -365,7 +363,7 @@ func (a *Server) suspendGame(saveName string) error {
 	// Save persistent state (high scores, etc.) alongside the suspend save.
 	if persistentState != nil {
 		if err := state.SaveGameState(a.dataDir, gameName, persistentState); err != nil {
-			a.serverLog(fmt.Sprintf("warning: could not save game state on suspend: %v", err))
+			slog.Warn("could not save game state on suspend", "error", err)
 		}
 	}
 
@@ -394,8 +392,7 @@ func (a *Server) suspendGame(saveName string) error {
 	a.broadcastMsg(domain.GameUnloadedMsg{})
 	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhaseNone})
 	a.broadcastMsg(domain.GameSuspendedMsg{Name: gameName})
-	a.broadcastChat(domain.Message{Text: fmt.Sprintf("Game suspended: %s (save: %s)", gameName, saveName)})
-	a.serverLog(fmt.Sprintf("game suspended: %s/%s", gameName, saveName))
+	slog.Info(fmt.Sprintf("Game suspended: %s (save: %s)", gameName, saveName))
 	return nil
 }
 
@@ -469,7 +466,7 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 	// Load persistent state (high scores, etc.) — same as a fresh game load.
 	persistentState, err := state.LoadGameState(a.dataDir, gameName)
 	if err != nil {
-		a.serverLog(fmt.Sprintf("warning: could not load game state on resume: %v", err))
+		slog.Warn("could not load game state on resume", "error", err)
 	}
 	rt.Load(persistentState)
 
@@ -487,12 +484,11 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 	a.broadcastMsg(domain.GameLoadedMsg{Name: gameName})
 	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhasePlaying})
 	a.broadcastMsg(domain.GameResumedMsg{Name: gameName})
-	a.broadcastChat(domain.Message{Text: fmt.Sprintf("Game resumed: %s (from save: %s)", gameName, saveName)})
-	a.serverLog(fmt.Sprintf("game resumed: %s/%s", gameName, saveName))
+	slog.Info(fmt.Sprintf("Game resumed: %s (from save: %s)", gameName, saveName))
 
 	// Clean up the suspend save after successful resume.
 	if err := state.DeleteSuspend(a.dataDir, gameName, saveName); err != nil {
-		a.serverLog(fmt.Sprintf("warning: could not delete suspend save: %v", err))
+		slog.Warn("could not delete suspend save", "error", err)
 	}
 
 	return nil

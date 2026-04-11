@@ -127,7 +127,7 @@ type Game interface {
 
 	// --- Rendering ---
 
-	Render(buf *render.ImageBuffer, playerID string, x, y, width, height int)
+	RenderAscii(buf *render.ImageBuffer, playerID string, x, y, width, height int)
 	// RenderStarting renders a custom starting screen into buf. Returns false to
 	// use the framework's default figlet-based starting screen.
 	RenderStarting(buf *render.ImageBuffer, playerID string, x, y, width, height int) bool

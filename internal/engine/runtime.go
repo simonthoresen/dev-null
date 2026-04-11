@@ -86,7 +86,7 @@ type Runtime struct {
 	updateFn          goja.Callable
 	onPlayerLeave     goja.Callable
 	onInput           goja.Callable
-	renderFn          goja.Callable
+	renderAsciiFn     goja.Callable
 	renderCanvasFn    goja.Callable
 	renderStartingFn  goja.Callable
 	renderEndingFn    goja.Callable
@@ -217,7 +217,7 @@ func (r *Runtime) extractGameObject() error {
 	r.updateFn = extractCallable(gameObj, "update")
 	r.onPlayerLeave = extractCallable(gameObj, "onPlayerLeave")
 	r.onInput = extractCallable(gameObj, "onInput")
-	r.renderFn = extractCallable(gameObj, "render")
+	r.renderAsciiFn = extractCallable(gameObj, "renderAscii")
 	r.renderCanvasFn = extractCallable(gameObj, "renderCanvas")
 	r.renderStartingFn = extractCallable(gameObj, "renderGameStart")
 	r.renderEndingFn = extractCallable(gameObj, "renderGameEnd")
@@ -311,26 +311,26 @@ func (r *Runtime) Update(dt float64) {
 	_, _ = r.updateFn(goja.Undefined(), r.vm.ToValue(dt))
 }
 
-func (r *Runtime) Render(buf *render.ImageBuffer, playerID string, x, y, width, height int) {
-	if r.renderFn == nil {
+func (r *Runtime) RenderAscii(buf *render.ImageBuffer, playerID string, x, y, width, height int) {
+	if r.renderAsciiFn == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	defer r.recoverJS("Render")
-	defer traceCall(r.vm, "Render")()
-	cancel := Watchdog(r.vm, "Render")
+	defer r.recoverJS("RenderAscii")
+	defer traceCall(r.vm, "RenderAscii")()
+	cancel := Watchdog(r.vm, "RenderAscii")
 	defer cancel()
 	jsBuf := r.newJSImageBuffer(buf, x, y, width, height)
-	_, err := r.renderFn(goja.Undefined(), r.vm.ToValue(jsBuf), r.vm.ToValue(playerID), r.vm.ToValue(x), r.vm.ToValue(y), r.vm.ToValue(width), r.vm.ToValue(height))
+	_, err := r.renderAsciiFn(goja.Undefined(), r.vm.ToValue(jsBuf), r.vm.ToValue(playerID), r.vm.ToValue(x), r.vm.ToValue(y), r.vm.ToValue(width), r.vm.ToValue(height))
 	if err != nil {
-		slog.Error("JS Render error", "error", err)
+		slog.Error("JS RenderAscii error", "error", err)
 	}
 }
 
 func (r *Runtime) Layout(playerID string, width, height int) *domain.WidgetNode {
 	if r.layoutFn == nil {
-		return nil // framework will fall back to wrapping Render() in a gameview node
+		return nil // framework will fall back to wrapping RenderAscii() in a gameview node
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

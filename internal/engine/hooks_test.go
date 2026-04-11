@@ -71,7 +71,7 @@ func TestUpdate_CallsJS(t *testing.T) {
 			state: { called: false, lastKey: "" },
 			load: function() {},
 			update: function(dt) { Game.state.called = true; Game.state.lastKey = "" + dt; },
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -86,7 +86,7 @@ func TestUpdate_CallsJS(t *testing.T) {
 
 func TestUpdate_NoHook_IsNoop(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	rt.Load(nil)
 	// Should not panic even when updateFn is nil.
@@ -101,7 +101,7 @@ func TestOnInput_CallsJS(t *testing.T) {
 			state: { lastInput: "" },
 			load: function() {},
 			onInput: function(pid, key) { Game.state.lastInput = pid + ":" + key; },
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -113,7 +113,7 @@ func TestOnInput_CallsJS(t *testing.T) {
 
 func TestOnInput_NoHook_IsNoop(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	rt.Load(nil)
 	rt.OnInput("p1", "x") // must not panic
@@ -127,7 +127,7 @@ func TestOnPlayerLeave_CallsJS(t *testing.T) {
 			state: { leftPlayer: "" },
 			load: function() {},
 			onPlayerLeave: function(pid) { Game.state.leftPlayer = pid; },
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -139,7 +139,7 @@ func TestOnPlayerLeave_CallsJS(t *testing.T) {
 
 func TestOnPlayerLeave_NoHook_IsNoop(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	rt.Load(nil)
 	rt.OnPlayerLeave("p1") // must not panic
@@ -153,7 +153,7 @@ func TestEnd_CallsJS(t *testing.T) {
 			state: { ended: false },
 			load: function() {},
 			end: function() { Game.state.ended = true; },
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -165,7 +165,7 @@ func TestEnd_CallsJS(t *testing.T) {
 
 func TestEnd_NoHook_IsNoop(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	rt.Load(nil)
 	rt.End() // must not panic
@@ -178,7 +178,7 @@ func TestUnload_ReturnsState(t *testing.T) {
 		var Game = {
 			load: function() {},
 			unload: function() { return { score: 99, label: "hi" }; },
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -197,7 +197,7 @@ func TestUnload_ReturnsState(t *testing.T) {
 
 func TestUnload_NoHook_ReturnsNil(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	rt.Load(nil)
 	result := rt.Unload()
@@ -211,7 +211,7 @@ func TestUnload_NullReturn_ReturnsNil(t *testing.T) {
 		var Game = {
 			load: function() {},
 			unload: function() { return null; },
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -229,7 +229,7 @@ func TestBegin_CallsJS(t *testing.T) {
 			state: { begun: false },
 			load: function() {},
 			begin: function() { Game.state.begun = true; },
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -246,7 +246,7 @@ func TestStatusBar_CallsJS(t *testing.T) {
 		var Game = {
 			load: function() {},
 			statusBar: function(pid) { return "status:" + pid; },
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -258,7 +258,7 @@ func TestStatusBar_CallsJS(t *testing.T) {
 
 func TestStatusBar_NoHook_ReturnsEmpty(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	rt.Load(nil)
 	if got := rt.StatusBar("p1"); got != "" {
@@ -271,7 +271,7 @@ func TestCommandBar_CallsJS(t *testing.T) {
 		var Game = {
 			load: function() {},
 			commandBar: function(pid) { return "cmd:" + pid; },
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -283,7 +283,7 @@ func TestCommandBar_CallsJS(t *testing.T) {
 
 func TestCommandBar_NoHook_ReturnsEmpty(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	rt.Load(nil)
 	if got := rt.CommandBar("p1"); got != "" {
@@ -303,7 +303,7 @@ func TestCommands_RegisteredViaJS(t *testing.T) {
 					handler: function(ctx, args) { ctx.reply("done"); }
 				});
 			},
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -321,7 +321,7 @@ func TestCommands_RegisteredViaJS(t *testing.T) {
 
 func TestCommands_Empty(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	rt.Load(nil)
 	if cmds := rt.Commands(); len(cmds) != 0 {
@@ -336,7 +336,7 @@ func TestTeamRange_FromJS(t *testing.T) {
 		var Game = {
 			teamRange: { min: 2, max: 6 },
 			load: function() {},
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	tr := rt.TeamRange()
@@ -347,7 +347,7 @@ func TestTeamRange_FromJS(t *testing.T) {
 
 func TestTeamRange_Default(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	tr := rt.TeamRange()
 	if tr.Min != 0 || tr.Max != 0 {
@@ -366,7 +366,7 @@ func TestRenderStarting_CallsJS(t *testing.T) {
 				Game.state.startingCalled = true;
 				return true;
 			},
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -382,7 +382,7 @@ func TestRenderStarting_CallsJS(t *testing.T) {
 
 func TestRenderStarting_NoHook_ReturnsFalse(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	rt.Load(nil)
 	buf := render.NewImageBuffer(20, 5)
@@ -400,7 +400,7 @@ func TestRenderEnding_CallsJS(t *testing.T) {
 				Game.state.endingCalled = true;
 				return true;
 			},
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -417,7 +417,7 @@ func TestRenderEnding_CallsJS(t *testing.T) {
 
 func TestRenderEnding_NoHook_ReturnsFalse(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	rt.Load(nil)
 	buf := render.NewImageBuffer(20, 5)
@@ -437,7 +437,7 @@ func TestSetTeamsCache(t *testing.T) {
 				var ts = teams();
 				Game.state.teamCount = ts.length;
 			},
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -467,7 +467,7 @@ func TestGameName_EmptyWhenNotDefined(t *testing.T) {
 	// GameName() returns "" when no gameName property is set in JS.
 	// The caller (chrome view) falls back to the filename stem.
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	if got := rt.GameName(); got != "" {
 		t.Errorf("expected empty GameName when not defined in JS, got %q", got)
@@ -481,7 +481,7 @@ func TestHasCanvasMode_True(t *testing.T) {
 		var Game = {
 			load: function() {},
 			renderCanvas: function(ctx, pid, w, h) {},
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	if !rt.HasCanvasMode() {
@@ -491,7 +491,7 @@ func TestHasCanvasMode_True(t *testing.T) {
 
 func TestHasCanvasMode_False(t *testing.T) {
 	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, render: function() {} };
+		var Game = { load: function() {}, renderAscii: function() {} };
 	`)
 	if rt.HasCanvasMode() {
 		t.Error("expected HasCanvasMode=false")
@@ -507,7 +507,7 @@ func TestIsGameOverPending_AfterGameOver(t *testing.T) {
 			onInput: function(pid, key) {
 				if (key === "q") gameOver([{name: pid, result: "done"}]);
 			},
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(nil)
@@ -533,7 +533,7 @@ func TestLoad_PassesSavedState(t *testing.T) {
 			load: function(saved) {
 				if (saved && saved.score) Game.state.score = saved.score;
 			},
-			render: function() {},
+			renderAscii: function() {},
 		};
 	`)
 	rt.Load(map[string]any{"score": int64(77)})

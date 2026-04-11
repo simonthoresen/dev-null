@@ -73,9 +73,11 @@ func (a *Server) broadcastChat(msg domain.Message) {
 	if msg.Text != "" {
 		a.state.AddChat(msg)
 
-		// Log system messages so they appear in the server log and console slog view.
+		// Log system messages to the file/console slog view.
+		// Use NoBroadcastContext so the SlogHandler does not re-broadcast to players
+		// (the message is already being delivered via broadcastChat).
 		if msg.Author == "" {
-			slog.Info(msg.Text)
+			slog.InfoContext(console.NoBroadcastContext(), msg.Text)
 		}
 
 		// Write to chat log file.
@@ -126,8 +128,10 @@ func (a *Server) ShowDialog(playerID string, d domain.DialogRequest) {
 	}
 }
 
+// serverLog logs an operator-facing line to the file/console but NOT to player chat.
+// Use direct slog.Info for events that should also appear in player chat.
 func (a *Server) serverLog(line string) {
-	slog.Info(line)
+	slog.InfoContext(console.NoBroadcastContext(), line)
 }
 
 // InstallConsoleSlogHandler wraps the current default slog handler to also
@@ -159,7 +163,9 @@ func (a *Server) InstallConsoleSlogHandler() {
 		})
 	}
 
-	handler := console.NewSlogHandler(a.slogCh, existing)
+	handler := console.NewSlogHandler(a.slogCh, existing, func(msg string) {
+		a.broadcastChat(domain.Message{Text: msg})
+	})
 	slog.SetDefault(slog.New(handler))
 }
 

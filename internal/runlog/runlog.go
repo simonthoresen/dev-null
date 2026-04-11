@@ -10,6 +10,16 @@ import (
 	"time"
 )
 
+// GlobalLevel is the runtime-adjustable log level for the system logger.
+// It is initialised by Configure* and can be changed at runtime via SetLevel.
+var GlobalLevel = new(slog.LevelVar)
+
+// SetLevel sets the system log level at runtime.
+func SetLevel(level slog.Level) { GlobalLevel.Set(level) }
+
+// GetLevel returns the current system log level.
+func GetLevel() slog.Level { return GlobalLevel.Level() }
+
 // ConfigureFromEnv sets up slog from DEV_NULL_LOG_FILE / DEV_NULL_LOG_LEVEL.
 // If DEV_NULL_LOG_FILE is not set, logs are discarded.
 func ConfigureFromEnv(component string) (func() error, error) {
@@ -53,8 +63,9 @@ func configure(logFilePath string, level slog.Level, component string) (func() e
 		slog.Info("logging to file", "path", logFilePath)
 	}
 
+	GlobalLevel.Set(level)
 	handler := slog.NewTextHandler(output, &slog.HandlerOptions{
-		Level:     level,
+		Level:     GlobalLevel,
 		AddSource: true,
 	})
 	logger := slog.New(handler).With("component", component, "pid", os.Getpid())

@@ -310,7 +310,7 @@ var Game = {
         Game.state.angleZ = t * 0.7;
     },
 
-    render: function(buf, playerID, ox, oy, width, height) {
+    renderAscii: function(buf, playerID, ox, oy, width, height) {
         renderCube(buf, width, height);
     },
 

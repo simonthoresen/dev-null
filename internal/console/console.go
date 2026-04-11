@@ -3,6 +3,7 @@ package console
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,9 +61,9 @@ type Model struct {
 	menuBar   *widget.MenuBar
 	statusBar *widget.StatusBar
 
-	// All log lines (tagged), and filter state.
-	allLines []taggedLine
-	filter   map[LogCategory]bool // true = show this category
+	// All log lines (tagged), and display threshold.
+	allLines  []taggedLine
+	showLevel slog.Level // minimum slog level shown in the console (default Info)
 
 	// Tab completion state (used by tabComplete callback).
 	tabPrefix     string
@@ -156,17 +157,10 @@ func NewModel(api ServerAPI, cancel context.CancelFunc, profile colorprofile.Pro
 		screen:    screen,
 		menuBar:   menuBarCtrl,
 		statusBar: statusBarCtrl,
-		filter: map[LogCategory]bool{
-			CatInfo:    true,
-			CatWarn:    true,
-			CatError:   true,
-			CatChat:    true,
-			CatCommand: true,
-			// CatDebug defaults to false
-		},
-		theme:   theme.Default(),
-		overlay: widget.OverlayState{OpenMenu: -1},
-		profile: profile,
+		showLevel: slog.LevelInfo,
+		theme:     theme.Default(),
+		overlay:   widget.OverlayState{OpenMenu: -1},
+		profile:   profile,
 	}
 
 	// Wire the menu bar to share the model's overlay state.
@@ -363,24 +357,17 @@ func (m *Model) consoleMenus() []domain.MenuDef {
 		{
 			Label: "&View",
 			Items: []domain.MenuItemDef{
-				{Label: "&Debug", Toggle: true, Checked: func() bool { return m.filter[CatDebug] }, Handler: func(_ string) {
-					m.submitInput("/view-debug")
+				{Label: "Show &Debug", Toggle: true, Checked: func() bool { return m.showLevel == slog.LevelDebug }, Handler: func(_ string) {
+					m.submitInput("/show-log-level debug")
 				}},
-				{Label: "&Info", Toggle: true, Checked: func() bool { return m.filter[CatInfo] }, Handler: func(_ string) {
-					m.submitInput("/view-info")
+				{Label: "Show &Info", Toggle: true, Checked: func() bool { return m.showLevel == slog.LevelInfo }, Handler: func(_ string) {
+					m.submitInput("/show-log-level info")
 				}},
-				{Label: "&Warnings", Toggle: true, Checked: func() bool { return m.filter[CatWarn] }, Handler: func(_ string) {
-					m.submitInput("/view-warnings")
+				{Label: "Show &Warnings", Toggle: true, Checked: func() bool { return m.showLevel == slog.LevelWarn }, Handler: func(_ string) {
+					m.submitInput("/show-log-level warn")
 				}},
-				{Label: "&Errors", Toggle: true, Checked: func() bool { return m.filter[CatError] }, Handler: func(_ string) {
-					m.submitInput("/view-errors")
-				}},
-				{Label: "---"},
-				{Label: "&Chat", Toggle: true, Checked: func() bool { return m.filter[CatChat] }, Handler: func(_ string) {
-					m.submitInput("/view-chat")
-				}},
-				{Label: "C&ommands", Toggle: true, Checked: func() bool { return m.filter[CatCommand] }, Handler: func(_ string) {
-					m.submitInput("/view-commands")
+				{Label: "Show &Errors", Toggle: true, Checked: func() bool { return m.showLevel == slog.LevelError }, Handler: func(_ string) {
+					m.submitInput("/show-log-level error")
 				}},
 			},
 		},
@@ -727,11 +714,31 @@ func (m *Model) appendLog(line string) {
 	m.appendTagged(CatCommand, line)
 }
 
+// catToLevel maps a LogCategory to its slog.Level equivalent.
+// CatChat and CatCommand have no slog level; callers must handle them separately.
+func catToLevel(cat LogCategory) slog.Level {
+	switch cat {
+	case CatError:
+		return slog.LevelError
+	case CatWarn:
+		return slog.LevelWarn
+	case CatInfo:
+		return slog.LevelInfo
+	default: // CatDebug
+		return slog.LevelDebug
+	}
+}
+
 func (m *Model) rebuildVisibleLines() {
 	var visible []string
 	for _, tl := range m.allLines {
-		if m.filter[tl.cat] {
+		switch tl.cat {
+		case CatChat, CatCommand:
 			visible = append(visible, tl.text)
+		default:
+			if catToLevel(tl.cat) >= m.showLevel {
+				visible = append(visible, tl.text)
+			}
 		}
 	}
 	m.logView.Lines = visible

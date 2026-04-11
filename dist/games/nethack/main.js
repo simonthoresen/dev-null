@@ -183,7 +183,7 @@ var Game = {
         }
     },
 
-    render: function(buf, playerID, ox, oy, width, height) {
+    renderAscii: function(buf, playerID, ox, oy, width, height) {
         var player = Game.state.players[playerID];
         if (!player) {
             renderSpectatorView(buf, width, height);

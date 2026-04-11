@@ -19,7 +19,7 @@ func (h *discardHandler) WithGroup(_ string) slog.Handler               { return
 func TestSlogDebugRoutedToConsole(t *testing.T) {
 	ch := make(chan SlogLine, 10)
 	wrapped := &discardHandler{}
-	handler := NewSlogHandler(ch, wrapped)
+	handler := NewSlogHandler(ch, wrapped, nil)
 
 	ctx := t.Context()
 
@@ -45,7 +45,7 @@ func TestSlogDebugRoutedToConsole(t *testing.T) {
 func TestSlogBlockedInRenderPath(t *testing.T) {
 	ch := make(chan SlogLine, 10)
 	wrapped := &discardHandler{}
-	handler := NewSlogHandler(ch, wrapped)
+	handler := NewSlogHandler(ch, wrapped, nil)
 
 	ctx := t.Context()
 

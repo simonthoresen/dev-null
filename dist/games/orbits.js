@@ -169,9 +169,9 @@ var Game = {
         Game.state.time += dt;
     },
 
-    // ── Text fallback renderer (SSH without canvas support) ─────────────────
+    // ── Ascii fallback renderer (SSH without canvas support) ─────────────────
 
-    render: function(buf, playerID, ox, oy, w, h) {
+    renderAscii: function(buf, playerID, ox, oy, w, h) {
         var cam = getCamera(playerID);
         var t   = Game.state.time;
 
