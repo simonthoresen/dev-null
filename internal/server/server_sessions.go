@@ -222,8 +222,15 @@ func (a *Server) registerSession(sess ssh.Session) *domain.Player {
 	// a future phase transition.
 	a.state.RLock()
 	currentPhase := a.state.GamePhase
+	game := a.state.ActiveGame
 	a.state.RUnlock()
 	a.sendToPlayer(player.ID, domain.GamePhaseMsg{Phase: currentPhase})
+
+	// Notify the game about the new player joining mid-game.
+	// Must be called after releasing state.mu (Runtime must not acquire state.mu).
+	if game != nil && currentPhase == domain.PhasePlaying {
+		game.OnPlayerJoin(player.ID, player.Name)
+	}
 
 	return player
 }

@@ -134,6 +134,7 @@ type Game interface {
 
 	// --- Events ---
 
+	OnPlayerJoin(playerID, playerName string)
 	OnPlayerLeave(playerID string)
 	OnInput(playerID, key string)
 

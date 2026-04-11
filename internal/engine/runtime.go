@@ -84,6 +84,7 @@ type Runtime struct {
 
 	// game object methods (nil if not defined)
 	updateFn          goja.Callable
+	onPlayerJoin      goja.Callable
 	onPlayerLeave     goja.Callable
 	onInput           goja.Callable
 	renderAsciiFn     goja.Callable
@@ -215,6 +216,7 @@ func (r *Runtime) extractGameObject() error {
 
 	// Core game methods
 	r.updateFn = extractCallable(gameObj, "update")
+	r.onPlayerJoin = extractCallable(gameObj, "onPlayerJoin")
 	r.onPlayerLeave = extractCallable(gameObj, "onPlayerLeave")
 	r.onInput = extractCallable(gameObj, "onInput")
 	r.renderAsciiFn = extractCallable(gameObj, "renderAscii")
@@ -271,6 +273,19 @@ func extractCallable(obj *goja.Object, name string) goja.Callable {
 }
 
 // Implement domain.Game
+
+func (r *Runtime) OnPlayerJoin(playerID, playerName string) {
+	if r.onPlayerJoin == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	defer r.recoverJS("OnPlayerJoin")
+	defer traceCall(r.vm, "OnPlayerJoin")()
+	cancel := Watchdog(r.vm, "OnPlayerJoin")
+	defer cancel()
+	_, _ = r.onPlayerJoin(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(playerName))
+}
 
 func (r *Runtime) OnPlayerLeave(playerID string) {
 	if r.onPlayerLeave == nil {

@@ -157,6 +157,7 @@ func (g *mockGame) End()                                                        
 func (g *mockGame) Unload() any                                                   { return nil }
 func (g *mockGame) Suspend() any                                                  { return nil }
 func (g *mockGame) Resume(any)                                                    {}
+func (g *mockGame) OnPlayerJoin(string, string)                                   {}
 func (g *mockGame) OnPlayerLeave(string)                                          {}
 func (g *mockGame) OnInput(string, string)                                        {}
 func (g *mockGame) StatusBar(string) string                                       { return "score: 42 | level: 3" }

@@ -183,6 +183,18 @@ func (a *Server) startingTimer() {
 
 	a.state.GamePhase = domain.PhasePlaying
 	game := a.state.ActiveGame
+
+	// Collect current game players while holding the lock so we can call
+	// OnPlayerJoin after releasing it (Runtime must not acquire state.mu).
+	type playerEntry struct{ id, name string }
+	var gamePlayers []playerEntry
+	for _, t := range a.state.GameTeams {
+		for _, id := range t.Players {
+			if p := a.state.Players[id]; p != nil {
+				gamePlayers = append(gamePlayers, playerEntry{p.ID, p.Name})
+			}
+		}
+	}
 	a.state.Unlock()
 
 	a.lastUpdateMu.Lock()
@@ -193,6 +205,9 @@ func (a *Server) startingTimer() {
 
 	if game != nil {
 		game.Begin()
+		for _, p := range gamePlayers {
+			game.OnPlayerJoin(p.id, p.name)
+		}
 	}
 }
 
