@@ -33,14 +33,14 @@ type ManifestFile struct {
 }
 
 // DefaultDataDir returns the platform-specific user data directory.
-// On Windows this is %APPDATA%/DevNull. When running via "go run"
+// On Windows this is %LOCALAPPDATA%/DevNull. When running via "go run"
 // (exe in a temp directory), it falls back to "." for development.
 func DefaultDataDir() string {
 	if isGoRun() {
 		return "."
 	}
-	if appData := os.Getenv("APPDATA"); appData != "" {
-		return filepath.Join(appData, "DevNull")
+	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+		return filepath.Join(localAppData, "DevNull")
 	}
 	// Fallback: directory of the executable.
 	return exeDir()
@@ -109,9 +109,6 @@ func Bootstrap(installDir, dataDir, buildCommit string) error {
 		copied++
 	}
 
-	// One-time migration: move legacy state and host key from install dir.
-	migrateLegacy(installDir, dataDir)
-
 	// Write manifest first, then version marker last (partial bootstrap retries).
 	manifestDst := filepath.Join(dataDir, ".bundle-manifest.json")
 	manifestSrc := filepath.Join(installDir, ".bundle-manifest.json")
@@ -126,39 +123,6 @@ func Bootstrap(installDir, dataDir, buildCommit string) error {
 		slog.Info("datadir: bootstrap complete", "copied", copied, "version", buildCommit, "dataDir", dataDir)
 	}
 	return nil
-}
-
-// migrateLegacy copies state/ and the SSH host key from the install
-// directory to the data directory if they exist and haven't been
-// migrated yet. This is a one-time operation for existing users.
-func migrateLegacy(installDir, dataDir string) {
-	// Migrate state directory.
-	srcState := filepath.Join(installDir, "state")
-	dstState := filepath.Join(dataDir, "state")
-	if info, err := os.Stat(srcState); err == nil && info.IsDir() {
-		if _, err := os.Stat(dstState); os.IsNotExist(err) {
-			if err := copyDir(srcState, dstState); err != nil {
-				slog.Warn("datadir: failed to migrate state", "error", err)
-			} else {
-				slog.Info("datadir: migrated state/ from install dir", "from", srcState, "to", dstState)
-			}
-		}
-	}
-
-	// Migrate SSH host key.
-	for _, name := range []string{"dev-null_ed25519", "dev-null_ed25519.pub"} {
-		src := filepath.Join(installDir, name)
-		dst := filepath.Join(dataDir, name)
-		if _, err := os.Stat(src); err == nil {
-			if _, err := os.Stat(dst); os.IsNotExist(err) {
-				if err := copyFile(src, dst); err != nil {
-					slog.Warn("datadir: failed to migrate host key", "file", name, "error", err)
-				} else {
-					slog.Info("datadir: migrated host key from install dir", "file", name)
-				}
-			}
-		}
-	}
 }
 
 // loadManifest reads and parses a bundle manifest JSON file.

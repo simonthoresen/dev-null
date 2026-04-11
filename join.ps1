@@ -86,10 +86,6 @@ function Find-InstallDir {
     $candidate = Join-Path $env:LocalAppData "DevNull"
     if (Test-Path (Join-Path $candidate "dev-null-client.exe")) { return $candidate }
 
-    # 4. %ProgramFiles%\DevNull  (legacy / system-wide install)
-    $candidate = Join-Path $env:ProgramFiles "DevNull"
-    if (Test-Path (Join-Path $candidate "dev-null-client.exe")) { return $candidate }
-
     return $null
 }
 

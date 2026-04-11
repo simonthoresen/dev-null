@@ -59,7 +59,7 @@ Built binaries use two directories:
 | Directory | Default | Purpose |
 |-----------|---------|---------|
 | **Install dir** | Exe directory | Binaries, bundled assets, `.bundle-manifest.json` (read-only, managed by installer) |
-| **Data dir** | `%APPDATA%/DevNull` | Working copies of assets, user-added content, saves, host keys (read-write) |
+| **Data dir** | `%LOCALAPPDATA%/DevNull` | Working copies of assets, user-added content, saves, host keys (read-write) |
 
 On first run or version upgrade, `datadir.Bootstrap()` copies bundled assets from install dir to data dir using a manifest-based merge:
 - New bundled files are copied; updated bundled files are overwritten; user-added files are left alone.
@@ -123,7 +123,7 @@ On first run or version upgrade, `datadir.Bootstrap()` copies bundled assets fro
 | `internal/engine/figlet.go` | Figlet ASCII art rendering |
 | `internal/engine/gamelist.go` | Game discovery, path resolution, team range probing |
 | `internal/network/` | UPnP, Pinggy status, public IP detection, downloads |
-| `internal/datadir/datadir.go` | Data directory resolution, bootstrap (install dir → %APPDATA%/DevNull) |
+| `internal/datadir/datadir.go` | Data directory resolution, bootstrap (install dir → %LOCALAPPDATA%/DevNull) |
 | `cmd/dev-null-server/` | Server entry point: boot sequence, console setup, signal handling |
 | `cmd/dev-null-client/` | Graphical client: SSH + Ebitengine canvas rendering |
 | `cmd/gen-manifest/` | Generates `.bundle-manifest.json` listing bundled assets with SHA-256 checksums |

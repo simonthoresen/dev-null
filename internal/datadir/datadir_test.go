@@ -163,47 +163,6 @@ func TestBootstrapUpgrade(t *testing.T) {
 	}
 }
 
-func TestMigrateLegacyState(t *testing.T) {
-	installDir := t.TempDir()
-	dataDir := filepath.Join(t.TempDir(), "data")
-
-	// Create legacy state and host key in install dir.
-	writeFile(t, filepath.Join(installDir, "state", "orbits.json"), `{"score":42}`)
-	writeFile(t, filepath.Join(installDir, "dev-null_ed25519"), "private key")
-	writeFile(t, filepath.Join(installDir, "dev-null_ed25519.pub"), "public key")
-
-	// Empty manifest — just testing migration.
-	writeManifest(t, installDir, Manifest{Version: "v1", Files: nil})
-
-	if err := Bootstrap(installDir, dataDir, "v1"); err != nil {
-		t.Fatal(err)
-	}
-
-	// State should be migrated.
-	if got := readFile(t, filepath.Join(dataDir, "state", "orbits.json")); got != `{"score":42}` {
-		t.Errorf("state = %q", got)
-	}
-	// Host keys should be migrated.
-	if got := readFile(t, filepath.Join(dataDir, "dev-null_ed25519")); got != "private key" {
-		t.Errorf("host key = %q", got)
-	}
-	if got := readFile(t, filepath.Join(dataDir, "dev-null_ed25519.pub")); got != "public key" {
-		t.Errorf("host key pub = %q", got)
-	}
-
-	// Running again should NOT overwrite (data dir versions already exist).
-	writeFile(t, filepath.Join(dataDir, ".bundle-version"), "") // reset to trigger re-bootstrap
-	writeFile(t, filepath.Join(dataDir, "dev-null_ed25519"), "user modified key")
-	writeManifest(t, installDir, Manifest{Version: "v2", Files: nil})
-
-	if err := Bootstrap(installDir, dataDir, "v2"); err != nil {
-		t.Fatal(err)
-	}
-	if got := readFile(t, filepath.Join(dataDir, "dev-null_ed25519")); got != "user modified key" {
-		t.Errorf("host key should not be overwritten, got %q", got)
-	}
-}
-
 func TestBootstrapNoManifest(t *testing.T) {
 	installDir := t.TempDir()
 	dataDir := t.TempDir()
