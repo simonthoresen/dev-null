@@ -129,15 +129,6 @@ func (m *Model) dispatchInput(text string) {
 			m.setGraphicsPref(domain.RenderModePixels)
 			m.persistClientConfig()
 			return
-		// Legacy aliases — handle stale client.txt entries gracefully.
-		case "/render-quadrant":
-			m.setGraphicsPref(domain.RenderModeBlocks)
-			m.persistClientConfig()
-			return
-		case "/render-canvas-hd":
-			m.setGraphicsPref(domain.RenderModePixels)
-			m.persistClientConfig()
-			return
 		}
 
 		// Server-side commands via registry.
