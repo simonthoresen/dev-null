@@ -59,9 +59,7 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 	menus := []domain.MenuDef{{Label: "&File", Items: fileItems}}
 
 	// Graphics menu — always visible; shows current preference as radio toggles.
-	// Blocks and Pixels are disabled when the active game has no canvas mode (string-only games).
-	// Pixels is also disabled for SSH (non-enhanced) clients since they can't render locally.
-	hasCanvas := game != nil && game.HasCanvasMode()
+	// Pixels is disabled for SSH (non-enhanced) clients since they can't render locally.
 	graphicsItems := []domain.MenuItemDef{
 		{
 			Label:   "&Ascii",
@@ -70,16 +68,15 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 			Handler: func(_ string) { m.dispatchInput("/render-ascii") },
 		},
 		{
-			Label:    "&Blocks",
-			Toggle:   true,
-			Disabled: game != nil && !hasCanvas,
-			Checked:  func() bool { return m.graphicsPref == domain.RenderModeBlocks },
-			Handler:  func(_ string) { m.dispatchInput("/render-blocks") },
+			Label:   "&Blocks",
+			Toggle:  true,
+			Checked: func() bool { return m.graphicsPref == domain.RenderModeBlocks },
+			Handler: func(_ string) { m.dispatchInput("/render-blocks") },
 		},
 		{
 			Label:    "&Pixels",
 			Toggle:   true,
-			Disabled: !m.IsEnhancedClient || (game != nil && !hasCanvas),
+			Disabled: !m.IsEnhancedClient,
 			Checked:  func() bool { return m.graphicsPref == domain.RenderModePixels },
 			Handler:  func(_ string) { m.dispatchInput("/render-pixels") },
 		},
