@@ -317,28 +317,13 @@ func (a *Server) inviteToken() string {
 
 const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/dev-null/main/join.ps1"
 
-// inviteWinCommand returns the Windows invite command formatted for terminal display.
-// The command is raw PowerShell — paste directly into a PowerShell window.
-// Line continuations (backtick + newline) are inserted to keep within console
-// width for easy copying.
+// inviteWinCommand returns the Windows invite command.
+// The command is wrapped in "powershell -Command ..." so it runs directly from
+// Win+R, a cmd prompt, or the Run dialog without opening PowerShell first.
 func (a *Server) inviteWinCommand() string {
 	token := a.inviteToken()
-	width := a.consoleWidth
-	if width < 40 {
-		width = 120 // default before first resize
-	}
-
-	seg1 := fmt.Sprintf("$env:NS='%s';", token)
-	seg2 := fmt.Sprintf("irm %s|iex", joinScriptURL)
-
-	// Try single line first.
-	oneLine := seg1 + seg2
-	if len(oneLine) <= width {
-		return oneLine
-	}
-
-	// Two lines: break between token assignment and irm.
-	return seg1 + " `\n" + seg2
+	inner := fmt.Sprintf("$env:NS='%s';irm %s|iex", token, joinScriptURL)
+	return fmt.Sprintf(`powershell -Command "%s"`, inner)
 }
 
 // inviteSSHCommand returns the SSH command to join the server,

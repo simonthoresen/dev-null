@@ -93,9 +93,9 @@ func (v *TextView) Render(buf *render.ImageBuffer, x, y, width, height int, focu
 	v.height = height
 	h := max(1, height)
 
+	// Always reserve 1 column for the scrollbar when Scrollable.
 	contentW := width
-	// Tentatively check if scrollbar is needed (may change after wrapping).
-	if v.Scrollable && len(v.Lines) > 0 {
+	if v.Scrollable {
 		contentW = max(1, width-1)
 	}
 
@@ -106,16 +106,6 @@ func (v *TextView) Render(buf *render.ImageBuffer, x, y, width, height int, focu
 	}
 
 	n := len(wrapped)
-	showScrollbar := v.Scrollable && n > h
-	if !showScrollbar && contentW < width {
-		// No scrollbar needed after wrapping — reclaim the column and re-wrap.
-		contentW = width
-		wrapped = wrapped[:0]
-		for _, line := range v.Lines {
-			wrapped = append(wrapped, render.WrapANSI(line, contentW)...)
-		}
-		n = len(wrapped)
-	}
 
 	// Clamp scroll to wrapped line count.
 	maxOff := n - h
@@ -155,9 +145,20 @@ func (v *TextView) Render(buf *render.ImageBuffer, x, y, width, height int, focu
 		buf.PaintANSI(x, startRow+i, contentW, 1, line, fg, bg)
 	}
 
-	// Scrollbar.
-	if showScrollbar {
-		RenderScrollbarBuf(buf, x+contentW, y, n, h, v.ScrollOffset, fg, bg)
+	// Scrollbar — always shown when Scrollable; color changes with focus.
+	if v.Scrollable {
+		scrollFg := layer.DisabledFg
+		if focused {
+			scrollFg = layer.Fg
+		}
+		if n <= h {
+			// Content fits: show a dim track with no thumb.
+			for i := 0; i < h; i++ {
+				buf.SetChar(x+contentW, y+i, '░', scrollFg, bg, render.AttrNone)
+			}
+		} else {
+			RenderScrollbarBuf(buf, x+contentW, y, n, h, v.ScrollOffset, scrollFg, bg)
+		}
 	}
 }
 

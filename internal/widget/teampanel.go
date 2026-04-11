@@ -134,7 +134,18 @@ func (tp *TeamPanel) Render(buf *render.ImageBuffer, x, y, width, height int, fo
 				name = p.Name
 			}
 		}
-		buf.WriteString(x+4, y+row, TruncateStr(name, width-4), fg, bg, render.AttrNone)
+		isMe := focused && pid == tp.PlayerID
+		if isMe {
+			if layer.Monochrome {
+				buf.WriteString(x+3, y+row, "►", fg, bg, render.AttrBold)
+				buf.WriteString(x+4, y+row, TruncateStr(name, width-4), fg, bg, render.AttrBold)
+			} else {
+				buf.Fill(x, y+row, width, 1, ' ', layer.HighlightFg, layer.HighlightBg, render.AttrNone)
+				buf.WriteString(x+4, y+row, TruncateStr(name, width-4), layer.HighlightFg, layer.HighlightBg, render.AttrBold)
+			}
+		} else {
+			buf.WriteString(x+4, y+row, TruncateStr(name, width-4), fg, bg, render.AttrNone)
+		}
 		row++
 	}
 
@@ -176,7 +187,18 @@ func (tp *TeamPanel) Render(buf *render.ImageBuffer, x, y, width, height int, fo
 					name = p.Name
 				}
 			}
-			buf.WriteString(x+4, y+row, TruncateStr(name, width-4), fg, bg, render.AttrNone)
+			isMe := focused && pid == tp.PlayerID
+			if isMe {
+				if layer.Monochrome {
+					buf.WriteString(x+3, y+row, "►", fg, bg, render.AttrBold)
+					buf.WriteString(x+4, y+row, TruncateStr(name, width-4), fg, bg, render.AttrBold)
+				} else {
+					buf.Fill(x, y+row, width, 1, ' ', layer.HighlightFg, layer.HighlightBg, render.AttrNone)
+					buf.WriteString(x+4, y+row, TruncateStr(name, width-4), layer.HighlightFg, layer.HighlightBg, render.AttrBold)
+				}
+			} else {
+				buf.WriteString(x+4, y+row, TruncateStr(name, width-4), fg, bg, render.AttrNone)
+			}
 			row++
 		}
 	}

@@ -82,6 +82,21 @@ func AboutLogo() string {
 	return strings.Join(lines, "\n")
 }
 
+// FigletLines renders text as ASCII art and returns individual lines with
+// trailing whitespace stripped from each line and trailing blank lines removed.
+// Suitable for passing directly to widget.LogoButton.Lines.
+func FigletLines(text, font string) []string {
+	raw := Figlet(text, font)
+	lines := strings.Split(raw, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " ")
+	}
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
 // Figlet renders text as ASCII art using the named font.
 // Built-in fonts: "standard", "larry3d". Any font from dist/fonts/ is also available.
 // Falls back to "standard" for unknown fonts. Returns an empty string if rendering fails.

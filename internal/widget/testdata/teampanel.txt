@@ -9,7 +9,7 @@ player_id: alice
 ===
 ╔══════════════════════╗
 ║    Unassigned        ║
-║    alice             ║
+║   ►alice             ║
 ║    bob               ║
 ║                      ║
 ║                      ║
@@ -30,7 +30,7 @@ my_team_idx: 0
 ║    charlie           ║
 ║                      ║
 ║    Red Team          ║
-║    alice             ║
+║   ►alice             ║
 ║    bob               ║
 ║                      ║
 ║                      ║
@@ -50,7 +50,7 @@ my_team_idx: 0
 ║    Unassigned        ║
 ║                      ║
 ║    Red Team          ║
-║    alice             ║
+║   ►alice             ║
 ║                      ║
 ║    Blue Team         ║
 ║    bob               ║
@@ -71,7 +71,7 @@ show_create: true
 ===
 ╔══════════════════════╗
 ║    Unassigned        ║
-║    alice             ║
+║   ►alice             ║
 ║    bob               ║
 ║                      ║
 ║ [+ Create Team]      ║

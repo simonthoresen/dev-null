@@ -104,6 +104,19 @@ func (o *OverlayState) PushDialog(d domain.DialogRequest) {
 	o.dialogs = append(o.dialogs, entry)
 }
 
+// PushWindowDialog pushes a pre-built Window as a modal dialog.
+// Esc dismisses the dialog; all other interactions are handled by the
+// Window's child controls and their OnPress callbacks.
+// win.Title is copied into the dialog request so DialogSize can account
+// for the title width in its minimum-width calculation.
+func (o *OverlayState) PushWindowDialog(win *Window) {
+	entry := &dialogEntry{
+		request: domain.DialogRequest{Title: win.Title},
+		window:  win,
+	}
+	o.dialogs = append(o.dialogs, entry)
+}
+
 func (o *OverlayState) PopDialog() {
 	o.popDialogEntry()
 }

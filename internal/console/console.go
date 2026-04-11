@@ -735,18 +735,12 @@ func catToLevel(cat LogCategory) slog.Level {
 }
 
 func (m *Model) pushInviteDialog() {
-	win, ssh := m.api.InviteLinks()
-	m.overlay.PushDialog(domain.DialogRequest{
-		Title: "Invite",
-		CopyItems: []domain.DialogCopyItem{
-			{Label: "WIN", Value: win},
-			{Label: "SSH", Value: ssh},
-		},
-		Buttons: []string{"Close"},
-		OnCopy: func(value string) {
-			m.pendingClipboard = value
-		},
-	})
+	winLink, sshLink := m.api.InviteLinks()
+	win := widget.BuildInviteWindow(winLink, sshLink,
+		func(v string) { m.pendingClipboard = v },
+		m.overlay.PopDialog,
+	)
+	m.overlay.PushWindowDialog(win)
 }
 
 func (m *Model) rebuildVisibleLines() {

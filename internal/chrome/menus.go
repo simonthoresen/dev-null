@@ -9,6 +9,7 @@ import (
 	"dev-null/internal/engine"
 	"dev-null/internal/localcmd"
 	"dev-null/internal/theme"
+	"dev-null/internal/widget"
 )
 
 // invalidateMenuCache forces the next cachedMenus() call to rebuild.
@@ -230,16 +231,10 @@ func (m *Model) pushSynthDialog(cursor int) {
 }
 
 func (m *Model) pushInviteDialog() {
-	win, ssh := m.api.InviteLinks()
-	m.overlay.PushDialog(domain.DialogRequest{
-		Title: "Invite",
-		CopyItems: []domain.DialogCopyItem{
-			{Label: "WIN", Value: win},
-			{Label: "SSH", Value: ssh},
-		},
-		Buttons: []string{"Close"},
-		OnCopy: func(value string) {
-			m.pendingClipboard = value
-		},
-	})
+	winLink, sshLink := m.api.InviteLinks()
+	win := widget.BuildInviteWindow(winLink, sshLink,
+		func(v string) { m.pendingClipboard = v },
+		m.overlay.PopDialog,
+	)
+	m.overlay.PushWindowDialog(win)
 }
