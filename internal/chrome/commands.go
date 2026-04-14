@@ -30,6 +30,7 @@ func (m *Model) dispatchInput(text string) {
 			if t, name := localcmd.HandleThemeLoad(arg, m.api.DataDir(), m.pluginReply); t != nil {
 				m.theme, m.themeName, m.gameWindow = t, name, nil
 				m.persistClientConfig()
+				m.invalidateMenuCache()
 			}
 			return
 		case "/plugin-list":
@@ -45,6 +46,7 @@ func (m *Model) dispatchInput(text string) {
 			m.plugins, m.pluginNames = p, n
 			if changed {
 				m.persistClientConfig()
+				m.invalidateMenuCache()
 			}
 			return
 		case "/plugin-unload":
@@ -56,6 +58,7 @@ func (m *Model) dispatchInput(text string) {
 			m.plugins, m.pluginNames = p, n
 			if changed {
 				m.persistClientConfig()
+				m.invalidateMenuCache()
 			}
 			return
 		case "/shader-list":
@@ -71,6 +74,7 @@ func (m *Model) dispatchInput(text string) {
 			m.shaders, m.shaderNames = s, n
 			if changed {
 				m.persistClientConfig()
+				m.invalidateMenuCache()
 			}
 			return
 		case "/shader-unload":
@@ -82,6 +86,7 @@ func (m *Model) dispatchInput(text string) {
 			m.shaders, m.shaderNames = s, n
 			if changed {
 				m.persistClientConfig()
+				m.invalidateMenuCache()
 			}
 			return
 		case "/shader-up":
@@ -93,6 +98,7 @@ func (m *Model) dispatchInput(text string) {
 			m.shaders, m.shaderNames = s, n
 			if changed {
 				m.persistClientConfig()
+				m.invalidateMenuCache()
 			}
 			return
 		case "/shader-down":
@@ -104,6 +110,7 @@ func (m *Model) dispatchInput(text string) {
 			m.shaders, m.shaderNames = s, n
 			if changed {
 				m.persistClientConfig()
+				m.invalidateMenuCache()
 			}
 			return
 		case "/synth-list":
@@ -250,6 +257,7 @@ func (m *Model) handleSynthLoad(name string) {
 	m.synthName = name
 	m.synthSent = false
 	m.persistClientConfig()
+	m.invalidateMenuCache()
 	m.pluginReply("SoundFont: " + name)
 }
 

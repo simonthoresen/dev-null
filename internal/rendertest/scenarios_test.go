@@ -165,11 +165,13 @@ var scenarios = []renderScenario{
 
 	// ── Warning dialogs ────────────────────────────────────────────────────────
 	{
-		// Alt+F → down×6 → Enter: navigates chrome File menu to Disconnect.
+		// Alt+F → down×8 → Enter: navigates chrome File menu to Exit.
+		// File menu: Games, Saves, ---, Themes, Plugins, Shaders, Synths, Fonts, ---, Invite, ---, Exit
+		// 8 downs from Games → Saves → Themes → Plugins → Shaders → Synths → Fonts → Invite → Exit
 		name:          "chrome_disconnect_dialog",
 		playerID:      "alice",
 		setup:         func(st *state.CentralState) {},
-		chromeKeys:    []string{"alt+f", "down", "down", "down", "down", "down", "down", "enter"},
+		chromeKeys:    []string{"alt+f", "down", "down", "down", "down", "down", "down", "down", "down", "enter"},
 		noIntegration: true,
 	},
 	{

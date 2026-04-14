@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -335,14 +336,16 @@ func (m *Model) consoleMenus() []domain.MenuDef {
 		{
 			Label: "&File",
 			Items: []domain.MenuItemDef{
-				{Label: "&Games...", Handler: func(_ string) { m.pushGamesDialog(0) }},
+				{Label: "&Games", SubItems: m.buildGameSubItems()},
 				{Label: "&Saves...", Handler: func(_ string) { m.pushSavesDialog(0) }},
 				{Label: "---"},
-				{Label: "&Themes...", Handler: func(_ string) { m.pushThemeDialog(0) }},
-				{Label: "&Plugins...", Handler: func(_ string) { m.pushPluginDialog(0) }},
-				{Label: "&Shaders...", Handler: func(_ string) { m.pushShaderDialog(0) }},
+				{Label: "&Themes", SubItems: m.buildThemeSubItems()},
+				{Label: "&Plugins", SubItems: m.buildPluginSubItems()},
+				{Label: "S&haders", SubItems: m.buildShaderSubItems()},
+				{Label: "S&ynths", SubItems: m.buildSynthSubItems()},
+				{Label: "&Fonts", SubItems: m.buildFontSubItems()},
 				{Label: "---"},
-				{Label: "&Invite...", Handler: func(_ string) { m.pushInviteDialog() }},
+				{Label: "&Invite", SubItems: m.buildInviteSubItems()},
 				{Label: "---"},
 				{Label: "E&xit", Hotkey: "ctrl+q", Handler: func(_ string) {
 					m.overlay.PushDialog(domain.DialogRequest{
@@ -391,112 +394,174 @@ func (m *Model) consoleMenus() []domain.MenuDef {
 	}
 }
 
-func (m *Model) pushThemeDialog(cursor int) {
-	localcmd.PushThemeDialog(cursor, localcmd.ThemeDialogOptions{
-		DataDir:          m.api.DataDir(),
-		Overlay:          &m.overlay,
-		CurrentThemeName: m.themeName,
-		CanAdd:           true,
-		OnSelect: func(name string, _ *theme.Theme) {
-			m.submitInput("/theme-load " + name)
-		},
-		OnRemove: m.showThemeRemoveConfirm,
-		Reload:   m.pushThemeDialog,
-	})
-}
+// ─── Sub-menu builders ───────────────────────────────────────────────────────
 
-func (m *Model) pushPluginDialog(cursor int) {
-	localcmd.PushScriptDialog(cursor, localcmd.ScriptDialogOptions{
-		Title:   "Plugins",
-		SubDir:  "plugins",
-		DataDir: m.api.DataDir(),
-		Overlay: &m.overlay,
-		Loaded:  m.pluginNames,
-		CanAdd:  true,
-		OnToggle: func(name string, load bool) {
-			if load {
-				m.submitInput("/plugin-load " + name)
-			} else {
-				m.submitInput("/plugin-unload " + name)
-			}
-		},
-		OnRemove: m.showPluginRemoveConfirm,
-		Reload:   m.pushPluginDialog,
-	})
-}
-
-func (m *Model) pushShaderDialog(cursor int) {
-	localcmd.PushScriptDialog(cursor, localcmd.ScriptDialogOptions{
-		Title:   "Shaders",
-		SubDir:  "shaders",
-		DataDir: m.api.DataDir(),
-		Overlay: &m.overlay,
-		Loaded:  m.shaderNames,
-		CanAdd:  true,
-		OnToggle: func(name string, load bool) {
-			if load {
-				m.submitInput("/shader-load " + name)
-			} else {
-				m.submitInput("/shader-unload " + name)
-			}
-		},
-		OnRemove: m.showShaderRemoveConfirm,
-		Reload:   m.pushShaderDialog,
-	})
-}
-
-func (m *Model) pushGamesDialog(cursor int) {
+func (m *Model) buildGameSubItems() []domain.MenuItemDef {
 	m.api.State().RLock()
 	currentGame := m.api.State().GameName
-	teamCount := len(m.api.State().Teams)
 	m.api.State().RUnlock()
 
-	localcmd.PushGameDialog(cursor, localcmd.GameDialogOptions{
-		DataDir:     m.api.DataDir(),
-		Overlay:     &m.overlay,
-		CurrentGame: currentGame,
-		TeamCount:   teamCount,
-		CanAdd:      true,
-		CanRemove:   true,
-		OnLoad: func(name string) {
-			m.submitInput("/game-load " + name)
-		},
-		OnRemove: m.showGameRemoveConfirm,
-		Reload:   m.pushGamesDialog,
-	})
+	gamesDir := filepath.Join(m.api.DataDir(), "games")
+	available := engine.ListGames(gamesDir)
+	items := []domain.MenuItemDef{
+		{Label: "&Add...", Handler: func(_ string) {
+			localcmd.PushGameAddDialog(&m.overlay, m.api.DataDir(), func(name string) {
+				m.submitInput("/game-load " + name)
+			})
+		}},
+		{Label: "---"},
+	}
+	for _, name := range available {
+		n := name
+		items = append(items, domain.MenuItemDef{
+			Label:   n,
+			Toggle:  true,
+			Checked: func() bool { return strings.EqualFold(n, currentGame) },
+			Handler: func(_ string) { m.submitInput("/game-load " + n) },
+			OnDelete: func(_ string) { m.showGameRemoveConfirm(n) },
+		})
+	}
+	return items
 }
 
-func (m *Model) showGameRemoveConfirm(name string, cursor int) {
-	gamesDir := filepath.Join(m.api.DataDir(), "games")
-	var displayPath string
-	if _, err := os.Stat(filepath.Join(gamesDir, name)); err == nil {
-		displayPath = name + "/"
-	} else {
-		displayPath = name + ".js"
+func (m *Model) buildThemeSubItems() []domain.MenuItemDef {
+	available := theme.ListThemes(m.api.DataDir())
+	items := []domain.MenuItemDef{
+		{Label: "&Add...", Handler: func(_ string) {
+			localcmd.PushThemeAddDialog(&m.overlay, m.api.DataDir(), func(name string) {
+				m.submitInput("/theme-load " + name)
+			})
+		}},
+		{Label: "---"},
 	}
-	m.overlay.PushDialog(domain.DialogRequest{
-		Title:   "Delete Game",
-		Body:    fmt.Sprintf("Delete game from the games folder?\n\n  %s\n\nThis cannot be undone.", displayPath),
-		Buttons: []string{"Delete", "Cancel"},
-		Warning: true,
-		OnClose: func(btn string) {
-			if btn == "Delete" {
-				m.api.State().RLock()
-				active := m.api.State().GameName
-				m.api.State().RUnlock()
-				if strings.EqualFold(active, name) {
-					m.submitInput("/game-unload")
-				}
-				if _, err := os.Stat(filepath.Join(gamesDir, name)); err == nil {
-					os.RemoveAll(filepath.Join(gamesDir, name))
-				} else {
-					os.Remove(filepath.Join(gamesDir, name+".js"))
-				}
-			}
-			m.pushGamesDialog(cursor)
-		},
-	})
+	for _, name := range available {
+		n := name
+		items = append(items, domain.MenuItemDef{
+			Label:   n,
+			Toggle:  true,
+			Checked: func() bool { return strings.EqualFold(n, m.themeName) },
+			Handler: func(_ string) { m.submitInput("/theme-load " + n) },
+			OnDelete: func(_ string) { m.showThemeRemoveConfirm(n) },
+		})
+	}
+	return items
 }
+
+func (m *Model) buildPluginSubItems() []domain.MenuItemDef {
+	return m.buildScriptSubItems("plugins", m.pluginNames, "/plugin-load ", "/plugin-unload ")
+}
+
+func (m *Model) buildShaderSubItems() []domain.MenuItemDef {
+	return m.buildScriptSubItems("shaders", m.shaderNames, "/shader-load ", "/shader-unload ")
+}
+
+func (m *Model) buildScriptSubItems(subDir string, loaded []string, loadCmd, unloadCmd string) []domain.MenuItemDef {
+	dir := filepath.Join(m.api.DataDir(), subDir)
+	available := engine.ListScripts(dir)
+	availableSet := make(map[string]bool)
+	for _, n := range available {
+		availableSet[n] = true
+	}
+	all := append([]string(nil), available...)
+	for _, n := range loaded {
+		if !availableSet[n] {
+			all = append(all, n)
+		}
+	}
+	sort.Strings(all)
+
+	loadedSet := make(map[string]bool)
+	for _, n := range loaded {
+		loadedSet[n] = true
+	}
+
+	// "plugins" → "Plugin", "shaders" → "Shader"
+	noun := strings.TrimSuffix(subDir, "s")
+	if len(noun) > 0 {
+		noun = strings.ToUpper(noun[:1]) + noun[1:]
+	}
+
+	items := []domain.MenuItemDef{
+		{Label: "&Add...", Handler: func(_ string) {
+			localcmd.PushScriptAddDialog(&m.overlay, noun, func(name string) {
+				m.submitInput(loadCmd + name)
+			})
+		}},
+		{Label: "---"},
+	}
+	for _, name := range all {
+		n := name
+		items = append(items, domain.MenuItemDef{
+			Label:  n,
+			Toggle: true,
+			Checked: func() bool { return loadedSet[n] },
+			Handler: func(_ string) {
+				if loadedSet[n] {
+					m.submitInput(unloadCmd + n)
+				} else {
+					m.submitInput(loadCmd + n)
+				}
+			},
+			OnDelete: func(_ string) { m.showScriptRemoveConfirm(subDir, n) },
+		})
+	}
+	return items
+}
+
+func (m *Model) buildSynthSubItems() []domain.MenuItemDef {
+	sf2Dir := filepath.Join(m.api.DataDir(), "soundfonts")
+	available := engine.ListDir(sf2Dir, ".sf2")
+	items := []domain.MenuItemDef{
+		{Label: "&Add...", Handler: func(_ string) {
+			localcmd.PushSynthAddDialog(&m.overlay, func(name string) {
+				// Synths are client-side; console just manages files.
+			})
+		}},
+		{Label: "---"},
+	}
+	for _, name := range available {
+		n := name
+		items = append(items, domain.MenuItemDef{
+			Label:    n,
+			OnDelete: func(_ string) { m.showSynthRemoveConfirm(n) },
+		})
+	}
+	return items
+}
+
+func (m *Model) buildFontSubItems() []domain.MenuItemDef {
+	fontsDir := filepath.Join(m.api.DataDir(), "fonts")
+	available := engine.ListDir(fontsDir, ".flf")
+	items := []domain.MenuItemDef{
+		{Label: "&Add...", Handler: func(_ string) {
+			localcmd.PushFontAddDialog(&m.overlay, func(_ string) {})
+		}},
+		{Label: "---"},
+	}
+	for _, name := range available {
+		n := name
+		items = append(items, domain.MenuItemDef{
+			Label: n,
+			OnDelete: func(_ string) { m.showFontRemoveConfirm(n) },
+		})
+	}
+	return items
+}
+
+func (m *Model) buildInviteSubItems() []domain.MenuItemDef {
+	return []domain.MenuItemDef{
+		{Label: "&Windows", Handler: func(_ string) {
+			winLink, _ := m.api.InviteLinks()
+			m.pendingClipboard = winLink
+		}},
+		{Label: "&SSH", Handler: func(_ string) {
+			_, sshLink := m.api.InviteLinks()
+			m.pendingClipboard = sshLink
+		}},
+	}
+}
+
+// ─── Saves dialog (still a dialog, not a sub-menu) ─────────────────────────
 
 func (m *Model) pushSavesDialog(cursor int) {
 	localcmd.PushSaveDialog(cursor, localcmd.SaveDialogOptions{
@@ -526,6 +591,8 @@ func (m *Model) showSaveRemoveConfirm(gameName, saveName string, cursor int) {
 	})
 }
 
+// ─── Delete confirmation dialogs (used as OnDelete handlers from sub-menus) ──
+
 // scriptExt returns the file extension (".js" or ".lua") for a script in dir.
 func scriptExt(dir, name string) string {
 	if _, err := os.Stat(filepath.Join(dir, name+".lua")); err == nil {
@@ -534,36 +601,38 @@ func scriptExt(dir, name string) string {
 	return ".js"
 }
 
-func (m *Model) showPluginRemoveConfirm(names []string, returnCursor int) {
-	var lines []string
-	for _, name := range names {
-		ext := scriptExt(filepath.Join(m.api.DataDir(), "plugins"), name)
-		lines = append(lines, "  "+name+ext)
+func (m *Model) showGameRemoveConfirm(name string) {
+	gamesDir := filepath.Join(m.api.DataDir(), "games")
+	var displayPath string
+	if _, err := os.Stat(filepath.Join(gamesDir, name)); err == nil {
+		displayPath = name + "/"
+	} else {
+		displayPath = name + ".js"
 	}
-	noun := "plugin"
-	if len(names) > 1 {
-		noun = fmt.Sprintf("%d plugins", len(names))
-	}
-	body := fmt.Sprintf("Delete active %s from the plugins folder?\n\n%s\n\nThis cannot be undone.", noun, strings.Join(lines, "\n"))
 	m.overlay.PushDialog(domain.DialogRequest{
-		Title:   "Delete Plugin Files",
-		Body:    body,
+		Title:   "Delete Game",
+		Body:    fmt.Sprintf("Delete game from the games folder?\n\n  %s\n\nThis cannot be undone.", displayPath),
 		Buttons: []string{"Delete", "Cancel"},
 		Warning: true,
 		OnClose: func(btn string) {
 			if btn == "Delete" {
-				for _, name := range names {
-					m.submitInput("/plugin-unload " + name)
-					ext := scriptExt(filepath.Join(m.api.DataDir(), "plugins"), name)
-					os.Remove(filepath.Join(m.api.DataDir(), "plugins", name+ext))
+				m.api.State().RLock()
+				active := m.api.State().GameName
+				m.api.State().RUnlock()
+				if strings.EqualFold(active, name) {
+					m.submitInput("/game-unload")
+				}
+				if _, err := os.Stat(filepath.Join(gamesDir, name)); err == nil {
+					os.RemoveAll(filepath.Join(gamesDir, name))
+				} else {
+					os.Remove(filepath.Join(gamesDir, name+".js"))
 				}
 			}
-			m.pushPluginDialog(returnCursor)
 		},
 	})
 }
 
-func (m *Model) showThemeRemoveConfirm(name string, returnCursor int) {
+func (m *Model) showThemeRemoveConfirm(name string) {
 	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   "Delete Theme File",
 		Body:    fmt.Sprintf("Delete '%s.json' from the themes folder?\nThis cannot be undone.", name),
@@ -573,36 +642,57 @@ func (m *Model) showThemeRemoveConfirm(name string, returnCursor int) {
 			if btn == "Delete" {
 				os.Remove(filepath.Join(m.api.DataDir(), "themes", name+".json"))
 			}
-			m.pushThemeDialog(returnCursor)
 		},
 	})
 }
 
-func (m *Model) showShaderRemoveConfirm(names []string, returnCursor int) {
-	var lines []string
-	for _, name := range names {
-		ext := scriptExt(filepath.Join(m.api.DataDir(), "shaders"), name)
-		lines = append(lines, "  "+name+ext)
-	}
-	noun := "shader"
-	if len(names) > 1 {
-		noun = fmt.Sprintf("%d shaders", len(names))
-	}
-	body := fmt.Sprintf("Delete active %s from the shaders folder?\n\n%s\n\nThis cannot be undone.", noun, strings.Join(lines, "\n"))
+func (m *Model) showScriptRemoveConfirm(subDir, name string) {
+	dir := filepath.Join(m.api.DataDir(), subDir)
+	ext := scriptExt(dir, name)
+	noun := strings.TrimSuffix(subDir, "s")
 	m.overlay.PushDialog(domain.DialogRequest{
-		Title:   "Delete Shader Files",
-		Body:    body,
+		Title:   "Delete " + strings.ToUpper(noun[:1]) + noun[1:] + " File",
+		Body:    fmt.Sprintf("Delete '%s%s' from the %s folder?\nThis cannot be undone.", name, ext, subDir),
 		Buttons: []string{"Delete", "Cancel"},
 		Warning: true,
 		OnClose: func(btn string) {
 			if btn == "Delete" {
-				for _, name := range names {
+				// Unload first if it's a plugin/shader.
+				if subDir == "plugins" {
+					m.submitInput("/plugin-unload " + name)
+				} else if subDir == "shaders" {
 					m.submitInput("/shader-unload " + name)
-					ext := scriptExt(filepath.Join(m.api.DataDir(), "shaders"), name)
-					os.Remove(filepath.Join(m.api.DataDir(), "shaders", name+ext))
 				}
+				os.Remove(filepath.Join(dir, name+ext))
 			}
-			m.pushShaderDialog(returnCursor)
+		},
+	})
+}
+
+func (m *Model) showSynthRemoveConfirm(name string) {
+	m.overlay.PushDialog(domain.DialogRequest{
+		Title:   "Delete SoundFont",
+		Body:    fmt.Sprintf("Delete '%s.sf2' from the soundfonts folder?\nThis cannot be undone.", name),
+		Buttons: []string{"Delete", "Cancel"},
+		Warning: true,
+		OnClose: func(btn string) {
+			if btn == "Delete" {
+				os.Remove(filepath.Join(m.api.DataDir(), "soundfonts", name+".sf2"))
+			}
+		},
+	})
+}
+
+func (m *Model) showFontRemoveConfirm(name string) {
+	m.overlay.PushDialog(domain.DialogRequest{
+		Title:   "Delete Font",
+		Body:    fmt.Sprintf("Delete '%s.flf' from the fonts folder?\nThis cannot be undone.", name),
+		Buttons: []string{"Delete", "Cancel"},
+		Warning: true,
+		OnClose: func(btn string) {
+			if btn == "Delete" {
+				os.Remove(filepath.Join(m.api.DataDir(), "fonts", name+".flf"))
+			}
 		},
 	})
 }

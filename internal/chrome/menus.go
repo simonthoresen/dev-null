@@ -1,15 +1,14 @@
 package chrome
 
 import (
-	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"dev-null/internal/domain"
 	"dev-null/internal/engine"
 	"dev-null/internal/localcmd"
 	"dev-null/internal/theme"
-	"dev-null/internal/widget"
 )
 
 // invalidateMenuCache forces the next cachedMenus() call to rebuild.
@@ -28,15 +27,16 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 	}
 
 	fileItems := []domain.MenuItemDef{
-		{Label: "&Games...", Handler: func(_ string) { m.pushGamesDialog(0) }},
+		{Label: "&Games", SubItems: m.buildGameSubItems()},
 		{Label: "&Saves...", Handler: func(_ string) { m.pushSavesDialog(0) }},
 		{Label: "---"},
-		{Label: "&Themes...", Handler: func(_ string) { m.pushThemeDialog(0) }},
-		{Label: "&Plugins...", Handler: func(_ string) { m.pushPluginDialog(0) }},
-		{Label: "&Shaders...", Handler: func(_ string) { m.pushShaderDialog(0) }},
-		{Label: "S&ynths...", Handler: func(_ string) { m.pushSynthDialog(0) }},
+		{Label: "&Themes", SubItems: m.buildThemeSubItems()},
+		{Label: "&Plugins", SubItems: m.buildPluginSubItems()},
+		{Label: "S&haders", SubItems: m.buildShaderSubItems()},
+		{Label: "S&ynths", SubItems: m.buildSynthSubItems()},
+		{Label: "&Fonts", SubItems: m.buildFontSubItems()},
 		{Label: "---"},
-		{Label: "&Invite...", Handler: func(_ string) { m.pushInviteDialog() }},
+		{Label: "&Invite", SubItems: m.buildInviteSubItems()},
 		{Label: "---"},
 		{Label: "E&xit", Hotkey: "ctrl+q", Handler: func(playerID string) {
 			m.overlay.PushDialog(domain.DialogRequest{
@@ -104,28 +104,6 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 	return menus
 }
 
-func (m *Model) pushGamesDialog(cursor int) {
-	m.api.State().RLock()
-	currentGame := m.api.State().GameName
-	teamCount := len(m.api.State().Teams)
-	m.api.State().RUnlock()
-
-	opts := localcmd.GameDialogOptions{
-		DataDir:     m.api.DataDir(),
-		Overlay:     &m.overlay,
-		CurrentGame: currentGame,
-		TeamCount:   teamCount,
-		CanAdd:      m.isAdmin(),
-		Reload:      m.pushGamesDialog,
-	}
-	if m.isAdmin() {
-		opts.OnLoad = func(name string) {
-			m.dispatchInput("/game-load " + name)
-		}
-	}
-	localcmd.PushGameDialog(cursor, opts)
-}
-
 func (m *Model) pushSavesDialog(cursor int) {
 	localcmd.PushSaveDialog(cursor, localcmd.SaveDialogOptions{
 		DataDir:  m.api.DataDir(),
@@ -145,100 +123,211 @@ func (m *Model) isAdmin() bool {
 	return p != nil && p.IsAdmin
 }
 
-func (m *Model) pushThemeDialog(cursor int) {
-	localcmd.PushThemeDialog(cursor, localcmd.ThemeDialogOptions{
-		DataDir:          m.api.DataDir(),
-		Overlay:          &m.overlay,
-		CurrentThemeName: m.themeName,
-		CanAdd:           m.isAdmin(),
-		OnSelect: func(name string, _ *theme.Theme) {
-			m.dispatchInput("/theme-load " + name)
-		},
-		Reload: m.pushThemeDialog,
-	})
+// ─── Sub-menu builders ───────────────────────────────────────────────────────
+
+func (m *Model) buildGameSubItems() []domain.MenuItemDef {
+	m.api.State().RLock()
+	currentGame := m.api.State().GameName
+	m.api.State().RUnlock()
+
+	gamesDir := filepath.Join(m.api.DataDir(), "games")
+	available := engine.ListGames(gamesDir)
+	var items []domain.MenuItemDef
+	if m.isAdmin() {
+		items = append(items,
+			domain.MenuItemDef{Label: "&Add...", Handler: func(_ string) {
+				localcmd.PushGameAddDialog(&m.overlay, m.api.DataDir(), func(name string) {
+					m.dispatchInput("/game-load " + name)
+				})
+			}},
+			domain.MenuItemDef{Label: "---"},
+		)
+	}
+	for _, name := range available {
+		n := name // capture
+		item := domain.MenuItemDef{
+			Label:   n,
+			Toggle:  true,
+			Checked: func() bool { return strings.EqualFold(n, currentGame) },
+			Handler: func(_ string) { m.dispatchInput("/game-load " + n) },
+		}
+		items = append(items, item)
+	}
+	return items
 }
 
-func (m *Model) pushPluginDialog(cursor int) {
-	localcmd.PushScriptDialog(cursor, localcmd.ScriptDialogOptions{
-		Title:   "Plugins",
-		SubDir:  "plugins",
-		DataDir: m.api.DataDir(),
-		Overlay: &m.overlay,
-		Loaded:  m.pluginNames,
-		CanAdd:  m.isAdmin(),
-		OnToggle: func(name string, load bool) {
-			if load {
-				m.dispatchInput("/plugin-load " + name)
-			} else {
-				m.dispatchInput("/plugin-unload " + name)
-			}
-		},
-		Reload: m.pushPluginDialog,
-	})
+func (m *Model) buildThemeSubItems() []domain.MenuItemDef {
+	available := theme.ListThemes(m.api.DataDir())
+	var items []domain.MenuItemDef
+	if m.isAdmin() {
+		items = append(items,
+			domain.MenuItemDef{Label: "&Add...", Handler: func(_ string) {
+				localcmd.PushThemeAddDialog(&m.overlay, m.api.DataDir(), func(name string) {
+					m.dispatchInput("/theme-load " + name)
+				})
+			}},
+			domain.MenuItemDef{Label: "---"},
+		)
+	}
+	for _, name := range available {
+		n := name
+		items = append(items, domain.MenuItemDef{
+			Label:   n,
+			Toggle:  true,
+			Checked: func() bool { return strings.EqualFold(n, m.themeName) },
+			Handler: func(_ string) { m.dispatchInput("/theme-load " + n) },
+		})
+	}
+	return items
 }
 
-func (m *Model) pushShaderDialog(cursor int) {
-	localcmd.PushScriptDialog(cursor, localcmd.ScriptDialogOptions{
-		Title:   "Shaders",
-		SubDir:  "shaders",
-		DataDir: m.api.DataDir(),
-		Overlay: &m.overlay,
-		Loaded:  m.shaderNames,
-		CanAdd:  m.isAdmin(),
-		OnToggle: func(name string, load bool) {
-			if load {
-				m.dispatchInput("/shader-load " + name)
-			} else {
-				m.dispatchInput("/shader-unload " + name)
-			}
-		},
-		Reload: m.pushShaderDialog,
-	})
+func (m *Model) buildPluginSubItems() []domain.MenuItemDef {
+	return m.buildScriptSubItems("plugins", m.pluginNames, "/plugin-load ", "/plugin-unload ")
 }
 
-func (m *Model) pushSynthDialog(cursor int) {
-	sf2Dir := filepath.Join(m.api.DataDir(), "soundfonts")
-	entries, _ := os.ReadDir(sf2Dir)
-	var names []string
-	var tags []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sf2") {
-			name := strings.TrimSuffix(e.Name(), ".sf2")
-			names = append(names, name)
-			if name == m.synthName {
-				tags = append(tags, "(●)")
-			} else {
-				tags = append(tags, "(○)")
-			}
+func (m *Model) buildShaderSubItems() []domain.MenuItemDef {
+	return m.buildScriptSubItems("shaders", m.shaderNames, "/shader-load ", "/shader-unload ")
+}
+
+func (m *Model) buildScriptSubItems(subDir string, loaded []string, loadCmd, unloadCmd string) []domain.MenuItemDef {
+	dir := filepath.Join(m.api.DataDir(), subDir)
+	available := engine.ListScripts(dir)
+	availableSet := make(map[string]bool)
+	for _, n := range available {
+		availableSet[n] = true
+	}
+	// Merge loaded scripts that may not be on disk.
+	all := append([]string(nil), available...)
+	for _, n := range loaded {
+		if !availableSet[n] {
+			all = append(all, n)
 		}
 	}
-	if len(names) == 0 {
-		m.overlay.PushDialog(domain.DialogRequest{
-			Title:   "SoundFonts",
-			Body:    "No SoundFonts found in soundfonts/",
-			Buttons: []string{"Close"},
-		})
-		return
+	sort.Strings(all)
+
+	loadedSet := make(map[string]bool)
+	for _, n := range loaded {
+		loadedSet[n] = true
 	}
-	m.overlay.PushDialog(domain.DialogRequest{
-		Title:     "SoundFonts",
-		ListItems: names,
-		ListTags:  tags,
-		Buttons:   []string{"Close"},
-		OnListEnter: func(idx int) {
-			m.dispatchInput("/synth-load " + names[idx])
-			m.overlay.PopDialog()
-			m.pushSynthDialog(idx)
-		},
-	})
-	m.overlay.SetTopCursor(cursor)
+
+	// "plugins" → "Plugin", "shaders" → "Shader"
+	noun := strings.TrimSuffix(subDir, "s")
+	if len(noun) > 0 {
+		noun = strings.ToUpper(noun[:1]) + noun[1:]
+	}
+	var items []domain.MenuItemDef
+	if m.isAdmin() {
+		items = append(items,
+			domain.MenuItemDef{Label: "&Add...", Handler: func(_ string) {
+				localcmd.PushScriptAddDialog(&m.overlay, noun, func(name string) {
+					m.dispatchInput(loadCmd + name)
+				})
+			}},
+			domain.MenuItemDef{Label: "---"},
+		)
+	}
+	for _, name := range all {
+		n := name
+		items = append(items, domain.MenuItemDef{
+			Label:  n,
+			Toggle: true,
+			Checked: func() bool { return loadedSet[n] },
+			Handler: func(_ string) {
+				if loadedSet[n] {
+					m.dispatchInput(unloadCmd + n)
+				} else {
+					m.dispatchInput(loadCmd + n)
+				}
+			},
+		})
+	}
+	return items
 }
 
-func (m *Model) pushInviteDialog() {
-	winLink, sshLink := m.api.InviteLinks()
-	win := widget.BuildInviteWindow(winLink, sshLink,
-		func(v string) { m.pendingClipboard = v },
-		m.overlay.PopDialog,
-	)
-	m.overlay.PushWindowDialog(win)
+func (m *Model) buildSynthSubItems() []domain.MenuItemDef {
+	sf2Dir := filepath.Join(m.api.DataDir(), "soundfonts")
+	available := engine.ListDir(sf2Dir, ".sf2")
+	var items []domain.MenuItemDef
+	if m.isAdmin() {
+		items = append(items,
+			domain.MenuItemDef{Label: "&Add...", Handler: func(_ string) {
+				localcmd.PushSynthAddDialog(&m.overlay, func(name string) {
+					m.dispatchInput("/synth-load " + name)
+				})
+			}},
+			domain.MenuItemDef{Label: "---"},
+		)
+	}
+	for _, name := range available {
+		n := name
+		items = append(items, domain.MenuItemDef{
+			Label:   n,
+			Toggle:  true,
+			Checked: func() bool { return n == m.synthName },
+			Handler: func(_ string) { m.dispatchInput("/synth-load " + n) },
+		})
+	}
+	return items
+}
+
+func (m *Model) buildFontSubItems() []domain.MenuItemDef {
+	fontsDir := filepath.Join(m.api.DataDir(), "fonts")
+	available := engine.ListDir(fontsDir, ".flf")
+	var items []domain.MenuItemDef
+	if m.isAdmin() {
+		items = append(items,
+			domain.MenuItemDef{Label: "&Add...", Handler: func(_ string) {
+				localcmd.PushFontAddDialog(&m.overlay, func(name string) {
+					// Fonts don't need a "load" command — they're just files.
+					// After adding, invalidate menu cache so it shows up.
+					m.invalidateMenuCache()
+				})
+			}},
+			domain.MenuItemDef{Label: "---"},
+		)
+	}
+	for _, name := range available {
+		n := name
+		items = append(items, domain.MenuItemDef{
+			Label: n,
+			Handler: func(_ string) {
+				m.injectFontTag(n)
+			},
+		})
+	}
+	return items
+}
+
+func (m *Model) buildInviteSubItems() []domain.MenuItemDef {
+	return []domain.MenuItemDef{
+		{Label: "&Windows", Handler: func(_ string) {
+			winLink, _ := m.api.InviteLinks()
+			m.pendingClipboard = winLink
+			m.chatLines = append(m.chatLines, "Windows invite link copied to clipboard")
+		}},
+		{Label: "&SSH", Handler: func(_ string) {
+			_, sshLink := m.api.InviteLinks()
+			m.pendingClipboard = sshLink
+			m.chatLines = append(m.chatLines, "SSH invite link copied to clipboard")
+		}},
+	}
+}
+
+// injectFontTag inserts <font=name></font> at the current cursor position in the chat input.
+func (m *Model) injectFontTag(fontName string) {
+	// Pick the active input based on whether we're in the game view.
+	input := m.lobbyInput
+	if m.inActiveGame {
+		input = m.playingInput
+	}
+	if input == nil || input.Model == nil {
+		return
+	}
+	openTag := "<font=" + fontName + ">"
+	closeTag := "</font>"
+	val := input.Model.Value()
+	pos := input.Model.Position()
+	newVal := val[:pos] + openTag + closeTag + val[pos:]
+	input.Model.SetValue(newVal)
+	input.Model.SetCursor(pos + len(openTag))
 }

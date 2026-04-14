@@ -296,11 +296,11 @@ func (o *OverlayState) handleDropdownKey(key string, menus []domain.MenuDef, pla
 			o.DropScrollOff = 0
 		} else {
 			o.DropCursor = prev
-			o.autoOpenSubMenu(items, o.DropCursor)
+			o.closeSubMenus()
 		}
 	case "down":
 		o.DropCursor = NextSelectable(items, o.DropCursor)
-		o.autoOpenSubMenu(items, o.DropCursor)
+		o.closeSubMenus()
 	case "left":
 		idx := o.MenuCursor - 1
 		if idx < 0 {
