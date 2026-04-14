@@ -413,11 +413,13 @@ func (m *Model) buildGameSubItems() []domain.MenuItemDef {
 	}
 	for _, name := range available {
 		n := name
+		label := "  " + n
+		if strings.EqualFold(n, currentGame) {
+			label = "→ " + n
+		}
 		items = append(items, domain.MenuItemDef{
-			Label:   n,
-			Toggle:  true,
-			Checked: func() bool { return strings.EqualFold(n, currentGame) },
-			Handler: func(_ string) { m.submitInput("/game-load " + n) },
+			Label:    label,
+			Handler:  func(_ string) { m.submitInput("/game-load " + n) },
 			OnDelete: func(_ string) { m.showGameRemoveConfirm(n) },
 		})
 	}

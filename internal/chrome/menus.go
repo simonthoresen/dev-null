@@ -8,7 +8,9 @@ import (
 	"dev-null/internal/domain"
 	"dev-null/internal/engine"
 	"dev-null/internal/localcmd"
+	"dev-null/internal/render"
 	"dev-null/internal/theme"
+	"dev-null/internal/widget"
 )
 
 // invalidateMenuCache forces the next cachedMenus() call to rebuild.
@@ -145,10 +147,12 @@ func (m *Model) buildGameSubItems() []domain.MenuItemDef {
 	}
 	for _, name := range available {
 		n := name // capture
+		label := "  " + n
+		if strings.EqualFold(n, currentGame) {
+			label = "→ " + n
+		}
 		item := domain.MenuItemDef{
-			Label:   n,
-			Toggle:  true,
-			Checked: func() bool { return strings.EqualFold(n, currentGame) },
+			Label:   label,
 			Handler: func(_ string) { m.dispatchInput("/game-load " + n) },
 		}
 		items = append(items, item)
@@ -303,14 +307,27 @@ func (m *Model) buildInviteSubItems() []domain.MenuItemDef {
 		{Label: "&Windows", Handler: func(_ string) {
 			winLink, _ := m.api.InviteLinks()
 			m.pendingClipboard = winLink
+			m.chatLines = append(m.chatLines, m.renderLogoLines(widget.RenderWindowsLogo)...)
 			m.chatLines = append(m.chatLines, "Windows invite link copied to clipboard")
 		}},
 		{Label: "&SSH", Handler: func(_ string) {
 			_, sshLink := m.api.InviteLinks()
 			m.pendingClipboard = sshLink
+			m.chatLines = append(m.chatLines, m.renderLogoLines(widget.RenderSSHLogo)...)
 			m.chatLines = append(m.chatLines, "SSH invite link copied to clipboard")
 		}},
 	}
+}
+
+// renderLogoLines renders a logo into ANSI strings suitable for chat display.
+func (m *Model) renderLogoLines(renderFn func(*render.ImageBuffer, int, int)) []string {
+	buf := render.NewImageBuffer(widget.LogoArtWidth, widget.LogoArtHeight)
+	renderFn(buf, 0, 0)
+	s := buf.ToString(m.ColorProfile)
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, "\n")
 }
 
 // injectFontTag inserts <font=name></font> at the current cursor position in the chat input.

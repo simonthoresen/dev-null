@@ -1,9 +1,9 @@
  File │ Graphics │ Help
 ╔════════════════╗════════════════════════════╤════════════════════════════════╗
 ║►Games        ► ║╔══════════════╗           ░│    Unassigned                  ║
-║ Saves...       ║║►  Add...     ║           ░│                                ║
+║ Saves...       ║║►Add...       ║           ░│                                ║
 ║────────────────║║──────────────║           ░│    Team alice                  ║
-║ Themes       ► ║║ √ cube       ║           ░│    alice                       ║
+║ Themes       ► ║║ → cube       ║           ░│    alice                       ║
 ║ Plugins      ► ║║   orbits     ║           ░│                                ║
 ║ Shaders      ► ║╚══════════════╝           ░│                                ║
 ║ Synths       ► ║                           ░│                                ║
