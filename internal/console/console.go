@@ -481,16 +481,18 @@ func (m *Model) buildFontSubItems() []domain.MenuItemDef {
 }
 
 func (m *Model) buildInviteSubItems() []domain.MenuItemDef {
-	return []domain.MenuItemDef{
-		{Label: "&Windows", Handler: func(_ string) {
-			winLink, _ := m.api.InviteLinks()
-			m.pendingClipboard = winLink
-		}},
-		{Label: "&SSH", Handler: func(_ string) {
-			_, sshLink := m.api.InviteLinks()
-			m.pendingClipboard = sshLink
-		}},
-	}
+	winLink, sshLink := m.api.InviteLinks()
+	return localcmd.BuildInviteSubItems(localcmd.InviteSubMenuOptions{
+		WinLink:      winLink,
+		SSHLink:      sshLink,
+		ColorProfile: m.profile,
+		OnCopy:       func(link string) { m.pendingClipboard = link },
+		OnOutput: func(lines []string) {
+			for _, line := range lines {
+				m.appendLog(line)
+			}
+		},
+	})
 }
 
 // ─── Saves dialog (still a dialog, not a sub-menu) ─────────────────────────

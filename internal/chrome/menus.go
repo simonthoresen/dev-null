@@ -6,8 +6,6 @@ import (
 	"dev-null/internal/domain"
 	"dev-null/internal/engine"
 	"dev-null/internal/localcmd"
-	"dev-null/internal/render"
-	"dev-null/internal/widget"
 )
 
 // invalidateMenuCache forces the next cachedMenus() call to rebuild.
@@ -227,31 +225,14 @@ func (m *Model) buildFontSubItems() []domain.MenuItemDef {
 }
 
 func (m *Model) buildInviteSubItems() []domain.MenuItemDef {
-	return []domain.MenuItemDef{
-		{Label: "&Windows", Handler: func(_ string) {
-			winLink, _ := m.api.InviteLinks()
-			m.pendingClipboard = winLink
-			m.chatLines = append(m.chatLines, m.renderLogoLines(widget.RenderWindowsLogo)...)
-			m.chatLines = append(m.chatLines, "Windows invite link copied to clipboard")
-		}},
-		{Label: "&SSH", Handler: func(_ string) {
-			_, sshLink := m.api.InviteLinks()
-			m.pendingClipboard = sshLink
-			m.chatLines = append(m.chatLines, m.renderLogoLines(widget.RenderSSHLogo)...)
-			m.chatLines = append(m.chatLines, "SSH invite link copied to clipboard")
-		}},
-	}
-}
-
-// renderLogoLines renders a logo into ANSI strings suitable for chat display.
-func (m *Model) renderLogoLines(renderFn func(*render.ImageBuffer, int, int)) []string {
-	buf := render.NewImageBuffer(widget.LogoArtWidth, widget.LogoArtHeight)
-	renderFn(buf, 0, 0)
-	s := buf.ToString(m.ColorProfile)
-	if s == "" {
-		return nil
-	}
-	return strings.Split(s, "\n")
+	winLink, sshLink := m.api.InviteLinks()
+	return localcmd.BuildInviteSubItems(localcmd.InviteSubMenuOptions{
+		WinLink:      winLink,
+		SSHLink:      sshLink,
+		ColorProfile: m.ColorProfile,
+		OnCopy:       func(link string) { m.pendingClipboard = link },
+		OnOutput:     func(lines []string) { m.chatLines = append(m.chatLines, lines...) },
+	})
 }
 
 // injectFontTag inserts <font=name></font> at the current cursor position in the chat input.
