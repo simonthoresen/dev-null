@@ -4,7 +4,7 @@
 ║ Saves...       ║║►Add...       ║           ░│                                ║
 ║────────────────║║──────────────║           ░│    Team alice                  ║
 ║ Themes       ► ║║ → cube       ║           ░│    alice                       ║
-║ Plugins      ► ║║   orbits     ║           ░│                                ║
+║ Plugins      ► ║║ orbits       ║           ░│                                ║
 ║ Shaders      ► ║╚══════════════╝           ░│                                ║
 ║ Synths       ► ║                           ░│                                ║
 ║ Fonts        ► ║                           ░│                                ║

@@ -3,8 +3,8 @@
 ║ Games        ► ║╔══════════════╗                                            ░║
 ║ Saves...       ║║ Add...       ║                                            ░║
 ║────────────────║║──────────────║                                            ░║
-║ Themes       ► ║║   cube       ║                                            ░║
-║ Plugins      ► ║║   orbits     ║                                            ░║
+║ Themes       ► ║║ cube         ║                                            ░║
+║ Plugins      ► ║║ orbits       ║                                            ░║
 ║ Shaders      ► ║╚══════════════╝                                            ░║
 ║ Synths       ► ║                                                            ░║
 ║ Fonts        ► ║                                                            ░║

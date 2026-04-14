@@ -1,6 +1,6 @@
 // voyage.js — Amiga-style space flythrough demo
-// Camera travels from deep space through the solar system, approaches Earth,
-// enters the atmosphere, and lands at the Egyptian pyramids in a cloud of dust.
+// A single continuous camera travels from deep space through the solar system,
+// approaches Earth, enters the atmosphere, and lands at the Egyptian pyramids.
 //
 // Load with: /game load voyage
 //
@@ -11,9 +11,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 var T_FLY     = 4;   // Camera starts moving toward Earth
-var T_GLOBE   = 16;  // Transition: space → Earth globe
-var T_ATMO    = 28;  // Transition: globe → atmosphere/surface
-var T_SURFACE = 34;  // Surface clearly visible, pyramids growing
 var T_LAND    = 44;  // Touchdown — dust kicks up
 var T_SETTLE  = 50;  // Dust settling
 var T_END     = 55;  // Game over
@@ -95,8 +92,7 @@ var SCROLL_TEXT = "VOYAGE  ///  A DEV-NULL DEMO  ///  GREETINGS TO ALL PLAYERS A
 
 var time = 0;
 var ended = false;
-var midiAmbient = false;
-var midiResolve = false;
+var midiCue = 0;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GAME OBJECT
@@ -110,32 +106,12 @@ var Game = {
     begin: function() {
         time = 0;
         ended = false;
-        midiAmbient = false;
-        midiResolve = false;
+        midiCue = 0;
     },
 
     update: function(dt) {
         time += dt;
-
-        // MIDI ambient pad in space
-        if (time > 2 && !midiAmbient) {
-            midiAmbient = true;
-            midiProgram(0, 89);          // Pad 2 (Warm)
-            midiNote(0, 36, 35, 24000);  // C2 — deep drone
-            midiNote(0, 48, 30, 24000);  // C3
-            midiNote(0, 55, 25, 24000);  // G3
-        }
-
-        // MIDI resolution chord at landing
-        if (time > T_SETTLE + 1 && !midiResolve) {
-            midiResolve = true;
-            midiProgram(1, 88);          // Pad 1 (New Age)
-            midiNote(1, 60, 55, 6000);   // C4
-            midiNote(1, 64, 50, 6000);   // E4
-            midiNote(1, 67, 50, 6000);   // G4
-            midiNote(1, 72, 45, 6000);   // C5
-        }
-
+        updateMusic();
         if (time >= T_END && !ended) {
             ended = true;
             gameOver([{ name: "Voyage", result: "Complete" }]);
@@ -149,93 +125,81 @@ var Game = {
         ctx.setFillStyle("#000011");
         ctx.fillRect(0, 0, w, h);
 
-        // Render current phase
-        if (time < T_GLOBE) {
-            renderSpacePhase(ctx, w, h);
-        } else if (time < T_ATMO) {
-            renderGlobePhase(ctx, w, h);
-        } else {
-            renderSurfacePhase(ctx, w, h);
+        // ── Continuous camera ───────────────────────────────────────────
+        var flyT = smooth(progress(time, T_FLY, T_LAND));
+        var earthAngle = time * PLANETS[2].spd + PLANETS[2].a0;
+        var earthWX = Math.cos(earthAngle) * PLANETS[2].orbit;
+        var earthWY = Math.sin(earthAngle) * PLANETS[2].orbit;
+
+        // Camera arrives at Earth early, then stays locked on
+        var posT = smooth(clamp(flyT * 3, 0, 1));
+        var camX = lerp(0, earthWX, posT);
+        var camY = lerp(0, earthWY, posT);
+
+        // Exponential zoom: 0.35 → 525
+        var zoom = 0.35 * Math.pow(1500, flyT);
+        var scale = zoom * w / 1200;
+
+        // Earth's projected size and screen position
+        var earthScreenR = PLANETS[2].r * scale;
+        var relR = earthScreenR / w;
+        var cx = w / 2;
+        var cy = h / 2;
+        var earthSX = cx + (earthWX - camX) * scale;
+        var earthSY = cy + (earthWY - camY) * scale;
+
+        // ── Layer 1: Stars and solar system ─────────────────────────────
+        if (relR < 0.20) {
+            renderStarfield(ctx, w, h, cx, cy, camX, camY, scale);
+            if (flyT > 0.03) {
+                renderSpeedLines(ctx, w, h, cx, cy, flyT);
+            }
+            renderSolarSystem(ctx, w, h, cx, cy, camX, camY, scale);
+            // Fade overlay as Earth grows
+            if (relR > 0.04) {
+                var spaceFade = smooth((relR - 0.04) / 0.16);
+                ctx.setFillStyle(hex(0, 0, 17, Math.round(spaceFade * 255)));
+                ctx.fillRect(0, 0, w, h);
+            }
         }
 
-        // Transition 1: space → globe (fade through deep blue)
-        var t1 = transitionOverlay(T_GLOBE, 1.5);
-        if (t1 > 0) {
-            ctx.setFillStyle(hex(0, 0, 20, Math.round(t1 * 255)));
-            ctx.fillRect(0, 0, w, h);
+        // ── Layer 2: Detailed globe ─────────────────────────────────────
+        if (relR > 0.02 && relR < 1.05) {
+            drawGlobe(ctx, earthSX, earthSY, earthScreenR, w, h);
+            // Atmosphere rim glow
+            if (earthScreenR > 20 && relR < 0.7) {
+                for (var i = 3; i >= 1; i--) {
+                    var gr = earthScreenR + i * Math.max(2, earthScreenR * 0.03);
+                    ctx.setFillStyle(hex(80, 130, 255, Math.round(30 / i)));
+                    ctx.beginPath();
+                    ctx.arc(earthSX, earthSY, gr, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
         }
 
-        // Transition 2: globe → surface (atmospheric orange flash)
-        var t2 = transitionOverlay(T_ATMO, 1.5);
-        if (t2 > 0) {
-            ctx.setFillStyle(hex(
-                Math.round(200 * t2),
-                Math.round(100 * t2),
-                Math.round(20 * t2),
-                Math.round(t2 * 230)
-            ));
-            ctx.fillRect(0, 0, w, h);
+        // ── Layer 3: Atmospheric entry glow ─────────────────────────────
+        if (relR > 0.6 && relR < 1.5) {
+            var entryT = clamp((relR - 0.6) / 0.9, 0, 1);
+            var glow = Math.sin(entryT * Math.PI);
+            if (glow > 0.01) {
+                ctx.setFillStyle(hex(220, 160, 80, Math.round(glow * 250)));
+                ctx.fillRect(0, 0, w, h);
+            }
         }
 
-        // Copper bar at bottom
+        // ── Layer 4: Surface ────────────────────────────────────────────
+        if (relR > 1.05) {
+            renderSurfaceLayer(ctx, w, h);
+        }
+
+        // ── Copper bar ──────────────────────────────────────────────────
         renderCopperBar(ctx, w, h);
 
-        // Fade in from black at start
+        // ── Fade in from black ──────────────────────────────────────────
         if (time < 2) {
             ctx.setFillStyle(hex(0, 0, 0, Math.round((1 - time / 2) * 255)));
             ctx.fillRect(0, 0, w, h);
-        }
-    },
-
-    // ── ASCII fallback ──────────────────────────────────────────────────
-    renderAscii: function(buf, pid, ox, oy, w, h) {
-        buf.fill(ox, oy, w, h, " ", null, "#000011");
-
-        // Stars
-        for (var i = 0; i < 80; i++) {
-            var sx = Math.floor(hashF(i, 1) * w);
-            var sy = Math.floor(hashF(i, 2) * (h - 2));
-            var twk = (Math.sin(time * 2.5 + i * 1.3) + 1) * 0.5;
-            var v = Math.round((hashF(i, 3) * 0.5 + 0.5) * twk * 255);
-            buf.setChar(ox + sx, oy + sy, "\u00B7", hex(v, v, v), null);
-        }
-
-        // Phase label
-        var label = phaseLabel();
-        var tx = Math.floor((w - label.length) / 2);
-        var ty = Math.floor(h / 2) - 1;
-        buf.writeString(ox + Math.max(0, tx), oy + ty, label, "#FFFFFF", null, ATTR_BOLD);
-
-        // Progress bar
-        var pct = clamp(time / T_END, 0, 1);
-        var barW = Math.min(w - 6, 50);
-        var barX = Math.floor((w - barW) / 2);
-        var filled = Math.floor(pct * barW);
-        for (var i = 0; i < barW; i++) {
-            buf.setChar(ox + barX + i, oy + ty + 2,
-                i < filled ? "\u2588" : "\u2591",
-                i < filled ? "#4488EE" : "#222244", null);
-        }
-        var pctStr = Math.floor(pct * 100) + "%";
-        buf.writeString(ox + barX + barW + 1, oy + ty + 2, pctStr, "#666688", null);
-
-        // Scrolling rainbow text at bottom
-        var scrollY = oy + h - 1;
-        var scrollPos = Math.floor(time * 8) % SCROLL_TEXT.length;
-        for (var i = 0; i < w; i++) {
-            var ci = (scrollPos + i) % SCROLL_TEXT.length;
-            var ch = SCROLL_TEXT.charAt(ci);
-            var hue = ((i * 4 + time * 60) % 360) / 60;
-            var sector = Math.floor(hue) % 6;
-            var frac = hue - Math.floor(hue);
-            var cr, cg, cb;
-            if      (sector === 0) { cr = 255; cg = frac * 255; cb = 0; }
-            else if (sector === 1) { cr = (1 - frac) * 255; cg = 255; cb = 0; }
-            else if (sector === 2) { cr = 0; cg = 255; cb = frac * 255; }
-            else if (sector === 3) { cr = 0; cg = (1 - frac) * 255; cb = 255; }
-            else if (sector === 4) { cr = frac * 255; cg = 0; cb = 255; }
-            else                   { cr = 255; cg = 0; cb = (1 - frac) * 255; }
-            buf.setChar(ox + i, scrollY, ch, hex(cr, cg, cb), "#0A0A1A");
         }
     },
 
@@ -250,45 +214,89 @@ var Game = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// MUSIC — continuous evolution across the journey
+// ═══════════════════════════════════════════════════════════════════════════
+
+function updateMusic() {
+    // Cue 1 (t=2): Deep space drone — low pad
+    if (midiCue < 1 && time > 2) {
+        midiCue = 1;
+        midiProgram(0, 89);           // Pad 2 (Warm)
+        midiNote(0, 36, 35, 52000);   // C2 — deep drone (plays whole demo)
+        midiNote(0, 48, 30, 52000);   // C3
+        midiNote(0, 55, 25, 52000);   // G3
+    }
+
+    // Cue 2 (t=10): Flythrough begins — add movement
+    if (midiCue < 2 && time > 10) {
+        midiCue = 2;
+        midiProgram(1, 91);           // Pad 4 (Choir)
+        midiNote(1, 60, 25, 18000);   // C4 — ethereal choir swell
+        midiNote(1, 67, 20, 18000);   // G4
+    }
+
+    // Cue 3 (t=20): Approaching Earth — rising tension
+    if (midiCue < 3 && time > 20) {
+        midiCue = 3;
+        midiProgram(2, 90);           // Pad 3 (Polysynth)
+        midiNote(2, 64, 30, 12000);   // E4
+        midiNote(2, 69, 25, 12000);   // A4
+    }
+
+    // Cue 4 (t=30): Globe fills view — build
+    if (midiCue < 4 && time > 30) {
+        midiCue = 4;
+        midiNote(1, 72, 30, 8000);    // C5 — choir climbs
+        midiNote(2, 71, 28, 8000);    // B4 — tension
+    }
+
+    // Cue 5 (t=35): Atmospheric entry — dramatic
+    if (midiCue < 5 && time > 35) {
+        midiCue = 5;
+        midiProgram(3, 92);           // Pad 5 (Bowed)
+        midiNote(3, 48, 45, 10000);   // C3 — dramatic entry
+        midiNote(3, 55, 40, 10000);   // G3
+        midiNote(3, 60, 38, 10000);   // C4
+    }
+
+    // Cue 6 (t=44): Landing — impact
+    if (midiCue < 6 && time > T_LAND) {
+        midiCue = 6;
+        midiProgram(4, 47);           // Timpani
+        midiNote(4, 36, 70, 2000);    // C2 — impact boom
+        midiNote(4, 41, 55, 1500);    // F2
+    }
+
+    // Cue 7 (t=51): Resolution — final chord
+    if (midiCue < 7 && time > T_SETTLE + 1) {
+        midiCue = 7;
+        midiProgram(5, 88);           // Pad 1 (New Age)
+        midiNote(5, 60, 55, 6000);    // C4
+        midiNote(5, 64, 50, 6000);    // E4
+        midiNote(5, 67, 50, 6000);    // G4
+        midiNote(5, 72, 45, 6000);    // C5
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
 function phaseLabel() {
-    if (time < T_FLY)     return "Deep Space";
-    if (time < T_GLOBE)   return "Solar System Flythrough";
-    if (time < T_ATMO)    return "Approaching Earth";
-    if (time < T_SURFACE) return "Entering Atmosphere";
-    if (time < T_LAND)    return "Descending to Giza";
-    if (time < T_SETTLE)  return "Landing...";
+    if (time < T_FLY)    return "Deep Space";
+    if (time < 20)       return "Solar System Flythrough";
+    if (time < 32)       return "Approaching Earth";
+    if (time < 36)       return "Entering Atmosphere";
+    if (time < T_LAND)   return "Descending to Giza";
+    if (time < T_SETTLE) return "Landing...";
     return "Voyage Complete";
 }
 
-function transitionOverlay(centerT, halfDur) {
-    var dt = Math.abs(time - centerT);
-    if (dt >= halfDur) return 0;
-    return 1 - dt / halfDur;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
-// PHASE 1: SPACE — Solar system flythrough
+// STARFIELD
 // ═══════════════════════════════════════════════════════════════════════════
 
-function renderSpacePhase(ctx, w, h) {
-    var cx = w / 2;
-    var cy = h / 2;
-
-    // Camera: pan from origin toward Earth, zoom in
-    var flyT = smooth(progress(time, T_FLY, T_GLOBE));
-    var earthA  = time * PLANETS[2].spd + PLANETS[2].a0;
-    var earthWX = Math.cos(earthA) * PLANETS[2].orbit;
-    var earthWY = Math.sin(earthA) * PLANETS[2].orbit;
-
-    var camX  = lerp(0, earthWX, flyT);
-    var camY  = lerp(0, earthWY, flyT);
-    var zoom  = lerp(0.35, 4.0, flyT);
-    var scale = zoom * w / 1200;
-
-    // ── Stars ──
+function renderStarfield(ctx, w, h, cx, cy, camX, camY, scale) {
     for (var i = 0; i < STARS.length; i++) {
         var s  = STARS[i];
         var sx = cx + (s.x - camX * s.z * 0.8) * scale * 0.25;
@@ -300,29 +308,39 @@ function renderSpacePhase(ctx, w, h) {
         ctx.setFillStyle(hex(v, v, v));
         ctx.fillRect(sx, sy, Math.max(1, s.z * 1.2), Math.max(1, s.z * 1.2));
     }
+}
 
-    // ── Speed lines during flythrough ──
-    if (flyT > 0.05 && flyT < 0.95) {
-        var lineAlpha = Math.sin(flyT * Math.PI) * 0.4;
-        for (var i = 0; i < 25; i++) {
-            var lx = ((hashF(i, 42) * 2 - 1) * w * 0.8 + cx);
-            var ly = ((hashF(i, 73) * 2 - 1) * h * 0.8 + cy);
-            var ll = 4 + hashF(i, 99) * 12;
-            var dx = (lx - cx); var dy = (ly - cy);
-            var len = Math.sqrt(dx * dx + dy * dy) + 0.001;
-            dx /= len; dy /= len;
-            var a = Math.round(lineAlpha * 140);
-            if (a > 2) {
-                ctx.setStrokeStyle(hex(160, 180, 255, a));
-                ctx.setLineWidth(1);
-                ctx.beginPath();
-                ctx.moveTo(lx, ly);
-                ctx.lineTo(lx + dx * ll * flyT * 3, ly + dy * ll * flyT * 3);
-                ctx.stroke();
-            }
+// ═══════════════════════════════════════════════════════════════════════════
+// SPEED LINES
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderSpeedLines(ctx, w, h, cx, cy, flyT) {
+    var lineAlpha = Math.sin(flyT * Math.PI) * 0.4;
+    if (lineAlpha < 0.01) return;
+    for (var i = 0; i < 25; i++) {
+        var lx = ((hashF(i, 42) * 2 - 1) * w * 0.8 + cx);
+        var ly = ((hashF(i, 73) * 2 - 1) * h * 0.8 + cy);
+        var ll = 4 + hashF(i, 99) * 12;
+        var dx = (lx - cx); var dy = (ly - cy);
+        var len = Math.sqrt(dx * dx + dy * dy) + 0.001;
+        dx /= len; dy /= len;
+        var a = Math.round(lineAlpha * 140);
+        if (a > 2) {
+            ctx.setStrokeStyle(hex(160, 180, 255, a));
+            ctx.setLineWidth(1);
+            ctx.beginPath();
+            ctx.moveTo(lx, ly);
+            ctx.lineTo(lx + dx * ll * flyT * 3, ly + dy * ll * flyT * 3);
+            ctx.stroke();
         }
     }
+}
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SOLAR SYSTEM (orbits, sun, planets — Earth handled by globe renderer)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderSolarSystem(ctx, w, h, cx, cy, camX, camY, scale) {
     // ── Orbit rings ──
     for (var i = 0; i < PLANETS.length; i++) {
         var orbitScreenR = PLANETS[i].orbit * scale;
@@ -352,8 +370,9 @@ function renderSpacePhase(ctx, w, h) {
         ctx.fillCircle(sunSX, sunSY, sunSR * 0.6);
     }
 
-    // ── Planets ──
+    // ── Planets (skip Earth — globe renderer handles it) ──
     for (var i = 0; i < PLANETS.length; i++) {
+        if (i === 2) continue;
         var p     = PLANETS[i];
         var angle = time * p.spd + p.a0;
         var pwx   = Math.cos(angle) * p.orbit;
@@ -379,45 +398,6 @@ function renderSpacePhase(ctx, w, h) {
             ctx.beginPath();
             ctx.arc(psx, psy, pr * 1.7, 0, Math.PI * 2);
             ctx.stroke();
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// PHASE 2: GLOBE — Earth approach
-// ═══════════════════════════════════════════════════════════════════════════
-
-function renderGlobePhase(ctx, w, h) {
-    var globeT = smooth(progress(time, T_GLOBE, T_ATMO));
-
-    // Stars fade behind globe
-    var starFade = 1 - globeT * 0.7;
-    for (var i = 0; i < STARS.length; i++) {
-        var s  = STARS[i];
-        var sx = ((s.x + 2000) / 4000) * w;
-        var sy = ((s.y + 2000) / 4000) * h;
-        if (sx < 0 || sx >= w || sy < 0 || sy >= h) continue;
-        var v = Math.round(s.bright * starFade * 200);
-        if (v > 10) {
-            ctx.setFillStyle(hex(v, v, v));
-            ctx.fillRect(sx, sy, 1, 1);
-        }
-    }
-
-    // Globe grows from small to filling the screen
-    var maxR  = Math.max(w, h) * 0.8;
-    var radius = lerp(15, maxR, globeT * globeT);
-
-    drawGlobe(ctx, w / 2, h / 2, radius, w, h);
-
-    // Atmosphere rim glow
-    if (radius > 20) {
-        for (var i = 3; i >= 1; i--) {
-            var gr = radius + i * Math.max(2, radius * 0.03);
-            ctx.setFillStyle(hex(80, 130, 255, Math.round(30 / i)));
-            ctx.beginPath();
-            ctx.arc(w / 2, h / 2, gr, 0, Math.PI * 2);
-            ctx.fill();
         }
     }
 }
@@ -579,14 +559,13 @@ function isLand(lat, lon) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PHASE 3: SURFACE — Descent to the pyramids
+// SURFACE — Descent to the pyramids
 // ═══════════════════════════════════════════════════════════════════════════
 
-function renderSurfacePhase(ctx, w, h) {
+function renderSurfaceLayer(ctx, w, h) {
     var barH     = Math.max(3, Math.round(h * 0.05));
-    var usableH  = h - barH;   // leave room for copper bar
-    var descentT = smooth(progress(time, T_ATMO, T_LAND));      // 0→1 over descent
-    var landT    = smooth(progress(time, T_LAND, T_SETTLE));     // 0→1 during dust
+    var usableH  = h - barH;
+    var descentT = smooth(progress(time, 30, T_LAND));
     var horizonY = lerp(usableH * 0.3, usableH * 0.5, descentT);
 
     // ── Sky ──
@@ -596,7 +575,6 @@ function renderSurfacePhase(ctx, w, h) {
         var by = t * horizonY;
         var bh = horizonY / skyBands + 1;
 
-        // Dark blue at top → lighter → orange near horizon
         var sr = lerp(8,   160, t * t);
         var sg = lerp(12,  140, t);
         var sb = lerp(50,  200, Math.sqrt(t));
@@ -629,7 +607,6 @@ function renderSurfacePhase(ctx, w, h) {
         var gy = horizonY + t * groundH;
         var gh = groundH / gBands + 1;
 
-        // Far (horizon): hazy light. Near (bottom): saturated sand.
         var gr = lerp(205, 215, t);
         var gg = lerp(190, 175, t);
         var gb = lerp(165, 110, t);
@@ -643,7 +620,7 @@ function renderSurfacePhase(ctx, w, h) {
         ctx.fillRect(0, gy, w, gh);
     }
 
-    // ── Dune ripple lines on the ground ──
+    // ── Dune ripple lines ──
     ctx.setStrokeStyle("#BFA87040");
     ctx.setLineWidth(1);
     for (var i = 0; i < 8; i++) {
@@ -695,8 +672,6 @@ function drawPyramids(ctx, w, h, horizonY, approach) {
         { xOff:  0.16, size: 0.55 },
     ];
 
-    // Sort back-to-front (smaller = further, drawn first)
-    // During approach, spread them laterally
     var spread = lerp(0.6, 1.0, approach);
 
     for (var i = 0; i < pyrs.length; i++) {
@@ -706,7 +681,6 @@ function drawPyramids(ctx, w, h, horizonY, approach) {
         var pyrH = lerp(12, 80, approach) * p.size * baseScale;
         var pyrW = pyrH * 1.35;
 
-        // Base Y: near horizon when far, lower when close
         var baseY = horizonY + groundH * lerp(0.05, 0.35, approach) * (1 + (1 - p.size) * 0.3);
 
         // Shadow side (right half)
@@ -754,7 +728,6 @@ function drawDust(ctx, w, h, groundY, intensity) {
         var age = age0 - d.delay;
         if (age < 0) continue;
 
-        // Parabolic arc: rises then falls
         var gravity = 0.25;
         var dx = d.x * w * 0.35 + d.vx * age * w * 0.08;
         var dy = d.vy0 * age * h * 0.12 + gravity * age * age * h * 0.04;
@@ -763,7 +736,6 @@ function drawDust(ctx, w, h, groundY, intensity) {
         var sy = groundY + dy;
         sy = Math.min(sy, h - 2);
 
-        // Fade over lifetime
         var alpha = clamp(1 - age / d.life, 0, 1) * intensity;
         if (alpha < 0.02) continue;
 

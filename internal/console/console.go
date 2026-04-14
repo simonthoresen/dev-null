@@ -413,7 +413,7 @@ func (m *Model) buildGameSubItems() []domain.MenuItemDef {
 	}
 	for _, name := range available {
 		n := name
-		label := "  " + n
+		label := n
 		if strings.EqualFold(n, currentGame) {
 			label = "→ " + n
 		}
