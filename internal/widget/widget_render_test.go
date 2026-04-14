@@ -384,18 +384,18 @@ func TestHandleKeyDropdownNavigation(t *testing.T) {
 			{Label: "&Close", Handler: func(string) {}},
 		}},
 	}
-	o := &OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := &OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 
 	// Down skips separator.
 	o.HandleKey("down", menus, "p1")
-	if o.DropCursor != 2 {
-		t.Errorf("expected cursor 2 (skip separator), got %d", o.DropCursor)
+	if o.SubMenus[0].Cursor != 2 {
+		t.Errorf("expected cursor 2 (skip separator), got %d", o.SubMenus[0].Cursor)
 	}
 
 	// Up goes back.
 	o.HandleKey("up", menus, "p1")
-	if o.DropCursor != 0 {
-		t.Errorf("expected cursor 0, got %d", o.DropCursor)
+	if o.SubMenus[0].Cursor != 0 {
+		t.Errorf("expected cursor 0, got %d", o.SubMenus[0].Cursor)
 	}
 
 	// Enter activates.
@@ -416,7 +416,7 @@ func TestHandleKeyUpAtTopClosesDropdown(t *testing.T) {
 			{Label: "&Close", Handler: func(string) {}},
 		}},
 	}
-	o := &OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := &OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 
 	// Already at top (index 0). Up should close dropdown and return to menu bar.
 	o.HandleKey("up", menus, "p1")
@@ -766,22 +766,22 @@ func TestHandleDropdownKeyLeftRight(t *testing.T) {
 		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&Open", Handler: func(string) {}}}},
 		{Label: "&Edit", Items: []domain.MenuItemDef{{Label: "&Undo", Handler: func(string) {}}}},
 	}
-	o := &OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := &OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 
 	// Right arrow moves to next menu.
-	o.handleDropdownKey("right", menus, "p1")
+	o.handleMenuKey("right", menus, "p1")
 	if o.OpenMenu != 1 {
 		t.Errorf("expected OpenMenu 1, got %d", o.OpenMenu)
 	}
 
 	// Left arrow moves back.
-	o.handleDropdownKey("left", menus, "p1")
+	o.handleMenuKey("left", menus, "p1")
 	if o.OpenMenu != 0 {
 		t.Errorf("expected OpenMenu 0, got %d", o.OpenMenu)
 	}
 
 	// Left wraps.
-	o.handleDropdownKey("left", menus, "p1")
+	o.handleMenuKey("left", menus, "p1")
 	if o.OpenMenu != 1 {
 		t.Errorf("expected wrap to 1, got %d", o.OpenMenu)
 	}
@@ -794,8 +794,8 @@ func TestHandleDropdownKeyLetterShortcut(t *testing.T) {
 			{Label: "&Open", Handler: func(string) { called = true }},
 		}},
 	}
-	o := &OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
-	o.handleDropdownKey("o", menus, "p1")
+	o := &OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
+	o.handleMenuKey("o", menus, "p1")
 	if !called {
 		t.Error("expected shortcut 'o' to activate Open handler")
 	}

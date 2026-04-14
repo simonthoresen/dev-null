@@ -291,12 +291,12 @@ func renderMenuDropdown(
 
 // ─── Dropdown rendering ────────────────────────────────────────────────────────
 
-// RenderDropdownBuf renders the top-level dropdown into a buffer.
+// RenderDropdownBuf renders the top-level dropdown (SubMenus[0]) into a buffer.
 // Returns the buffer and its screen position, or (nil, 0, 0) if no dropdown is open.
 func (o *OverlayState) RenderDropdownBuf(
 	menus []domain.MenuDef, ncBarRow, screenW, screenH int, layer *theme.Layer,
 ) (*render.ImageBuffer, int, int) {
-	if o.OpenMenu < 0 || o.OpenMenu >= len(menus) {
+	if o.OpenMenu < 0 || o.OpenMenu >= len(menus) || len(o.SubMenus) == 0 {
 		return nil, 0, 0
 	}
 	items := menus[o.OpenMenu].Items
@@ -304,10 +304,11 @@ func (o *OverlayState) RenderDropdownBuf(
 		return nil, 0, 0
 	}
 
+	top := &o.SubMenus[0]
 	maxVis := maxDropdownItems(screenH, ncBarRow+1)
-	o.DropScrollOff = ensureMenuVisible(o.DropCursor, o.DropScrollOff, maxVis)
+	top.ScrollOff = ensureMenuVisible(top.Cursor, top.ScrollOff, maxVis)
 
-	ddBuf := renderMenuDropdown(items, o.DropCursor, o.DropScrollOff, maxVis, layer)
+	ddBuf := renderMenuDropdown(items, top.Cursor, top.ScrollOff, maxVis, layer)
 	if ddBuf == nil {
 		return nil, 0, 0
 	}
@@ -317,32 +318,31 @@ func (o *OverlayState) RenderDropdownBuf(
 	if o.OpenMenu < len(pos) {
 		col = pos[o.OpenMenu]
 	}
-	// Clamp to screen width.
 	if col+ddBuf.Width > screenW {
 		col = max(0, screenW-ddBuf.Width)
 	}
 	return ddBuf, col, ncBarRow + 1
 }
 
-// RenderSubMenusBuf renders all open sub-menu levels into separate buffers.
+// RenderSubMenusBuf renders sub-menu levels (SubMenus[1:]) into separate buffers.
 // parentCol and parentW are the position/width of the top-level dropdown.
 func (o *OverlayState) RenderSubMenusBuf(
 	menus []domain.MenuDef, ncBarRow, parentCol, parentW, screenW, screenH int,
 	layer *theme.Layer,
 ) []SubMenuBox {
-	if len(o.SubMenus) == 0 || o.OpenMenu < 0 || o.OpenMenu >= len(menus) {
+	if len(o.SubMenus) <= 1 || o.OpenMenu < 0 || o.OpenMenu >= len(menus) {
 		return nil
 	}
 
 	prevCol := parentCol
 	prevW := parentW
-	prevRow := ncBarRow + 1 // top-level dropdown row
-	prevScrollOff := o.DropScrollOff
+	prevRow := ncBarRow + 1
+	prevScrollOff := o.SubMenus[0].ScrollOff
 
 	var result []SubMenuBox
 	items := menus[o.OpenMenu].Items
 
-	for i := range o.SubMenus {
+	for i := 1; i < len(o.SubMenus); i++ {
 		sm := &o.SubMenus[i]
 		if sm.ParentIdx < 0 || sm.ParentIdx >= len(items) || !HasSubMenu(items[sm.ParentIdx]) {
 			break
@@ -357,25 +357,21 @@ func (o *OverlayState) RenderSubMenusBuf(
 			break
 		}
 
-		// Position: right of parent, aligned with the triggering item's row.
 		col := prevCol + prevW
-		row := prevRow + (sm.ParentIdx - prevScrollOff) + 1 // +1 for top border row of parent
+		row := prevRow + (sm.ParentIdx - prevScrollOff) + 1
 
-		// Flip to left if would overflow right edge.
 		if col+subBuf.Width > screenW {
 			col = prevCol - subBuf.Width
 			if col < 0 {
 				col = 0
 			}
 		}
-		// Shift up if would overflow bottom edge.
 		if row+subBuf.Height > screenH {
 			row = max(0, screenH-subBuf.Height)
 		}
 
 		result = append(result, SubMenuBox{Buf: subBuf, Col: col, Row: row})
 
-		// For next level, this sub-menu is the parent.
 		prevCol = col
 		prevW = subBuf.Width
 		prevRow = row
@@ -477,7 +473,7 @@ func (o *OverlayState) RenderDropdown(menus []domain.MenuDef, ncBarRow int, laye
 		switch {
 		case it.Disabled:
 			inner = disabledStyle.Width(innerW).Render(" " + check + clean + pad + suffix + " ")
-		case i == o.DropCursor:
+		case len(o.SubMenus) > 0 && i == o.SubMenus[0].Cursor:
 			dropMarker := " "
 			if layer.Monochrome {
 				dropMarker = "►"

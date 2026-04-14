@@ -131,7 +131,7 @@ func TestNCWindowBordersASCIITheme(t *testing.T) {
 }
 
 func TestDropdownBordersSingleLineTheme(t *testing.T) {
-	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 	menus := []domain.MenuDef{
 		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&New"},
@@ -316,7 +316,7 @@ func TestPaletteDepthCyclesThroughLayers(t *testing.T) {
 	}
 
 	// Layer 1: Dropdown at depth 1 (Secondary) over the window.
-	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 	menus := []domain.MenuDef{
 		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}, {Label: "&Quit"}}},
 	}
@@ -519,7 +519,7 @@ func TestPerLayerBordersOnDropdown(t *testing.T) {
 	}
 
 	// Depth 1 → Secondary → single-line.
-	o1 := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o1 := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 	dd1 := o1.RenderDropdown(menus, 0, th.LayerAt(1)).Content
 	s1 := newScreen(dd1)
 	if !strings.HasPrefix(s1.lines[0], "┌") || !strings.HasSuffix(s1.lines[0], "┐") {
@@ -530,7 +530,7 @@ func TestPerLayerBordersOnDropdown(t *testing.T) {
 	}
 
 	// Depth 2 → Tertiary → ASCII.
-	o2 := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o2 := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 	dd2 := o2.RenderDropdown(menus, 0, th.LayerAt(2)).Content
 	s2 := newScreen(dd2)
 	if !strings.HasPrefix(s2.lines[0], "+") || !strings.HasSuffix(s2.lines[0], "+") {
@@ -622,7 +622,7 @@ func TestPerLayerBordersCompositedStack(t *testing.T) {
 	}
 
 	// Composite a dropdown at depth 1 (single-line).
-	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 	menus := []domain.MenuDef{
 		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}}},
 	}

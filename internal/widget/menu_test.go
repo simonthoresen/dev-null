@@ -82,7 +82,7 @@ func TestRenderNCBarFocusedMenu(t *testing.T) {
 // ─── Dropdown render tests ───────────────────────────────────────────────────
 
 func TestRenderDropdownBasic(t *testing.T) {
-	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 	menus := []domain.MenuDef{
 		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&New"},
@@ -135,7 +135,7 @@ func TestRenderDropdownBasic(t *testing.T) {
 }
 
 func TestRenderDropdownWithSeparator(t *testing.T) {
-	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 	menus := []domain.MenuDef{
 		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&New"},
@@ -166,7 +166,7 @@ func TestRenderDropdownWithSeparator(t *testing.T) {
 }
 
 func TestRenderDropdownWithHotkey(t *testing.T) {
-	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 	menus := []domain.MenuDef{
 		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&Quit", Hotkey: "ctrl+q"},
@@ -183,7 +183,7 @@ func TestRenderDropdownWithHotkey(t *testing.T) {
 }
 
 func TestRenderDropdownWithToggles(t *testing.T) {
-	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 	menus := []domain.MenuDef{
 		{Label: "&View", Items: []domain.MenuItemDef{
 			{Label: "&Sidebar", Toggle: true, Checked: func() bool { return true }},
@@ -213,7 +213,7 @@ func TestRenderDropdownWithToggles(t *testing.T) {
 }
 
 func TestRenderDropdownSecondMenu(t *testing.T) {
-	o := OverlayState{MenuFocused: true, MenuCursor: 1, OpenMenu: 1, DropCursor: 0}
+	o := OverlayState{MenuFocused: true, MenuCursor: 1, OpenMenu: 1, SubMenus: []subMenuState{{Cursor: 0}}}
 	menus := []domain.MenuDef{
 		{Label: "&File", Items: []domain.MenuItemDef{{Label: "&New"}}},
 		{Label: "&Edit", Items: []domain.MenuItemDef{{Label: "&Copy"}, {Label: "&Paste"}}},
@@ -248,7 +248,7 @@ func TestRenderDropdownSecondMenu(t *testing.T) {
 // ─── Dropdown composited on bar ──────────────────────────────────────────────
 
 func TestDropdownOnBar(t *testing.T) {
-	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, DropCursor: 0}
+	o := OverlayState{MenuFocused: true, MenuCursor: 0, OpenMenu: 0, SubMenus: []subMenuState{{Cursor: 0}}}
 	menus := []domain.MenuDef{
 		{Label: "&File", Items: []domain.MenuItemDef{
 			{Label: "&New"},

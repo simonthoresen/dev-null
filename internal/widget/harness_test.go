@@ -485,7 +485,9 @@ func renderCase(tc widgetCase, profile colorprofile.Profile) string {
 			MenuCursor:  cursor,
 			MenuFocused: menuFocused || openMenu >= 0,
 			OpenMenu:    openMenu,
-			DropCursor:  dropCursor,
+		}
+		if openMenu >= 0 {
+			overlay.SubMenus = []subMenuState{{Cursor: dropCursor}}
 		}
 		mb := &MenuBar{Menus: menus, Overlay: overlay}
 		mb.Render(buf, 0, 0, w, 1, false, layer)
