@@ -415,7 +415,7 @@ func (m *Model) buildGameSubItems() []domain.MenuItemDef {
 		n := name
 		label := n
 		if strings.EqualFold(n, currentGame) {
-			label = "→ " + n
+			label = n + "*"
 		}
 		items = append(items, domain.MenuItemDef{
 			Label:    label,
