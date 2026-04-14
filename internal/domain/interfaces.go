@@ -39,6 +39,8 @@ type MenuItemDef struct {
 	Toggle   bool                  // if true, this is a toggle item with a checkmark column
 	Checked  func() bool           // returns current toggle state (nil = not a toggle)
 	Handler  func(playerID string) // nil for separators
+	SubItems []MenuItemDef         // if non-empty, opens a sub-menu; Handler is ignored
+	OnDelete func(playerID string) // called when Del key is pressed on this item
 }
 
 // MenuDef describes a top-level menu registered by a game in the NC action bar.

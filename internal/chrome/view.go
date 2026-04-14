@@ -62,11 +62,13 @@ func (m *Model) View() tea.View {
 	shadowBg := m.theme.ShadowBg
 	if m.overlay.OpenMenu >= 0 {
 		menuLayer := m.theme.LayerAt(1)
-		if dd := m.overlay.RenderDropdown(menus, 0, menuLayer); dd.Content != "" {
-			sub := render.NewImageBuffer(dd.Width, dd.Height)
-			sub.PaintANSI(0, 0, dd.Width, dd.Height, dd.Content, menuLayer.Fg, menuLayer.Bg)
-			buf.Blit(dd.Col, dd.Row, sub)
-			render.BlitShadow(buf, dd.Col, dd.Row, dd.Width, dd.Height, shadowFg, shadowBg)
+		if ddBuf, ddCol, ddRow := m.overlay.RenderDropdownBuf(menus, 0, m.width, m.height, menuLayer); ddBuf != nil {
+			buf.Blit(ddCol, ddRow, ddBuf)
+			render.BlitShadow(buf, ddCol, ddRow, ddBuf.Width, ddBuf.Height, shadowFg, shadowBg)
+			for _, sub := range m.overlay.RenderSubMenusBuf(menus, 0, ddCol, ddBuf.Width, m.width, m.height, menuLayer) {
+				buf.Blit(sub.Col, sub.Row, sub.Buf)
+				render.BlitShadow(buf, sub.Col, sub.Row, sub.Buf.Width, sub.Buf.Height, shadowFg, shadowBg)
+			}
 		}
 	}
 	if m.overlay.HasDialog() {
