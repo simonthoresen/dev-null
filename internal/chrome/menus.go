@@ -225,14 +225,10 @@ func (m *Model) buildFontSubItems() []domain.MenuItemDef {
 }
 
 func (m *Model) buildInviteSubItems() []domain.MenuItemDef {
-	winLink, sshLink := m.api.InviteLinks()
-	return localcmd.BuildInviteSubItems(localcmd.InviteSubMenuOptions{
-		WinLink:      winLink,
-		SSHLink:      sshLink,
-		ColorProfile: m.ColorProfile,
-		OnCopy:       func(link string) { m.pendingClipboard = link },
-		OnOutput:     func(lines []string) { m.chatLines = append(m.chatLines, lines...) },
-	})
+	return []domain.MenuItemDef{
+		{Label: "&Windows", Handler: func(_ string) { m.dispatchInput("/invite-win") }},
+		{Label: "&SSH", Handler: func(_ string) { m.dispatchInput("/invite-ssh") }},
+	}
 }
 
 // injectFontTag inserts <font=name></font> at the current cursor position in the chat input.

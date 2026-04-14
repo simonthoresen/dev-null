@@ -481,18 +481,10 @@ func (m *Model) buildFontSubItems() []domain.MenuItemDef {
 }
 
 func (m *Model) buildInviteSubItems() []domain.MenuItemDef {
-	winLink, sshLink := m.api.InviteLinks()
-	return localcmd.BuildInviteSubItems(localcmd.InviteSubMenuOptions{
-		WinLink:      winLink,
-		SSHLink:      sshLink,
-		ColorProfile: m.profile,
-		OnCopy:       func(link string) { m.pendingClipboard = link },
-		OnOutput: func(lines []string) {
-			for _, line := range lines {
-				m.appendLog(line)
-			}
-		},
-	})
+	return []domain.MenuItemDef{
+		{Label: "&Windows", Handler: func(_ string) { m.submitInput("/invite-win") }},
+		{Label: "&SSH", Handler: func(_ string) { m.submitInput("/invite-ssh") }},
+	}
 }
 
 // ─── Saves dialog (still a dialog, not a sub-menu) ─────────────────────────
@@ -760,15 +752,6 @@ func catToLevel(cat LogCategory) slog.Level {
 	default: // CatDebug
 		return slog.LevelDebug
 	}
-}
-
-func (m *Model) pushInviteDialog() {
-	winLink, sshLink := m.api.InviteLinks()
-	win := widget.BuildInviteWindow(winLink, sshLink,
-		func(v string) { m.pendingClipboard = v },
-		m.overlay.PopDialog,
-	)
-	m.overlay.PushWindowDialog(win)
 }
 
 func (m *Model) rebuildVisibleLines() {

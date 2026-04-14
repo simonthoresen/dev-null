@@ -535,43 +535,125 @@ func (o *OverlayState) handleDropdownClick(x, y, ncBarRow int, menus []domain.Me
 		return false
 	}
 
-	// Dropdown position
+	// Check sub-menus first (deepest to shallowest) — same priority as keyboard.
+	if len(o.SubMenus) > 0 {
+		if o.handleSubMenuClick(x, y, ncBarRow, menus, playerID) {
+			return true
+		}
+	}
+
+	// Check the top-level dropdown.
 	pos := MenuBarPositions(menus)
 	ddCol := 0
 	if o.OpenMenu < len(pos) {
 		ddCol = pos[o.OpenMenu]
 	}
 	ddRow := ncBarRow + 1
-	boxW := dropdownInnerWidth(items) + 2 // + borders
+	boxW := dropdownInnerWidth(items) + 2
 
-	// Check if click is inside the dropdown box.
-	relX := x - ddCol
-	relY := y - ddRow
-	if relX >= 0 && relX < boxW && relY >= 0 {
-		lineIdx := 0
-		for i, it := range items {
-			lineIdx++
-			if relY == lineIdx && !IsSeparator(it) && !it.Disabled {
-				o.DropCursor = i
-				if HasSubMenu(it) {
-					o.closeSubMenus()
-					o.openSubMenu(items, i)
-				} else if it.Handler != nil {
-					if !it.Toggle {
-						o.closeMenus()
-					}
-					it.Handler(playerID)
-				}
-				return true
+	return o.clickInMenu(x, y, ddCol, ddRow, boxW, items, func(i int, it domain.MenuItemDef) {
+		o.DropCursor = i
+		if HasSubMenu(it) {
+			o.closeSubMenus()
+			o.openSubMenu(items, i)
+		} else if it.Handler != nil {
+			if !it.Toggle {
+				o.closeMenus()
 			}
+			it.Handler(playerID)
 		}
-		return relY <= lineIdx+1
+	})
+}
+
+// handleSubMenuClick checks all open sub-menu levels from deepest to shallowest.
+func (o *OverlayState) handleSubMenuClick(x, y, ncBarRow int, menus []domain.MenuDef, playerID string) bool {
+	if o.OpenMenu < 0 || o.OpenMenu >= len(menus) || len(o.SubMenus) == 0 {
+		return false
 	}
 
-	// TODO: sub-menu click handling (will be refined in rendering step
-	// once we know the exact positions of sub-menu boxes).
+	// Recompute sub-menu positions (same logic as RenderSubMenusBuf).
+	pos := MenuBarPositions(menus)
+	prevCol := 0
+	if o.OpenMenu < len(pos) {
+		prevCol = pos[o.OpenMenu]
+	}
+	prevW := dropdownInnerWidth(menus[o.OpenMenu].Items) + 2
+	prevRow := ncBarRow + 1
+	prevScrollOff := o.DropScrollOff
 
+	type levelInfo struct {
+		col, row, boxW int
+		items          []domain.MenuItemDef
+		depth          int
+	}
+	var levels []levelInfo
+	items := menus[o.OpenMenu].Items
+
+	for i := range o.SubMenus {
+		sm := &o.SubMenus[i]
+		if sm.ParentIdx < 0 || sm.ParentIdx >= len(items) || !HasSubMenu(items[sm.ParentIdx]) {
+			break
+		}
+		subItems := items[sm.ParentIdx].SubItems
+		subW := dropdownInnerWidth(subItems) + 2
+
+		col := prevCol + prevW
+		row := prevRow + (sm.ParentIdx - prevScrollOff) + 1
+		// Flip left if would overflow (simplified — no screenW here, just check negative).
+		if col < 0 {
+			col = 0
+		}
+
+		levels = append(levels, levelInfo{col: col, row: row, boxW: subW, items: subItems, depth: i})
+
+		prevCol = col
+		prevW = subW
+		prevRow = row
+		prevScrollOff = sm.ScrollOff
+		items = subItems
+	}
+
+	// Check from deepest to shallowest.
+	for li := len(levels) - 1; li >= 0; li-- {
+		lv := levels[li]
+		depth := lv.depth
+		hit := o.clickInMenu(x, y, lv.col, lv.row, lv.boxW, lv.items, func(i int, it domain.MenuItemDef) {
+			o.SubMenus[depth].Cursor = i
+			if HasSubMenu(it) {
+				// Close deeper sub-menus and open this one.
+				o.SubMenus = o.SubMenus[:depth+1]
+				o.openSubMenu(lv.items, i)
+			} else if it.Handler != nil {
+				if !it.Toggle {
+					o.closeMenus()
+				}
+				it.Handler(playerID)
+			}
+		})
+		if hit {
+			return true
+		}
+	}
 	return false
+}
+
+// clickInMenu tests if (x,y) hits an item in a menu box at (col,row) with width boxW.
+// Calls onHit(itemIndex, item) if a selectable item is hit. Returns true if click was inside the box.
+func (o *OverlayState) clickInMenu(x, y, col, row, boxW int, items []domain.MenuItemDef, onHit func(int, domain.MenuItemDef)) bool {
+	relX := x - col
+	relY := y - row
+	if relX < 0 || relX >= boxW || relY < 0 {
+		return false
+	}
+	lineIdx := 0
+	for i, it := range items {
+		lineIdx++
+		if relY == lineIdx && !IsSeparator(it) && !it.Disabled {
+			onHit(i, it)
+			return true
+		}
+	}
+	return relY <= lineIdx+1 // inside box border
 }
 
 // ─── Selectable-item helpers ───────────────────────────────────────────────────

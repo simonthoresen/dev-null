@@ -461,13 +461,14 @@ func (a *Server) SetConsoleSender(s msgSender) {
 func (a *Server) registerBuiltins() {
 	a.registry.Register(domain.Command{
 		Name:        "invite-win",
-		Description: "Show the Windows join command for this server",
+		Description: "Show QR code and copy the Windows join command to the clipboard",
 		Handler: func(ctx domain.CommandContext, args []string) {
 			cmd := a.inviteWinCommand()
+			msg := "Windows invite link copied to clipboard"
 			if qr, err := renderQR(cmd); err == nil {
-				ctx.Reply(qr + cmd)
+				ctx.Reply(qr + msg)
 			} else {
-				ctx.Reply(cmd)
+				ctx.Reply(msg)
 			}
 			if ctx.Clipboard != nil {
 				ctx.Clipboard(cmd)
@@ -477,10 +478,15 @@ func (a *Server) registerBuiltins() {
 
 	a.registry.Register(domain.Command{
 		Name:        "invite-ssh",
-		Description: "Show the SSH join command for this server",
+		Description: "Show QR code and copy the SSH join command to the clipboard",
 		Handler: func(ctx domain.CommandContext, args []string) {
 			cmd := a.inviteSSHCommand()
-			ctx.Reply(cmd)
+			msg := "SSH invite link copied to clipboard"
+			if qr, err := renderQR(cmd); err == nil {
+				ctx.Reply(qr + msg)
+			} else {
+				ctx.Reply(msg)
+			}
 			if ctx.Clipboard != nil {
 				ctx.Clipboard(cmd)
 			}

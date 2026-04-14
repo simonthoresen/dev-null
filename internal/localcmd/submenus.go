@@ -5,13 +5,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/colorprofile"
-
 	"dev-null/internal/domain"
 	"dev-null/internal/engine"
-	"dev-null/internal/render"
 	"dev-null/internal/theme"
-	"dev-null/internal/widget"
 )
 
 // ─── Game sub-menu ───────────────────────────────────────────────────────────
@@ -208,52 +204,6 @@ func BuildFontSubItems(opts FontSubMenuOptions) []domain.MenuItemDef {
 		items = append(items, item)
 	}
 	return items
-}
-
-// ─── Invite sub-menu ─────────────────────────────────────────────────────────
-
-// InviteSubMenuOptions configures the Invite sub-menu.
-type InviteSubMenuOptions struct {
-	WinLink      string
-	SSHLink      string
-	ColorProfile colorprofile.Profile
-	OnCopy       func(link string) // sets clipboard
-	OnOutput     func(lines []string) // writes lines to chat (chrome) or console log (server)
-}
-
-// BuildInviteSubItems returns the menu items for the Invite sub-menu.
-func BuildInviteSubItems(opts InviteSubMenuOptions) []domain.MenuItemDef {
-	return []domain.MenuItemDef{
-		{Label: "&Windows", Handler: func(_ string) {
-			if opts.OnOutput != nil {
-				opts.OnOutput(renderLogoLines(widget.RenderWindowsLogo, opts.ColorProfile))
-				opts.OnOutput([]string{"Windows invite link copied to clipboard"})
-			}
-			if opts.OnCopy != nil {
-				opts.OnCopy(opts.WinLink)
-			}
-		}},
-		{Label: "&SSH", Handler: func(_ string) {
-			if opts.OnOutput != nil {
-				opts.OnOutput(renderLogoLines(widget.RenderSSHLogo, opts.ColorProfile))
-				opts.OnOutput([]string{"SSH invite link copied to clipboard"})
-			}
-			if opts.OnCopy != nil {
-				opts.OnCopy(opts.SSHLink)
-			}
-		}},
-	}
-}
-
-// renderLogoLines renders a logo into ANSI strings.
-func renderLogoLines(renderFn func(*render.ImageBuffer, int, int), profile colorprofile.Profile) []string {
-	buf := render.NewImageBuffer(widget.LogoArtWidth, widget.LogoArtHeight)
-	renderFn(buf, 0, 0)
-	s := buf.ToString(profile)
-	if s == "" {
-		return nil
-	}
-	return strings.Split(s, "\n")
 }
 
 // deleteHandler wraps an OnDelete callback with a captured name, or returns nil.
