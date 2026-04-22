@@ -89,8 +89,6 @@ type Runtime struct {
 	onInput           goja.Callable
 	renderAsciiFn     goja.Callable
 	renderCanvasFn    goja.Callable
-	renderStartingFn  goja.Callable
-	renderEndingFn    goja.Callable
 	layoutFn          goja.Callable
 	statusBarFn       goja.Callable
 	commandBarFn      goja.Callable
@@ -164,19 +162,6 @@ func (r *Runtime) Load(savedState any) {
 	cancel := Watchdog(r.vm, "Load")
 	defer cancel()
 	_, _ = r.loadFn(goja.Undefined(), r.vm.ToValue(savedState))
-
-	// Re-read renderGameStart/renderGameEnd — load() may have defined them dynamically.
-	gameVal := r.vm.Get("Game")
-	if gameVal != nil && !goja.IsUndefined(gameVal) && !goja.IsNull(gameVal) {
-		if obj := gameVal.ToObject(r.vm); obj != nil {
-			if r.renderStartingFn == nil {
-				r.renderStartingFn = extractCallable(obj, "renderGameStart")
-			}
-			if r.renderEndingFn == nil {
-				r.renderEndingFn = extractCallable(obj, "renderGameEnd")
-			}
-		}
-	}
 }
 
 func (r *Runtime) Begin() {
@@ -224,8 +209,6 @@ func (r *Runtime) extractGameObject() error {
 	r.onInput = extractCallable(gameObj, "onInput")
 	r.renderAsciiFn = extractCallable(gameObj, "renderAscii")
 	r.renderCanvasFn = extractCallable(gameObj, "renderCanvas")
-	r.renderStartingFn = extractCallable(gameObj, "renderGameStart")
-	r.renderEndingFn = extractCallable(gameObj, "renderGameEnd")
 	r.layoutFn = extractCallable(gameObj, "layout")
 	r.statusBarFn = extractCallable(gameObj, "statusBar")
 	r.commandBarFn = extractCallable(gameObj, "commandBar")
@@ -585,49 +568,6 @@ func (r *Runtime) RenderCanvasImage(playerID string, width, height int) *image.R
 		return nil
 	}
 	return canvas.ToRGBA()
-}
-
-func (r *Runtime) RenderStarting(buf *render.ImageBuffer, playerID string, x, y, width, height int) bool {
-	if r.renderStartingFn == nil {
-		return false
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	defer r.recoverJS("RenderStarting")
-	defer traceCall(r.vm, "RenderStarting")()
-	cancel := Watchdog(r.vm, "RenderStarting")
-	defer cancel()
-	jsBuf := r.newJSImageBuffer(buf, x, y, width, height)
-	_, err := r.renderStartingFn(goja.Undefined(), r.vm.ToValue(jsBuf), r.vm.ToValue(playerID), r.vm.ToValue(x), r.vm.ToValue(y), r.vm.ToValue(width), r.vm.ToValue(height))
-	if err != nil {
-		slog.Error("JS RenderStarting error", "error", err)
-		return false
-	}
-	return true
-}
-
-func (r *Runtime) RenderEnding(buf *render.ImageBuffer, playerID string, x, y, width, height int, results []domain.GameResult) bool {
-	if r.renderEndingFn == nil {
-		return false
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	defer r.recoverJS("RenderEnding")
-	defer traceCall(r.vm, "RenderEnding")()
-	cancel := Watchdog(r.vm, "RenderEnding")
-	defer cancel()
-	jsBuf := r.newJSImageBuffer(buf, x, y, width, height)
-	// Convert results to JS-friendly array of {name, result} objects.
-	jsResults := make([]map[string]any, len(results))
-	for i, r := range results {
-		jsResults[i] = map[string]any{"name": r.Name, "result": r.Result}
-	}
-	_, err := r.renderEndingFn(goja.Undefined(), r.vm.ToValue(jsBuf), r.vm.ToValue(playerID), r.vm.ToValue(x), r.vm.ToValue(y), r.vm.ToValue(width), r.vm.ToValue(height), r.vm.ToValue(jsResults))
-	if err != nil {
-		slog.Error("JS RenderEnding error", "error", err)
-		return false
-	}
-	return true
 }
 
 // IsGameOverPending returns true if JS called gameOver() and clears the flag.

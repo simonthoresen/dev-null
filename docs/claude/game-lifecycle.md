@@ -10,7 +10,7 @@ LOBBY (teams + chat) -> STARTING -> PLAYING -> GAME OVER -> LOBBY
 ```
 1. **Lobby**: Players configure teams, chat. Admin loads game with `/game load <name>`.
 2. **Load**: Framework snapshots teams, loads persistent state from `dist/state/<gameName>.json`, calls `load(persistentState)`. `teams()` returns game teams.
-3. **Starting**: Shows game starting screen (custom `renderGameStart` or default figlet). Admin presses Enter to start, or auto-starts after 10s.
+3. **Starting**: Framework shows a figlet of the game name. Admin presses Enter to start, or auto-starts after 10s.
 4. **Starting→Playing**: Framework calls `begin()`. Game sets up its playing state.
 5. **Reconnect**: If a player disconnects mid-game and reconnects with the same name, they rejoin automatically.
 6. **Playing**: Normal game mode. Game calls `gameOver(results)` when done.

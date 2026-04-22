@@ -183,14 +183,6 @@ func (g *mockGame) RenderAscii(buf *render.ImageBuffer, _ string, x, y, w, h int
 	buf.WriteString(x, y+h-1, "[ game over: press enter ]", nil, nil, 0)
 }
 
-func (g *mockGame) RenderStarting(_ *render.ImageBuffer, _ string, _, _, _, _ int) bool {
-	return false // use framework default
-}
-
-func (g *mockGame) RenderEnding(_ *render.ImageBuffer, _ string, _, _, _, _ int, _ []domain.GameResult) bool {
-	return false // use framework default
-}
-
 // ─── Golden file helpers ─────────────────────────────────────────────────────
 
 // goldenPath returns the path for a golden file.

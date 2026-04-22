@@ -1,8 +1,7 @@
 package engine
 
 // Tests for game-loop hooks (Update, OnInput, OnPlayerLeave, End, Unload)
-// and property methods (StatusBar, CommandBar, Commands, TeamRange,
-// RenderStarting, RenderEnding).
+// and property methods (StatusBar, CommandBar, Commands, TeamRange).
 
 import (
 	"os"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"dev-null/internal/domain"
-	"dev-null/internal/render"
 )
 
 // loadHookRuntime compiles js as a single-file game and returns the Runtime.
@@ -352,77 +350,6 @@ func TestTeamRange_Default(t *testing.T) {
 	tr := rt.TeamRange()
 	if tr.Min != 0 || tr.Max != 0 {
 		t.Errorf("expected {0,0}, got {%d,%d}", tr.Min, tr.Max)
-	}
-}
-
-// ─── RenderStarting / RenderEnding ───────────────────────────────────────────
-
-func TestRenderStarting_CallsJS(t *testing.T) {
-	rt := loadHookRuntime(t, `
-		var Game = {
-			state: { startingCalled: false },
-			load: function() {},
-			renderGameStart: function(buf, pid, ox, oy, w, h) {
-				Game.state.startingCalled = true;
-				return true;
-			},
-			renderAscii: function() {},
-		};
-	`)
-	rt.Load(nil)
-	buf := render.NewImageBuffer(20, 5)
-	result := rt.RenderStarting(buf, "p1", 0, 0, 20, 5)
-	if !result {
-		t.Error("expected RenderStarting to return true")
-	}
-	if !stateBool(rt, "startingCalled") {
-		t.Error("expected renderGameStart() to be called")
-	}
-}
-
-func TestRenderStarting_NoHook_ReturnsFalse(t *testing.T) {
-	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, renderAscii: function() {} };
-	`)
-	rt.Load(nil)
-	buf := render.NewImageBuffer(20, 5)
-	if rt.RenderStarting(buf, "p1", 0, 0, 20, 5) {
-		t.Error("expected false when no renderGameStart hook")
-	}
-}
-
-func TestRenderEnding_CallsJS(t *testing.T) {
-	rt := loadHookRuntime(t, `
-		var Game = {
-			state: { endingCalled: false },
-			load: function() {},
-			renderGameEnd: function(buf, pid, ox, oy, w, h, results) {
-				Game.state.endingCalled = true;
-				return true;
-			},
-			renderAscii: function() {},
-		};
-	`)
-	rt.Load(nil)
-	buf := render.NewImageBuffer(20, 5)
-	results := []domain.GameResult{{Name: "alice", Result: "10 pts"}}
-	result := rt.RenderEnding(buf, "p1", 0, 0, 20, 5, results)
-	if !result {
-		t.Error("expected RenderEnding to return true")
-	}
-	if !stateBool(rt, "endingCalled") {
-		t.Error("expected renderGameEnd() to be called")
-	}
-}
-
-func TestRenderEnding_NoHook_ReturnsFalse(t *testing.T) {
-	rt := loadHookRuntime(t, `
-		var Game = { load: function() {}, renderAscii: function() {} };
-	`)
-	rt.Load(nil)
-	buf := render.NewImageBuffer(20, 5)
-	if rt.RenderEnding(buf, "p1", 0, 0, 20, 5, nil) {
-		t.Error("expected false when no renderGameEnd hook")
 	}
 }
 

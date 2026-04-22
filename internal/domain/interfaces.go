@@ -143,12 +143,6 @@ type Game interface {
 	// --- Rendering ---
 
 	RenderAscii(buf *render.ImageBuffer, playerID string, x, y, width, height int)
-	// RenderStarting renders a custom starting screen into buf. Returns false to
-	// use the framework's default figlet-based starting screen.
-	RenderStarting(buf *render.ImageBuffer, playerID string, x, y, width, height int) bool
-	// RenderEnding renders a custom ending screen into buf. Returns false
-	// to use the framework's default ending screen with figlet title + results.
-	RenderEnding(buf *render.ImageBuffer, playerID string, x, y, width, height int, results []GameResult) bool
 	// Layout returns a declarative widget tree describing the game window.
 	// If it returns nil, the framework falls back to wrapping Render() in a
 	// default gameview node. Games can mix NC panels with raw Render() output

@@ -221,15 +221,9 @@ var Game = {
         }
     },
 
-    // Custom starting screen rendering. Optional — if omitted or returns false,
-    // the framework renders a figlet game name centered in the viewport.
-    // Same buf API as renderAscii(). Return true to indicate custom rendering was done.
-    // renderGameStart: function(buf, playerID, ox, oy, width, height) { ... return true; },
-
-    // Custom ending screen rendering. Optional — if omitted or returns false,
-    // the framework renders a figlet "GAME OVER" title with ranked results.
-    // results is an array of {name, result} objects in ranked order.
-    // renderGameEnd: function(buf, playerID, ox, oy, width, height, results) { ... return true; },
+    // The framework renders the starting screen (figlet game name) and the
+    // ending screen (figlet "GAME OVER" + ranked results). Games don't provide
+    // their own.
 
     statusBar: function(playerID) {
         var p = players[playerID];

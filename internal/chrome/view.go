@@ -282,7 +282,7 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 	switch phase {
 	case domain.PhaseStarting:
 		m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
-			m.renderStartingDialog(gbuf, game, displayName, x, y, w, h)
+			m.renderStartingDialog(gbuf, displayName, x, y, w, h)
 		}
 		m.playingGameView.OnKey = nil // starting screen ignores game keys
 	case domain.PhaseEnding:
@@ -290,9 +290,7 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 		results := m.api.State().GameOverResults
 		m.api.State().RUnlock()
 		m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
-			if !game.RenderEnding(gbuf, m.playerID, x, y, w, h, results) {
-				m.defaultRenderEnding(gbuf, results, x, y, w, h)
-			}
+			m.renderGameOverScreen(gbuf, results, x, y, w, h)
 		}
 		m.playingGameView.OnKey = nil // ending screen ignores game keys
 	default: // PhasePlaying
@@ -385,9 +383,9 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 }
 
 // renderStartingDialog renders the starting screen as a centered dialog in the
-// game viewport. The splash area uses the game's RenderStarting (or a default
-// figlet title), and the status row shows a countdown + per-player ready state.
-func (m *Model) renderStartingDialog(buf *render.ImageBuffer, game domain.Game, name string, x, y, w, h int) {
+// game viewport. The splash area shows a figlet title, and the status row shows
+// a countdown + per-player ready state.
+func (m *Model) renderStartingDialog(buf *render.ImageBuffer, name string, x, y, w, h int) {
 	// Read starting state.
 	st := m.api.State()
 	st.RLock()
@@ -425,11 +423,9 @@ func (m *Model) renderStartingDialog(buf *render.ImageBuffer, game domain.Game, 
 	}
 	m.startingStatus.Text = strings.Join(parts, "  ")
 
-	// Wire splash to game's custom starting screen or default figlet.
+	// Splash is always a framework-rendered figlet title.
 	m.startingSplash.RenderFn = func(gbuf *render.ImageBuffer, sx, sy, sw, sh int) {
-		if !game.RenderStarting(gbuf, m.playerID, sx, sy, sw, sh) {
-			renderFigletSplash(gbuf, name, sx, sy, sw, sh)
-		}
+		renderFigletSplash(gbuf, name, sx, sy, sw, sh)
 	}
 	m.startingWindow.Title = name
 
@@ -499,8 +495,8 @@ func figletLines(text, font string, maxW int) []string {
 	return lines
 }
 
-// defaultRenderEnding renders a figlet "GAME OVER" title with ranked results.
-func (m *Model) defaultRenderEnding(buf *render.ImageBuffer, results []domain.GameResult, x, y, w, h int) {
+// renderGameOverScreen renders a figlet "GAME OVER" title with ranked results.
+func (m *Model) renderGameOverScreen(buf *render.ImageBuffer, results []domain.GameResult, x, y, w, h int) {
 	var lines []string
 
 	// Figlet title.
