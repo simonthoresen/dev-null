@@ -424,13 +424,24 @@ func (r *ClientRenderer) drawRemote(screen *ebiten.Image) {
 	canReaderLocal := vw > 0 && vh > 0 && r.localRenderer.IsLoaded() && r.localRenderer.HasCanvas() && r.gameStateJSON != nil
 
 	// Blocks-local mode: render canvas locally and convert to quadrant block
-	// characters, writing them into the cell buffer so they composite with
-	// menus/dialogs exactly like server-rendered blocks.
+	// characters. We render into a scratch buffer and copy only into cells
+	// that still hold the CanvasCell placeholder, so any menu/dialog cells
+	// the server composited on top of the viewport are preserved.
 	if r.renderMode == "blocks-local" && canReaderLocal {
 		img := r.localRenderer.RenderCanvasImage(r.playerID, vw*2, vh*4)
 		if img != nil {
+			qbuf := render.NewImageBuffer(vw, vh)
+			render.ImageToQuadrants(img, qbuf, 0, 0, vw, vh)
 			buf := r.grid.ToImageBuffer()
-			render.ImageToQuadrants(img, buf, vx, vy, vw, vh)
+			for cy := 0; cy < vh; cy++ {
+				for cx := 0; cx < vw; cx++ {
+					if !render.IsCanvasCell(buf.CharAt(vx+cx, vy+cy)) {
+						continue
+					}
+					src := qbuf.Pixels[cy*qbuf.Width+cx]
+					buf.SetChar(vx+cx, vy+cy, src.Char, src.Fg, src.Bg, src.Attr)
+				}
+			}
 			r.drawImageBuffer(screen, buf, nil)
 			if r.grid.CursorVisible {
 				r.drawCursor(screen)
