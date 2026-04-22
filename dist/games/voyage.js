@@ -24,6 +24,30 @@ var PLANETS = [
     { name: "Neptune", orbit: 450, r:  7.5, col: "#2855D8", spd: 0.02, a0: 5.1, ring: false }
 ];
 
+// Moons — up to 3 per planet, biggest real ones, exaggerated for visibility.
+// p: planet index, dist: world units from planet, inc: orbital tilt (rad around world X).
+var MOONS = [
+    // Earth
+    { p: 2, dist: 12, r: 1.4, col: "#C8C8C8", spd: 1.00, a0: 0.0, inc: 0.10 }, // Luna
+    // Mars
+    { p: 3, dist:  7, r: 0.6, col: "#9C8878", spd: 2.00, a0: 0.0, inc: 0.05 }, // Phobos
+    { p: 3, dist: 10, r: 0.5, col: "#7C6858", spd: 1.20, a0: 2.1, inc: 0.15 }, // Deimos
+    // Jupiter
+    { p: 4, dist: 22, r: 1.3, col: "#E8D060", spd: 2.80, a0: 0.0, inc: 0.04 }, // Io
+    { p: 4, dist: 32, r: 1.8, col: "#B0A898", spd: 1.30, a0: 2.0, inc: 0.18 }, // Ganymede
+    { p: 4, dist: 42, r: 1.7, col: "#887868", spd: 0.80, a0: 4.2, inc: 0.35 }, // Callisto
+    // Saturn (outside rings; outer ring ~30)
+    { p: 5, dist: 38, r: 1.7, col: "#D8C080", spd: 1.10, a0: 0.0, inc: 0.08 }, // Titan
+    { p: 5, dist: 46, r: 0.9, col: "#A89898", spd: 0.70, a0: 2.5, inc: 0.20 }, // Rhea
+    { p: 5, dist: 56, r: 0.9, col: "#655C52", spd: 0.40, a0: 4.7, inc: 0.45 }, // Iapetus
+    // Uranus (famously tilted)
+    { p: 6, dist: 14, r: 1.0, col: "#A0A0B0", spd: 1.50, a0: 0.0, inc: 0.12 }, // Titania
+    { p: 6, dist: 19, r: 1.0, col: "#889098", spd: 1.00, a0: 2.1, inc: 0.35 }, // Oberon
+    { p: 6, dist: 24, r: 0.8, col: "#606870", spd: 0.60, a0: 4.0, inc: 0.55 }, // Umbriel
+    // Neptune
+    { p: 7, dist: 14, r: 1.4, col: "#D0B098", spd: 1.20, a0: 0.0, inc: 0.50 }  // Triton
+];
+
 // Star directions as points on the unit sphere.
 var STARS = [];
 (function() {
@@ -103,6 +127,16 @@ function planetPos(idx, t) {
     var p = PLANETS[idx];
     var a = t * p.spd + p.a0;
     return [Math.cos(a) * p.orbit, 0, Math.sin(a) * p.orbit];
+}
+
+function moonPos(m, t) {
+    var pp = planetPos(m.p, t);
+    var a  = t * m.spd + m.a0;
+    var x  = Math.cos(a) * m.dist;
+    var z  = Math.sin(a) * m.dist;
+    var ci = Math.cos(m.inc || 0);
+    var si = Math.sin(m.inc || 0);
+    return [pp[0] + x, pp[1] - z * si, pp[2] + z * ci];
 }
 
 function orbitRadiusFor(idx) {
@@ -275,42 +309,45 @@ function renderSun(ctx, p) {
     ctx.fillCircle(p.x, p.y, r * 0.6);
 }
 
-function renderPlanet(ctx, proj, idx, t) {
-    var wp = planetPos(idx, t);
-    var p  = proj.project(wp);
-    if (!p) return;
-    var r = PLANETS[idx].r * p.scale;
+// Draw a Sun-lit shaded disk. Used for both planets and moons.
+function renderBody(ctx, proj, wp, p, Rworld, col) {
+    var r = Rworld * p.scale;
     if (r < 0.5) {
-        ctx.setFillStyle(PLANETS[idx].col);
-        ctx.fillCircle(p.x, p.y, Math.max(0.8, r));
+        ctx.setFillStyle(col);
+        ctx.fillCircle(p.x, p.y, Math.max(0.6, r));
         return;
     }
-
-    // Lit direction in screen space: offset a point on the planet toward the
-    // Sun (at origin) and see which way that shifts on screen.
+    // Lit direction in screen space: offset a point toward the Sun (origin)
+    // and see which way that shifts in screen coords.
     var sunDir = vNorm(vSub([0, 0, 0], wp));
-    var litRef = proj.project(vAdd(wp, vScale(sunDir, PLANETS[idx].r * 0.4)));
+    var litRef = proj.project(vAdd(wp, vScale(sunDir, Rworld * 0.4)));
     var lx = 0, ly = 0;
     if (litRef) {
         var dx = litRef.x - p.x, dy = litRef.y - p.y;
         var L  = Math.sqrt(dx*dx + dy*dy) || 1;
         lx = dx / L; ly = dy / L;
     }
-
-    var c = parseCol(PLANETS[idx].col);
+    var c = parseCol(col);
     // Dark side, mid, lit — concentric disks offset toward the light.
     ctx.setFillStyle(hex(c[0]*0.30, c[1]*0.30, c[2]*0.45));
     ctx.fillCircle(p.x, p.y, r);
     ctx.setFillStyle(hex(c[0]*0.65, c[1]*0.65, c[2]*0.70));
     ctx.fillCircle(p.x + lx*r*0.25, p.y + ly*r*0.25, r*0.85);
-    ctx.setFillStyle(PLANETS[idx].col);
+    ctx.setFillStyle(col);
     ctx.fillCircle(p.x + lx*r*0.45, p.y + ly*r*0.45, r*0.55);
     if (r > 3) {
         ctx.setFillStyle(hex(c[0]*0.4 + 150, c[1]*0.4 + 150, c[2]*0.4 + 150));
         ctx.fillCircle(p.x + lx*r*0.6, p.y + ly*r*0.6, r*0.22);
     }
+}
 
+function renderPlanet(ctx, proj, idx, wp, p) {
+    renderBody(ctx, proj, wp, p, PLANETS[idx].r, PLANETS[idx].col);
     if (PLANETS[idx].ring) renderRings(ctx, proj, wp, idx);
+}
+
+function renderMoon(ctx, proj, m, wp, p) {
+    renderBody(ctx, proj, wp, p, m.r, m.col);
 }
 
 function renderRings(ctx, proj, planetWP, idx) {
@@ -344,20 +381,27 @@ function renderScene(ctx, cam, t, w, h) {
     renderStars(ctx, proj, w, h);
     renderOrbitRings(ctx, proj);
 
-    // Z-sort Sun and planets back-to-front (painter's algorithm).
+    // Z-sort Sun, planets, and moons back-to-front (painter's algorithm).
     var items = [];
     var sp = proj.project([0, 0, 0]);
     if (sp) items.push({ z: sp.z, kind: "sun", p: sp });
     for (var i = 0; i < PLANETS.length; i++) {
-        var pp = proj.project(planetPos(i, t));
-        if (pp) items.push({ z: pp.z, kind: "planet", idx: i });
+        var wp = planetPos(i, t);
+        var pp = proj.project(wp);
+        if (pp) items.push({ z: pp.z, kind: "planet", idx: i, wp: wp, p: pp });
+    }
+    for (var i = 0; i < MOONS.length; i++) {
+        var mwp = moonPos(MOONS[i], t);
+        var mpp = proj.project(mwp);
+        if (mpp) items.push({ z: mpp.z, kind: "moon", m: MOONS[i], wp: mwp, p: mpp });
     }
     items.sort(function(a, b) { return b.z - a.z; });
 
     for (var k = 0; k < items.length; k++) {
         var it = items[k];
-        if (it.kind === "sun") renderSun(ctx, it.p);
-        else                   renderPlanet(ctx, proj, it.idx, t);
+        if      (it.kind === "sun")    renderSun(ctx, it.p);
+        else if (it.kind === "planet") renderPlanet(ctx, proj, it.idx, it.wp, it.p);
+        else                           renderMoon(ctx, proj, it.m, it.wp, it.p);
     }
 }
 
