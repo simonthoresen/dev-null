@@ -465,55 +465,51 @@ function renderScene(ctx, cam, t, w, h) {
 // GAME OBJECT
 // ═══════════════════════════════════════════════════════════════════════════
 
-var time = 0;
-
 var Game = {
     gameName: "Voyage",
+    contract: 2,
 
-    state: { tour: [], tourIdx: 0, phase: "orbit", phaseStart: 0, travel: null },
-
-    load: function(_saved) {},
-
-    begin: function() {
-        time = 0;
-        Game.state.tour = newTour();
-        Game.state.tourIdx = 0;
-        Game.state.phase = "orbit";
-        Game.state.phaseStart = 0;
-        Game.state.travel = null;
+    init: function(ctx) {
+        return { tour: [], tourIdx: 0, phase: "orbit", phaseStart: 0, travel: null };
     },
 
-    update: function(dt) {
-        time += dt;
-        updateCamera(Game.state, time);
+    begin: function(state, ctx) {
+        state.tour = newTour();
+        state.tourIdx = 0;
+        state.phase = "orbit";
+        state.phaseStart = 0;
+        state.travel = null;
     },
 
-    onInput: function(_pid, _key) {},
+    update: function(state, dt, events, ctx) {
+        // state._t is auto-injected by the engine; use it as our tour clock.
+        updateCamera(state, state._t || 0);
+    },
 
-    renderCanvas: function(ctx, _pid, w, h) {
-        // In pixel-mode the client never calls update(), so sync from _t.
-        if (Game.state._t !== undefined) time = Game.state._t;
-        if (!Game.state.tour || Game.state.tour.length < 2) {
-            ctx.setFillStyle("#000008");
-            ctx.fillRect(0, 0, w, h);
+    renderCanvas: function(state, me, canvas) {
+        var w = canvas.width;
+        var h = canvas.height;
+        var t = state._t || 0;
+        if (!state.tour || state.tour.length < 2) {
+            canvas.setFillStyle("#000008");
+            canvas.fillRect(0, 0, w, h);
             return;
         }
-        var cam = currentCamera(Game.state, time);
-        renderScene(ctx, cam, time, w, h);
+        var cam = currentCamera(state, t);
+        renderScene(canvas, cam, t, w, h);
     },
 
-    statusBar: function(_pid) {
-        var st = Game.state;
-        if (!st.tour || st.tour.length === 0) return "Voyage";
-        if (st.phase === "orbit") {
-            return "Orbiting " + PLANETS[st.tour[st.tourIdx]].name;
+    statusBar: function(state, me) {
+        if (!state.tour || state.tour.length === 0) return "Voyage";
+        if (state.phase === "orbit") {
+            return "Orbiting " + PLANETS[state.tour[state.tourIdx]].name;
         }
-        var s = clamp((time - st.phaseStart) / TRAVEL_DURATION, 0, 1);
-        return PLANETS[st.travel.from].name + " → " + PLANETS[st.travel.to].name
+        var s = clamp(((state._t || 0) - state.phaseStart) / TRAVEL_DURATION, 0, 1);
+        return PLANETS[state.travel.from].name + " → " + PLANETS[state.travel.to].name
              + "  [" + Math.round(s * 100) + "%]";
     },
 
-    commandBar: function(_pid) {
+    commandBar: function(state, me) {
         return "Sit back and enjoy the ride";
     }
 };
