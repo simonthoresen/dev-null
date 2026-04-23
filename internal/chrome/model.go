@@ -135,15 +135,11 @@ type Model struct {
 	playingChatView  *widget.TextView
 	playingInput     *widget.CommandInput
 
-	// Starting dialog NC controls (rendered as overlay in game viewport).
-	startingWindow *widget.Window
-	startingSplash *widget.GameView
-	startingStatus *widget.Label
-
 	// Phase action buttons — focus targets during starting/ending phases.
 	// They are standalone: not part of any Window's focus hierarchy. Input
 	// routing sets the current focused widget to the appropriate phase
-	// button while in PhaseStarting / PhaseEnding.
+	// button while in PhaseStarting / PhaseEnding, and their Render method
+	// is called directly by renderStartingScreen / renderGameOverScreen.
 	phaseReadyButton    *widget.Button
 	phaseContinueButton *widget.Button
 
@@ -254,35 +250,12 @@ func NewModel(api ServerAPI, playerID string) *Model {
 		StatusBar: playingStatusBar,
 	}
 
-	// Phase action buttons — constructed here, wired to api callbacks
-	// below after Model is assembled.
-	phaseReadyButton := &widget.Button{Label: "Ready", Align: "center"}
-	phaseContinueButton := &widget.Button{Label: "Continue", Align: "center"}
-
-	// Starting dialog — rendered as a centered overlay in the game viewport.
-	// The Ready button is a proper grid child so layout is automatic.
-	startingSplash := &widget.GameView{}
-	startingStatus := &widget.Label{Align: "center"}
-	startingWindow := &widget.Window{
-		FocusIdx: 4, // focus the Ready button
-		Children: []widget.GridChild{
-			{Control: startingSplash, Constraint: widget.GridConstraint{
-				Col: 0, Row: 0, WeightX: 1, WeightY: 1, Fill: widget.FillBoth,
-			}},
-			{Control: &widget.HDivider{Connected: true}, Constraint: widget.GridConstraint{
-				Col: 0, Row: 1, MinH: 1, Fill: widget.FillHorizontal,
-			}},
-			{Control: startingStatus, Constraint: widget.GridConstraint{
-				Col: 0, Row: 2, WeightX: 1, Fill: widget.FillHorizontal,
-			}},
-			{Control: &widget.HDivider{Connected: true}, Constraint: widget.GridConstraint{
-				Col: 0, Row: 3, MinH: 1, Fill: widget.FillHorizontal,
-			}},
-			{Control: phaseReadyButton, TabIndex: 0, Constraint: widget.GridConstraint{
-				Col: 0, Row: 4, MinH: 1, Fill: widget.FillHorizontal,
-			}},
-		},
-	}
+	// Phase action buttons — standalone focus targets during starting/
+	// ending phases. Their Render method is called by
+	// renderStartingScreen / renderGameOverScreen at a fixed position in
+	// the game viewport; they are not part of any Window's focus hierarchy.
+	phaseReadyButton := &widget.Button{Label: "Ready", Align: "left"}
+	phaseContinueButton := &widget.Button{Label: "Continue", Align: "left"}
 
 	m := Model{
 		api:           api,
@@ -307,9 +280,6 @@ func NewModel(api ServerAPI, playerID string) *Model {
 		playingGameView:  playingGameView,
 		playingChatView:  playingChatView,
 		playingInput:     playingInputCtrl,
-		startingWindow:   startingWindow,
-		startingSplash:   startingSplash,
-		startingStatus:   startingStatus,
 		phaseReadyButton:    phaseReadyButton,
 		phaseContinueButton: phaseContinueButton,
 	}

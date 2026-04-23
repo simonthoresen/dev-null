@@ -250,7 +250,7 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 	switch phase {
 	case domain.PhaseStarting:
 		m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
-			m.renderStartingDialog(gbuf, displayName, x, y, w, h)
+			m.renderStartingScreen(gbuf, displayName, x, y, w, h)
 		}
 		m.playingGameView.OnKey = nil // starting screen ignores game keys
 	case domain.PhaseEnding:
@@ -357,11 +357,12 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 	m.chatScrollOffset = m.playingChatView.ScrollOffset
 }
 
-// renderStartingDialog renders the starting screen as a centered dialog in the
-// game viewport. The splash area shows a figlet title, and the status row shows
-// a countdown + per-player ready state.
-func (m *Model) renderStartingDialog(buf *render.ImageBuffer, name string, x, y, w, h int) {
-	// Read starting state.
+// renderStartingScreen fills the game viewport with the starting splash:
+// figlet title, per-player ready checkboxes with countdown, and the
+// focused Ready button. No bordered sub-window — the splash is part of
+// the game viewport just like the gameplay render and the game-over
+// screen, so transitions between phases do not jump in layout.
+func (m *Model) renderStartingScreen(buf *render.ImageBuffer, name string, x, y, w, h int) {
 	st := m.api.State()
 	st.RLock()
 	startingStart := st.StartingStart
@@ -373,16 +374,13 @@ func (m *Model) renderStartingDialog(buf *render.ImageBuffer, name string, x, y,
 	}
 	st.RUnlock()
 
-	// Countdown.
-	elapsed := m.api.Clock().Now().Sub(startingStart).Seconds()
-	remaining := 10 - int(elapsed)
+	remaining := 10 - int(m.api.Clock().Now().Sub(startingStart).Seconds())
 	if remaining < 0 {
 		remaining = 0
 	}
 
-	// Build status line: "Starting in Xs  [ ] alice  [x] bob"
-	var parts []string
-	parts = append(parts, fmt.Sprintf("Starting in %ds", remaining))
+	// "Starting in Xs  [ ] alice  [x] bob"
+	parts := []string{fmt.Sprintf("Starting in %ds", remaining)}
 	for _, team := range gameTeams {
 		for _, pid := range team.Players {
 			p := players[pid]
@@ -396,54 +394,27 @@ func (m *Model) renderStartingDialog(buf *render.ImageBuffer, name string, x, y,
 			parts = append(parts, fmt.Sprintf("[%s] %s", check, p.Name))
 		}
 	}
-	m.startingStatus.Text = strings.Join(parts, "  ")
+	status := strings.Join(parts, "  ")
 
-	// Splash is always a framework-rendered figlet title.
-	m.startingSplash.RenderFn = func(gbuf *render.ImageBuffer, sx, sy, sw, sh int) {
-		renderFigletSplash(gbuf, name, sx, sy, sw, sh)
+	// Lay out vertically in the viewport:
+	//   figlet title (variable height), blank, status row, blank, button row.
+	// The content block is centered vertically in the viewport.
+	titleLines := figletLines(name, "larry3d", w)
+	if titleLines == nil {
+		titleLines = figletLines(name, "", w)
 	}
-	m.startingWindow.Title = name
-
-	// Size the dialog: nearly fill the viewport with some margin.
-	dlgW := w
-	dlgH := h
-	if dlgW > 4 {
-		dlgW -= 4
+	if titleLines == nil {
+		titleLines = []string{name}
 	}
-	if dlgH > 2 {
-		dlgH -= 2
-	}
-
-	// Render into a sub-buffer, blit centered. The Ready button is child
-	// index 4 of startingWindow (set as FocusIdx), so RenderToBuf draws it
-	// focused automatically.
-	layer := m.theme.LayerAt(1)
-	sub := render.NewImageBuffer(dlgW, dlgH)
-	m.startingWindow.RenderToBuf(sub, 0, 0, dlgW, dlgH, layer)
-
-	dlgX := x + (w-dlgW)/2
-	dlgY := y + (h-dlgH)/2
-	buf.Blit(dlgX, dlgY, sub)
-	render.BlitShadow(buf, dlgX, dlgY, dlgW, dlgH, m.theme.ShadowFg, m.theme.ShadowBg)
-}
-
-// renderFigletSplash renders a figlet title centered in the given area.
-// Tries larry3d first, falls back to standard, then plain text.
-func renderFigletSplash(buf *render.ImageBuffer, name string, x, y, w, h int) {
-	lines := figletLines(name, "larry3d", w)
-	if lines == nil {
-		lines = figletLines(name, "", w)
-	}
-	if lines == nil {
-		lines = []string{name}
-	}
-
-	topPad := (h - len(lines)) / 2
+	btnLabel := "[ " + m.phaseReadyButton.Label + " ]"
+	contentH := len(titleLines) + 1 + 1 + 1 + 1 // title + gap + status + gap + button
+	topPad := (h - contentH) / 2
 	if topPad < 0 {
 		topPad = 0
 	}
-	for i, line := range lines {
-		row := y + topPad + i
+
+	row := y + topPad
+	for _, line := range titleLines {
 		if row >= y+h {
 			break
 		}
@@ -451,8 +422,25 @@ func renderFigletSplash(buf *render.ImageBuffer, name string, x, y, w, h int) {
 		if col < x {
 			col = x
 		}
-		// Inherit the theme colors already painted by the Window fill.
-		buf.WriteStringInherit(col, row, line)
+		buf.WriteString(col, row, line, nil, nil, render.AttrNone)
+		row++
+	}
+	row++ // blank after title
+	if row < y+h {
+		col := x + (w-len(status))/2
+		if col < x {
+			col = x
+		}
+		buf.WriteString(col, row, status, nil, nil, render.AttrNone)
+		row++
+	}
+	row++ // blank before button
+	if row < y+h {
+		btnX := x + (w-len(btnLabel))/2
+		if btnX < x {
+			btnX = x
+		}
+		m.phaseReadyButton.Render(buf, btnX, row, len(btnLabel), 1, true, m.theme.LayerAt(0))
 	}
 }
 
