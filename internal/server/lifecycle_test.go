@@ -19,15 +19,21 @@ import (
 const minimalGameJS = `
 var Game = {
     gameName: "test-game",
-    state: { score: 0, highScore: 0 },
+    contract: 2,
 
-    // load: called with persistent state on every fresh load AND before resume.
-    load: function(saved) {
-        if (saved && saved.highScore) Game.state.highScore = saved.highScore;
+    init: function(ctx) { return { score: 0, highScore: 0 }; },
+
+    begin: function(state, ctx) { state.score = 0; },
+
+    update: function(state, dt, events, ctx) {
+        for (var i = 0; i < events.length; i++) {
+            var e = events[i];
+            if (e.type === "input" && e.key === "space") {
+                state.score++;
+                ctx.gameOver([{name: "player", result: state.score + " pts"}]);
+            }
+        }
     },
-
-    begin: function() { Game.state.score = 0; },
-    update: function(dt) {},
 
     // unload: returns PERSISTENT state (high scores etc.) — called on game-over,
     // /game unload, AND after suspend() during /game suspend.
@@ -47,14 +53,8 @@ var Game = {
         if (saved && saved.score !== undefined) Game.state.score = saved.score;
     },
 
-    onInput: function(pid, key) {
-        if (key === "space") {
-            Game.state.score++;
-            gameOver([{name: "player", result: Game.state.score + " pts"}]);
-        }
-    },
-    render: function(buf, pid, ox, oy, w, h) {
-        buf.writeString(ox, oy, "Score: " + Game.state.score, "#fff", null);
+    renderAscii: function(state, me, cells) {
+        cells.writeString(0, 0, "Score: " + state.score, "#fff", null);
     }
 };
 `
@@ -163,8 +163,10 @@ func TestGameLifecycle(t *testing.T) {
 	s.state.RUnlock()
 	game.Update(0.1)
 
-	// Trigger game over via input.
+	// Trigger game over via input — v2 queues events; the next Update()
+	// drains them and runs the handler that calls ctx.gameOver.
 	game.OnInput("p1", "space")
+	game.Update(0.1)
 
 	// Check that game over was signaled.
 	rt := game.(*engine.Runtime)
@@ -207,8 +209,9 @@ func TestSuspendResume(t *testing.T) {
 	s.state.RLock()
 	game := s.state.ActiveGame
 	s.state.RUnlock()
-	game.OnInput("p1", "space") // score → 1
-	game.OnInput("p1", "space") // score → 2
+	game.OnInput("p1", "space") // queued
+	game.OnInput("p1", "space") // queued
+	game.Update(0.1)            // drain events → score advances to 2
 
 	// Suspend — suspend() captures session state (score=2),
 	// unload() captures persistent state (highScore=0, since gameOver not called).
@@ -266,10 +269,10 @@ func TestSuspendResume(t *testing.T) {
 const teamRequiredGameJS = `
 var Game = {
     gameName: "team-required",
+    contract: 2,
     teamRange: { min: 2, max: 4 },
-    state: {},
-    load: function(saved) {},
-    render: function(buf, pid, ox, oy, w, h) {}
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) {}
 };
 `
 

@@ -6,7 +6,8 @@ width: 30
 height: 5
 --- js
 var Game = {
-    load: function(s) {},
+    contract: 2,
+    init: function(ctx) { return {}; },
     layout: function(playerID, w, h) {
         return {
             type: "label",
@@ -30,7 +31,8 @@ width: 30
 height: 5
 --- js
 var Game = {
-    load: function(s) {},
+    contract: 2,
+    init: function(ctx) { return {}; },
     layout: function(playerID, w, h) {
         return {
             type: "label",
@@ -55,7 +57,8 @@ width: 30
 height: 7
 --- js
 var Game = {
-    load: function(s) {},
+    contract: 2,
+    init: function(ctx) { return {}; },
     layout: function(playerID, w, h) {
         return {
             type: "table",
@@ -84,7 +87,8 @@ width: 30
 height: 7
 --- js
 var Game = {
-    load: function(s) {},
+    contract: 2,
+    init: function(ctx) { return {}; },
     layout: function(playerID, w, h) {
         return {
             type: "panel",
@@ -114,8 +118,9 @@ width: 20
 height: 3
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         buf.writeString(0, 0, "\x1b[31mRed\x1b[0m \x1b[32mGreen\x1b[0m", null, null);
     }
 };
@@ -133,8 +138,9 @@ width: 40
 height: 7
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         buf.writeString(0, 0, "\x1b[31mR\x1b[32mG\x1b[34mB\x1b[0m line", null, null);
         buf.writeString(0, 1, "row 2", null, null);
     },

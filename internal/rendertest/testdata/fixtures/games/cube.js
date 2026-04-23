@@ -1,5 +1,6 @@
 var Game = {
-  teamRange: { min: 1, max: 4 },
-  load: function() {},
-  render: function() { return ""; }
+  gameName: "cube",
+  contract: 2,
+  init: function(ctx) { return {}; },
+  renderAscii: function(state, me, cells) {}
 };

@@ -1,5 +1,6 @@
 var Game = {
-  teamRange: { min: 2, max: 8 },
-  load: function() {},
-  render: function() { return ""; }
+  gameName: "orbits",
+  contract: 2,
+  init: function(ctx) { return {}; },
+  renderAscii: function(state, me, cells) {}
 };

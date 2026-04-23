@@ -6,8 +6,9 @@ height: 5
 player_id: alice
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         buf.writeString(0, 0, "Hello, " + playerID + "!", null, null);
     }
 };
@@ -26,8 +27,9 @@ width: 20
 height: 3
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         var row = "";
         for (var i = 0; i < w; i++) row += "-";
         buf.writeString(0, 0, row, null, null);
@@ -46,8 +48,9 @@ width: 20
 height: 5
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         buf.writeString(0, 0, "Row 0", null, null);
         buf.writeString(0, 1, "Row 1", null, null);
         buf.writeString(0, 2, "Row 2", null, null);
@@ -68,8 +71,9 @@ width: 20
 height: 5
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         buf.writeString(0, 0, "Row 0", null, null);
         buf.writeString(0, 1, "Row 1", null, null);
         // Row 2 omitted — should remain blank.
@@ -91,8 +95,9 @@ width: 20
 height: 5
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         buf.writeString(0, 0, "Row 0", null, null);
         buf.writeString(0, 1, "Row 1", null, null);
         buf.writeString(0, 2, "Row 2", null, null);
@@ -115,8 +120,9 @@ width: 20
 height: 3
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         buf.writeString(0, 0, "Hi", null, null);
     }
 };
@@ -134,8 +140,9 @@ width: 20
 height: 3
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         buf.writeString(0, 0, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234", null, null);
     }
 };
@@ -153,8 +160,9 @@ width: 20
 height: 5
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         buf.writeString(0, 0, "OK", null, null);
         buf.setChar(w,     0, "X", null, null); // x == w → beyond right edge
         buf.setChar(0,     h, "Y", null, null); // y == h → beyond bottom edge
@@ -178,8 +186,9 @@ width: 20
 height: 5
 --- js
 var Game = {
-    load: function(s) {},
-    renderAscii: function(buf, playerID, x, y, w, h) {
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderAscii: function(state, me, cells) { var buf = cells, playerID = me.id, x = 0, y = 0, w = cells.width, h = cells.height;
         buf.writeString(0, 0, "AB", null, null);                         // short
         var dashes = ""; for (var i = 0; i < w; i++) dashes += "-";
         buf.writeString(0, 1, dashes, null, null);                       // exact fit

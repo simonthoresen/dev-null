@@ -13,20 +13,16 @@ import (
 	"dev-null/internal/render"
 )
 
-// LocalRenderer runs game JS locally on the client, rendering from
-// server-provided Game.state instead of receiving pre-rendered frames.
+// LocalRenderer runs game render hooks locally on the client, reading from
+// server-provided Game.state (via SetState / MergeStatePatch) instead of
+// receiving pre-rendered frames.
 type LocalRenderer struct {
-	mu       sync.Mutex
-	vm       *goja.Runtime
-	loaded   bool
-	// contractVersion is 1 for v1 games (legacy render signatures) and 2 for
-	// v2 games. v2 uses renderCanvas(state, me, canvas) / renderAscii(state,
-	// me, cells) and does not bind ctx-style globals on the client VM.
-	contractVersion int
-	resolveMeFn     goja.Callable // optional game-provided resolveMe(state, pid)
-	renderAsciiFn   goja.Callable // v1: (buf, pid, x, y, w, h); v2: (state, me, cells)
-	canvasFn        goja.Callable // v1: (ctx, pid, w, h);       v2: (state, me, canvas)
-
+	mu            sync.Mutex
+	vm            *goja.Runtime
+	loaded        bool
+	resolveMeFn   goja.Callable // optional: resolveMe(state, pid) -> me | null
+	renderAsciiFn goja.Callable // renderAscii(state, me, cells)
+	canvasFn      goja.Callable // renderCanvas(state, me, canvas)
 }
 
 // NewLocalRenderer creates a renderer ready to receive game source and state.
@@ -36,6 +32,11 @@ func NewLocalRenderer() *LocalRenderer {
 
 // LoadGame loads game JS source files into the goja VM.
 // Called when the client receives ns;gamesrc OSC sequences.
+//
+// The client never runs update; it only calls renderCanvas / renderAscii
+// with state received via SetState. No ctx is bound — any render-time
+// attempt to reach for chat/gameOver/midiNote throws, surfacing impurity
+// instead of silently diverging.
 func (lr *LocalRenderer) LoadGame(files []GameSrcFile) {
 	lr.mu.Lock()
 	defer lr.mu.Unlock()
@@ -45,53 +46,12 @@ func (lr *LocalRenderer) LoadGame(files []GameSrcFile) {
 	lr.renderAsciiFn = nil
 	lr.canvasFn = nil
 	lr.resolveMeFn = nil
-	lr.contractVersion = 1
 
-	// Always-safe globals that games may rely on at module-load time,
-	// regardless of contract version. These are pure computations that don't
-	// reach into framework state, so exposing them on the client doesn't
-	// compromise the "no impure calls from render" property.
+	// Only load-time-safe globals are bound client-side. figlet is pure;
+	// include is a no-op because the server already pre-expanded includes
+	// into the source file list before broadcasting.
 	lr.vm.Set("figlet", func(goja.FunctionCall) goja.Value { return lr.vm.ToValue("") })
-	lr.vm.Set("include", func(string) {}) // includes are pre-expanded by the server
-
-	// Peek at the source to detect the contract version before executing,
-	// so we only stub v1 globals when they're actually needed. v2 games
-	// declare `contract: 2` on their Game object; we look for that literal.
-	// Ugly but effective — the alternative is executing with every global
-	// bound and then pruning, which defeats the "v2 render can't call ctx"
-	// guarantee.
-	isV2 := sourceDeclaresV2(files)
-	lr.contractVersion = 1
-	if isV2 {
-		lr.contractVersion = 2
-	}
-
-	if !isV2 {
-		// v1 legacy globals — stubbed as no-ops on the client, since all
-		// side-effecty globals belong to server-side execution anyway.
-		lr.vm.Set("log", func(msg string) { log.Println("[game]", msg) })
-		lr.vm.Set("chat", func(string) {})
-		lr.vm.Set("chatPlayer", func(string, string) {})
-		lr.vm.Set("teams", func() []any { return nil })
-		lr.vm.Set("now", func() int64 { return 0 })
-		lr.vm.Set("gameOver", func(goja.FunctionCall) goja.Value { return goja.Undefined() })
-		lr.vm.Set("registerCommand", func(goja.FunctionCall) goja.Value { return goja.Undefined() })
-		lr.vm.Set("midiNote", func(goja.FunctionCall) goja.Value { return goja.Undefined() })
-		lr.vm.Set("midiProgram", func(goja.FunctionCall) goja.Value { return goja.Undefined() })
-		lr.vm.Set("midiCC", func(goja.FunctionCall) goja.Value { return goja.Undefined() })
-		lr.vm.Set("midiPitch", func(goja.FunctionCall) goja.Value { return goja.Undefined() })
-		lr.vm.Set("midiSilence", func(goja.FunctionCall) goja.Value { return goja.Undefined() })
-
-		// v1-only global pixel attribute constants. v2 games read these from
-		// the cells object (cells.ATTR_BOLD, etc.) which the server's render
-		// dispatch installs.
-		lr.vm.Set("ATTR_NONE", int(render.AttrNone))
-		lr.vm.Set("ATTR_BOLD", int(render.AttrBold))
-		lr.vm.Set("ATTR_FAINT", int(render.AttrFaint))
-		lr.vm.Set("ATTR_ITALIC", int(render.AttrItalic))
-		lr.vm.Set("ATTR_UNDERLINE", int(render.AttrUnderline))
-		lr.vm.Set("ATTR_REVERSE", int(render.AttrReverse))
-	}
+	lr.vm.Set("include", func(string) {})
 
 	// Execute all source files in order.
 	for _, f := range files {
@@ -101,7 +61,6 @@ func (lr *LocalRenderer) LoadGame(files []GameSrcFile) {
 		}
 	}
 
-	// Extract render functions from the Game object.
 	gameVal := lr.vm.Get("Game")
 	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
 		log.Println("local render: no Game object found")
@@ -111,7 +70,6 @@ func (lr *LocalRenderer) LoadGame(files []GameSrcFile) {
 	if gameObj == nil {
 		return
 	}
-
 	if fn, ok := goja.AssertFunction(gameObj.Get("renderAscii")); ok {
 		lr.renderAsciiFn = fn
 	}
@@ -121,54 +79,7 @@ func (lr *LocalRenderer) LoadGame(files []GameSrcFile) {
 	if fn, ok := goja.AssertFunction(gameObj.Get("resolveMe")); ok {
 		lr.resolveMeFn = fn
 	}
-
-	// v1: call load(null) so module-level wiring runs. v2: the framework
-	// calls init(ctx) on the server; the client's state arrives fully
-	// formed via SetState and no init is needed here.
-	if !isV2 {
-		if loadFn, ok := goja.AssertFunction(gameObj.Get("load")); ok {
-			loadFn(goja.Undefined(), goja.Null())
-		}
-	}
-
 	lr.loaded = true
-}
-
-// sourceDeclaresV2 returns true if any of the loaded source files declares
-// a v2 contract via `contract: 2` on the Game object. Matches the literal
-// pattern the design doc specifies; a false positive would at worst cause
-// the client to skip the legacy stubs for a v1 game, which we'd catch
-// immediately when the game calls an undefined global.
-func sourceDeclaresV2(files []GameSrcFile) bool {
-	for _, f := range files {
-		if containsContractV2(f.Content) {
-			return true
-		}
-	}
-	return false
-}
-
-func containsContractV2(src string) bool {
-	// Match "contract: 2" or "contract:2" allowing minor whitespace variance.
-	for i := 0; i+10 < len(src); i++ {
-		if src[i] == 'c' && src[i:i+8] == "contract" {
-			// Scan past "contract", optional whitespace, ':', optional whitespace, '2'.
-			j := i + 8
-			for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
-				j++
-			}
-			if j < len(src) && src[j] == ':' {
-				j++
-				for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
-					j++
-				}
-				if j < len(src) && src[j] == '2' {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 // SetState updates Game.state in the JS VM from a full JSON baseline,
@@ -287,27 +198,18 @@ func (lr *LocalRenderer) RenderCells(playerID string, width, height int) *render
 				log.Printf("local render panic: %v", r)
 			}
 		}()
-		if lr.contractVersion >= 2 {
-			me := lr.resolveMe(playerID)
-			if goja.IsUndefined(me) || goja.IsNull(me) {
-				return
-			}
-			// Install ATTR_* and log on the cells object for v2 authors.
-			jsBuf["ATTR_NONE"] = int(render.AttrNone)
-			jsBuf["ATTR_BOLD"] = int(render.AttrBold)
-			jsBuf["ATTR_FAINT"] = int(render.AttrFaint)
-			jsBuf["ATTR_ITALIC"] = int(render.AttrItalic)
-			jsBuf["ATTR_UNDERLINE"] = int(render.AttrUnderline)
-			jsBuf["ATTR_REVERSE"] = int(render.AttrReverse)
-			jsBuf["log"] = func(msg string) { log.Printf("[cells.log] %s", msg) }
-			lr.renderAsciiFn(goja.Undefined(), lr.gameState(), me, lr.vm.ToValue(jsBuf))
+		me := lr.resolveMe(playerID)
+		if goja.IsUndefined(me) || goja.IsNull(me) {
 			return
 		}
-		lr.renderAsciiFn(goja.Undefined(),
-			lr.vm.ToValue(jsBuf),
-			lr.vm.ToValue(playerID),
-			lr.vm.ToValue(0), lr.vm.ToValue(0),
-			lr.vm.ToValue(width), lr.vm.ToValue(height))
+		jsBuf["ATTR_NONE"] = int(render.AttrNone)
+		jsBuf["ATTR_BOLD"] = int(render.AttrBold)
+		jsBuf["ATTR_FAINT"] = int(render.AttrFaint)
+		jsBuf["ATTR_ITALIC"] = int(render.AttrItalic)
+		jsBuf["ATTR_UNDERLINE"] = int(render.AttrUnderline)
+		jsBuf["ATTR_REVERSE"] = int(render.AttrReverse)
+		jsBuf["log"] = func(msg string) { log.Printf("[cells.log] %s", msg) }
+		lr.renderAsciiFn(goja.Undefined(), lr.gameState(), me, lr.vm.ToValue(jsBuf))
 	}()
 
 	return buf
@@ -328,20 +230,12 @@ func (lr *LocalRenderer) renderCanvasRaw(playerID string, pixelW, pixelH int) *i
 				log.Printf("local renderCanvas panic: %v", r)
 			}
 		}()
-		if lr.contractVersion >= 2 {
-			me := lr.resolveMe(playerID)
-			if goja.IsUndefined(me) || goja.IsNull(me) {
-				return
-			}
-			ctx["log"] = func(msg string) { log.Printf("[canvas.log] %s", msg) }
-			lr.canvasFn(goja.Undefined(), lr.gameState(), me, lr.vm.ToValue(ctx))
+		me := lr.resolveMe(playerID)
+		if goja.IsUndefined(me) || goja.IsNull(me) {
 			return
 		}
-		lr.canvasFn(goja.Undefined(),
-			lr.vm.ToValue(ctx),
-			lr.vm.ToValue(playerID),
-			lr.vm.ToValue(pixelW),
-			lr.vm.ToValue(pixelH))
+		ctx["log"] = func(msg string) { log.Printf("[canvas.log] %s", msg) }
+		lr.canvasFn(goja.Undefined(), lr.gameState(), me, lr.vm.ToValue(ctx))
 	}()
 
 	return canvas.ToRGBA()

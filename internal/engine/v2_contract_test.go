@@ -79,9 +79,6 @@ Game = {
 
 func TestV2Contract_FullLifecycle(t *testing.T) {
 	rt := loadHookRuntime(t, v2GameJS)
-	if rt.contractVersion != 2 {
-		t.Fatalf("expected contractVersion 2, got %d", rt.contractVersion)
-	}
 	if rt.ctxObj == nil {
 		t.Fatal("ctxObj should be built during extractGameObject")
 	}

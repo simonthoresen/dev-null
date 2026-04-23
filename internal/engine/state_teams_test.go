@@ -13,7 +13,8 @@ func TestState_OverlaysTeamsCache(t *testing.T) {
 			gameName: "tf",
 			teamRange: { min: 1, max: 4 },
 			state: { score: 7 },
-			load: function() {}
+			contract: 2,
+			init: function(ctx) { return Game.state; }
 		};
 	`)
 	rt.SetTeamsCache([]map[string]any{
@@ -47,7 +48,8 @@ func TestState_NoTeamsCache_LeavesStateAlone(t *testing.T) {
 			gameName: "tf",
 			teamRange: { min: 1, max: 2 },
 			state: { score: 1 },
-			load: function() {}
+			contract: 2,
+			init: function(ctx) { return Game.state; }
 		};
 	`)
 	// No SetTeamsCache call.
@@ -68,7 +70,8 @@ func TestState_OverlayDoesNotTouchLiveJSState(t *testing.T) {
 			gameName: "tf",
 			teamRange: { min: 1, max: 4 },
 			state: { score: 1, marker: "untouched" },
-			load: function() {}
+			contract: 2,
+			init: function(ctx) { return Game.state; }
 		};
 	`)
 	rt.SetTeamsCache([]map[string]any{{"name": "Red", "color": "#F00", "players": []any{}}})

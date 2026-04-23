@@ -6,8 +6,9 @@ height: 34
 --- js
 #import "cube.js"
 var Game = {
-    load: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 0.4, 0.0); }
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderCanvas: function(state, me, canvas) { var ctx = canvas, playerID = me.id, w = canvas.width, h = canvas.height; drawCube(ctx, w, h, 0.4, 0.0); }
 };
 ---
 ===
@@ -54,8 +55,9 @@ height: 34
 --- js
 #import "cube.js"
 var Game = {
-    load: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 0.4, 0.8); }
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderCanvas: function(state, me, canvas) { var ctx = canvas, playerID = me.id, w = canvas.width, h = canvas.height; drawCube(ctx, w, h, 0.4, 0.8); }
 };
 ---
 ===
@@ -102,8 +104,9 @@ height: 34
 --- js
 #import "cube.js"
 var Game = {
-    load: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 0.4, 2.356); }
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderCanvas: function(state, me, canvas) { var ctx = canvas, playerID = me.id, w = canvas.width, h = canvas.height; drawCube(ctx, w, h, 0.4, 2.356); }
 };
 ---
 ===
@@ -150,8 +153,9 @@ height: 34
 --- js
 #import "cube.js"
 var Game = {
-    load: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 0.7, 0.785); }
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderCanvas: function(state, me, canvas) { var ctx = canvas, playerID = me.id, w = canvas.width, h = canvas.height; drawCube(ctx, w, h, 0.7, 0.785); }
 };
 ---
 ===
@@ -198,8 +202,9 @@ height: 34
 --- js
 #import "cube.js"
 var Game = {
-    load: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 1.1, 0.4); }
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderCanvas: function(state, me, canvas) { var ctx = canvas, playerID = me.id, w = canvas.width, h = canvas.height; drawCube(ctx, w, h, 1.1, 0.4); }
 };
 ---
 ===
@@ -246,8 +251,9 @@ height: 34
 --- js
 #import "cube.js"
 var Game = {
-    load: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 0.6, 1.2); }
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderCanvas: function(state, me, canvas) { var ctx = canvas, playerID = me.id, w = canvas.width, h = canvas.height; drawCube(ctx, w, h, 0.6, 1.2); }
 };
 ---
 ===
@@ -294,8 +300,9 @@ height: 34
 --- js
 #import "cube.js"
 var Game = {
-    load: function(s) {},
-    renderCanvas: function(ctx, playerID, w, h) { drawCube(ctx, w, h, 0.1, 0.524); }
+    contract: 2,
+    init: function(ctx) { return {}; },
+    renderCanvas: function(state, me, canvas) { var ctx = canvas, playerID = me.id, w = canvas.width, h = canvas.height; drawCube(ctx, w, h, 0.1, 0.524); }
 };
 ---
 ===

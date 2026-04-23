@@ -20,7 +20,8 @@ func TestIncludeSingleFile(t *testing.T) {
 		include("helper.js");
 		var Game = {
 			gameName: greet("World"),
-			load: function(s) {}
+			contract: 2,
+			init: function(ctx) { return {}; }
 		};
 	`), 0o644)
 
@@ -47,7 +48,8 @@ func TestIncludeIdempotent(t *testing.T) {
 		include("counter.js");
 		var Game = {
 			gameName: "count-" + counter,
-			load: function(s) {}
+			contract: 2,
+			init: function(ctx) { return {}; }
 		};
 	`), 0o644)
 
@@ -67,29 +69,13 @@ func TestIncludeRejectsPathTraversal(t *testing.T) {
 	mainJS := filepath.Join(dir, "main.js")
 	os.WriteFile(mainJS, []byte(`
 		include("../etc/passwd");
-		var Game = { load: function(s) {} };
+		var Game = { contract: 2, init: function(ctx) { return {}; } };
 	`), 0o644)
 
 	chatCh := make(chan domain.Message, 8)
 	_, err := LoadGame(mainJS, func(string) {}, chatCh, domain.RealClock{}, dir)
 	if err == nil {
 		t.Fatal("expected error for path traversal, got nil")
-	}
-}
-
-func TestNethackGameLoads(t *testing.T) {
-	mainJS := filepath.Join("../../dist/games/nethack", "main.js")
-	if _, err := os.Stat(mainJS); err != nil {
-		t.Skip("nethack game not found at", mainJS)
-	}
-
-	chatCh := make(chan domain.Message, 64)
-	game, err := LoadGame(mainJS, func(string) {}, chatCh, domain.RealClock{}, "../../dist")
-	if err != nil {
-		t.Fatalf("LoadGame nethack: %v", err)
-	}
-	if game.GameName() != "NetHack" {
-		t.Errorf("got gameName=%q, want %q", game.GameName(), "NetHack")
 	}
 }
 

@@ -3,7 +3,6 @@ package engine
 import (
 	"fmt"
 	"image/color"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,403 +14,20 @@ import (
 )
 
 func (r *Runtime) registerGlobals() {
-	// Pixel attribute constants for buf.setChar/writeString/fill.
-	r.vm.Set("ATTR_NONE", int(render.AttrNone))
-	r.vm.Set("ATTR_BOLD", int(render.AttrBold))
-	r.vm.Set("ATTR_FAINT", int(render.AttrFaint))
-	r.vm.Set("ATTR_ITALIC", int(render.AttrItalic))
-	r.vm.Set("ATTR_UNDERLINE", int(render.AttrUnderline))
-	r.vm.Set("ATTR_REVERSE", int(render.AttrReverse))
-
-	r.vm.Set("log", func(msg string) {
-		if r.logFn != nil {
-			r.logFn(msg)
-		}
-	})
-
-	r.vm.Set("chat", func(msg string) {
-		if r.chatCh != nil {
-			select {
-			case r.chatCh <- domain.Message{Text: msg}:
-			default:
-				slog.Warn("JS chat channel full, dropping message", "text", msg)
-			}
-		}
-	})
-
-	r.vm.Set("chatPlayer", func(playerID, msg string) {
-		if r.chatCh != nil {
-			select {
-			case r.chatCh <- domain.Message{Text: msg, IsPrivate: true, ToID: playerID}:
-			default:
-				slog.Warn("JS chatPlayer channel full, dropping message")
-			}
-		}
-	})
-
-	r.vm.Set("playSound", func(call goja.FunctionCall) goja.Value {
-		if r.chatCh == nil {
-			return goja.Undefined()
-		}
-		filename := ""
-		if v := call.Argument(0); !goja.IsUndefined(v) && !goja.IsNull(v) {
-			filename = v.String()
-		}
-		msg := domain.Message{SoundFile: filename}
-		if optsVal := call.Argument(1); !goja.IsUndefined(optsVal) && !goja.IsNull(optsVal) {
-			if opts := optsVal.ToObject(r.vm); opts != nil {
-				if v := opts.Get("loop"); v != nil && !goja.IsUndefined(v) {
-					msg.SoundLoop = v.ToBoolean()
-				}
-				if v := opts.Get("alt"); v != nil && !goja.IsUndefined(v) {
-					msg.Text = v.String()
-				}
-			}
-		}
-		select {
-		case r.chatCh <- msg:
-		default:
-			slog.Warn("JS playSound channel full, dropping", "file", filename)
-		}
-		return goja.Undefined()
-	})
-
-	r.vm.Set("stopSound", func(call goja.FunctionCall) goja.Value {
-		if r.chatCh == nil {
-			return goja.Undefined()
-		}
-		filename := ""
-		if v := call.Argument(0); !goja.IsUndefined(v) && !goja.IsNull(v) {
-			filename = v.String()
-		}
-		select {
-		case r.chatCh <- domain.Message{SoundStop: true, SoundFile: filename}:
-		default:
-			slog.Warn("JS stopSound channel full, dropping", "file", filename)
-		}
-		return goja.Undefined()
-	})
-
-	// MIDI synthesis — events flow through chatCh to graphical clients.
-	r.vm.Set("midiNote", func(call goja.FunctionCall) goja.Value {
-		if r.chatCh == nil {
-			return goja.Undefined()
-		}
-		ch := int(call.Argument(0).ToInteger())
-		note := int(call.Argument(1).ToInteger())
-		vel := int(call.Argument(2).ToInteger())
-		dur := int(call.Argument(3).ToInteger())
-		ev := newNoteOnEvent(ch, note, vel, dur)
-		select {
-		case r.chatCh <- domain.Message{MidiEvents: []domain.MidiEvent{ev}}:
-		default:
-			slog.Warn("JS midiNote channel full, dropping")
-		}
-		return goja.Undefined()
-	})
-
-	r.vm.Set("midiNotePlayer", func(call goja.FunctionCall) goja.Value {
-		if r.chatCh == nil {
-			return goja.Undefined()
-		}
-		playerID := call.Argument(0).String()
-		ch := int(call.Argument(1).ToInteger())
-		note := int(call.Argument(2).ToInteger())
-		vel := int(call.Argument(3).ToInteger())
-		dur := int(call.Argument(4).ToInteger())
-		ev := newNoteOnEvent(ch, note, vel, dur)
-		select {
-		case r.chatCh <- domain.Message{MidiEvents: []domain.MidiEvent{ev}, IsPrivate: true, ToID: playerID}:
-		default:
-			slog.Warn("JS midiNotePlayer channel full, dropping")
-		}
-		return goja.Undefined()
-	})
-
-	r.vm.Set("midiProgram", func(call goja.FunctionCall) goja.Value {
-		if r.chatCh == nil {
-			return goja.Undefined()
-		}
-		ch := int(call.Argument(0).ToInteger())
-		prog := int(call.Argument(1).ToInteger())
-		ev := newProgramChangeEvent(ch, prog)
-		select {
-		case r.chatCh <- domain.Message{MidiEvents: []domain.MidiEvent{ev}}:
-		default:
-			slog.Warn("JS midiProgram channel full, dropping")
-		}
-		return goja.Undefined()
-	})
-
-	r.vm.Set("midiProgramPlayer", func(call goja.FunctionCall) goja.Value {
-		if r.chatCh == nil {
-			return goja.Undefined()
-		}
-		playerID := call.Argument(0).String()
-		ch := int(call.Argument(1).ToInteger())
-		prog := int(call.Argument(2).ToInteger())
-		ev := newProgramChangeEvent(ch, prog)
-		select {
-		case r.chatCh <- domain.Message{MidiEvents: []domain.MidiEvent{ev}, IsPrivate: true, ToID: playerID}:
-		default:
-			slog.Warn("JS midiProgramPlayer channel full, dropping")
-		}
-		return goja.Undefined()
-	})
-
-	r.vm.Set("midiCC", func(call goja.FunctionCall) goja.Value {
-		if r.chatCh == nil {
-			return goja.Undefined()
-		}
-		ch := int(call.Argument(0).ToInteger())
-		ctrl := int(call.Argument(1).ToInteger())
-		val := int(call.Argument(2).ToInteger())
-		ev := newControlChangeEvent(ch, ctrl, val)
-		select {
-		case r.chatCh <- domain.Message{MidiEvents: []domain.MidiEvent{ev}}:
-		default:
-			slog.Warn("JS midiCC channel full, dropping")
-		}
-		return goja.Undefined()
-	})
-
-	r.vm.Set("teams", func() []map[string]any {
-		// Return a deep copy of the cached snapshot to prevent JS mutation.
-		result := make([]map[string]any, len(r.cachedTeams))
-		for i, t := range r.cachedTeams {
-			cp := make(map[string]any, len(t))
-			for k, v := range t {
-				if k == "players" {
-					if players, ok := v.([]any); ok {
-						pCopy := make([]any, len(players))
-						for j, p := range players {
-							if pm, ok := p.(map[string]any); ok {
-								entry := make(map[string]any, len(pm))
-								for pk, pv := range pm {
-									entry[pk] = pv
-								}
-								pCopy[j] = entry
-							} else {
-								pCopy[j] = p
-							}
-						}
-						cp[k] = pCopy
-					}
-				} else {
-					cp[k] = v
-				}
-			}
-			result[i] = cp
-		}
-		return result
-	})
-
-	r.vm.Set("gameOver", func(call goja.FunctionCall) goja.Value {
-		r.gameOverPending = true
-		r.gameOverResults = nil
-
-		// First arg: results array [{name, result}, ...]
-		if len(call.Arguments) > 0 {
-			arg := call.Argument(0)
-			if arg != nil && !goja.IsUndefined(arg) && !goja.IsNull(arg) {
-				obj := arg.ToObject(r.vm)
-				if obj != nil {
-					for _, key := range obj.Keys() {
-						item := obj.Get(key)
-						if item == nil || goja.IsUndefined(item) {
-							continue
-						}
-						itemObj := item.ToObject(r.vm)
-						if itemObj == nil {
-							continue
-						}
-						entry := domain.GameResult{}
-						if v := itemObj.Get("name"); v != nil && !goja.IsUndefined(v) {
-							entry.Name = v.String()
-						}
-						if v := itemObj.Get("result"); v != nil && !goja.IsUndefined(v) {
-							entry.Result = v.String()
-						}
-						r.gameOverResults = append(r.gameOverResults, entry)
-					}
-				}
-			}
-		}
-
-		return goja.Undefined()
-	})
+	// Only pure utilities stay as globals under v2. Everything side-effecty
+	// (log, chat, midi*, teams, gameOver, registerCommand, …) is exposed on
+	// the ctx object handed to server-only hooks; render JS never sees ctx,
+	// so misusing those APIs from render becomes a type error instead of a
+	// silent divergence.
 
 	r.vm.Set("figlet", func(text string, font string) string {
 		return Figlet(text, font)
 	})
 
-	r.vm.Set("addMenu", func(call goja.FunctionCall) goja.Value {
-		label := ""
-		if v := call.Argument(0); !goja.IsUndefined(v) {
-			label = v.String()
-		}
-		if label == "" {
-			return goja.Undefined()
-		}
-		itemsVal := call.Argument(1)
-		var items []domain.MenuItemDef
-		if !goja.IsUndefined(itemsVal) && !goja.IsNull(itemsVal) {
-			arr := itemsVal.ToObject(r.vm)
-			for _, k := range arr.Keys() {
-				el := arr.Get(k)
-				if el == nil || goja.IsUndefined(el) || goja.IsNull(el) {
-					continue
-				}
-				obj := el.ToObject(r.vm)
-				itemLabel := ""
-				if v := obj.Get("label"); v != nil && !goja.IsUndefined(v) {
-					itemLabel = v.String()
-				}
-				disabled := false
-				if v := obj.Get("disabled"); v != nil && !goja.IsUndefined(v) {
-					disabled = v.ToBoolean()
-				}
-				var handler goja.Callable
-				if v := obj.Get("onClick"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
-					handler, _ = goja.AssertFunction(v)
-				}
-				var goHandler func(string)
-				if handler != nil {
-					capturedHandler := handler
-					goHandler = func(playerID string) {
-						r.mu.Lock()
-						defer r.mu.Unlock()
-						_, _ = capturedHandler(goja.Undefined(), r.vm.ToValue(playerID))
-					}
-				}
-				items = append(items, domain.MenuItemDef{
-					Label:    itemLabel,
-					Disabled: disabled,
-					Handler:  goHandler,
-				})
-			}
-		}
-		r.menus = append(r.menus, domain.MenuDef{Label: label, Items: items})
-		return goja.Undefined()
-	})
-
-	r.vm.Set("messageBox", func(call goja.FunctionCall) goja.Value {
-		playerID := ""
-		if v := call.Argument(0); !goja.IsUndefined(v) {
-			playerID = v.String()
-		}
-		optsVal := call.Argument(1)
-		if goja.IsUndefined(optsVal) || goja.IsNull(optsVal) {
-			return goja.Undefined()
-		}
-		opts := optsVal.ToObject(r.vm)
-
-		title := ""
-		if v := opts.Get("title"); v != nil && !goja.IsUndefined(v) {
-			title = v.String()
-		}
-		message := ""
-		if v := opts.Get("message"); v != nil && !goja.IsUndefined(v) {
-			message = v.String()
-		}
-		var buttons []string
-		if v := opts.Get("buttons"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
-			arr := v.ToObject(r.vm)
-			for _, k := range arr.Keys() {
-				if el := arr.Get(k); el != nil && !goja.IsUndefined(el) {
-					buttons = append(buttons, el.String())
-				}
-			}
-		}
-		var onClose func(string)
-		if v := opts.Get("onClose"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
-			if cb, ok := goja.AssertFunction(v); ok {
-				onClose = func(button string) {
-					r.mu.Lock()
-					defer r.mu.Unlock()
-					_, _ = cb(goja.Undefined(), r.vm.ToValue(button))
-				}
-			}
-		}
-		d := domain.DialogRequest{
-			Title:   title,
-			Body:    message,
-			Buttons: buttons,
-			OnClose: onClose,
-		}
-		if r.showDialogFn != nil {
-			go r.showDialogFn(playerID, d)
-		}
-		return goja.Undefined()
-	})
-
-	r.vm.Set("registerCommand", func(call goja.FunctionCall) goja.Value {
-		specVal := call.Argument(0)
-		specObj := specVal.ToObject(r.vm)
-
-		name := ""
-		if v := specObj.Get("name"); v != nil {
-			name = v.String()
-		}
-		desc := ""
-		if v := specObj.Get("description"); v != nil {
-			desc = v.String()
-		}
-		adminOnly := false
-		if v := specObj.Get("adminOnly"); v != nil && !goja.IsUndefined(v) {
-			adminOnly = v.ToBoolean()
-		}
-		firstArgIsPlayer := false
-		if v := specObj.Get("firstArgIsPlayer"); v != nil && !goja.IsUndefined(v) {
-			firstArgIsPlayer = v.ToBoolean()
-		}
-		handler, _ := goja.AssertFunction(specObj.Get("handler"))
-
-		if name == "" || handler == nil {
-			slog.Warn("JS registerCommand: name and handler are required")
-			return goja.Undefined()
-		}
-
-		cmd := domain.Command{
-			Name:             name,
-			Description:      desc,
-			AdminOnly:        adminOnly,
-			FirstArgIsPlayer: firstArgIsPlayer,
-			Handler: func(ctx domain.CommandContext, args []string) {
-				r.mu.Lock()
-				defer r.mu.Unlock()
-
-				jsArgs := make([]interface{}, len(args))
-				for i, a := range args {
-					jsArgs[i] = a
-				}
-				argsVal := r.vm.ToValue(jsArgs)
-
-				_, err := handler(goja.Undefined(),
-					r.vm.ToValue(ctx.PlayerID),
-					r.vm.ToValue(ctx.IsAdmin),
-					argsVal,
-				)
-				if err != nil {
-					slog.Error("JS command handler error", "name", name, "error", err)
-					ctx.Reply(fmt.Sprintf("Command error: %v", err))
-				}
-			},
-		}
-		r.commands = append(r.commands, cmd)
-		return goja.Undefined()
-	})
-
-	// now() — returns server time in epoch milliseconds (mockable via Clock).
-	r.vm.Set("now", func() int64 {
-		return r.clock.Now().UnixMilli()
-	})
-
-	// include("file.js") — evaluate another JS file relative to the game's directory.
-	// This enables multi-file games stored in games/<name>/ folders.
-	included := map[string]bool{} // track already-included files to prevent cycles
+	// include("file.js") evaluates another JS file relative to the game's
+	// directory. Enables multi-file games stored in games/<name>/ folders.
+	included := map[string]bool{}
 	r.vm.Set("include", func(name string) {
-		// Sanitize: no path traversal, must end in .js
 		if strings.Contains(name, "..") || strings.ContainsAny(name, "/\\") {
 			panic(r.vm.NewGoError(fmt.Errorf("include: invalid path %q (no directories or ..)", name)))
 		}
@@ -420,17 +36,15 @@ func (r *Runtime) registerGlobals() {
 		}
 		absPath := filepath.Join(r.baseDir, name)
 		if included[absPath] {
-			return // already included
+			return
 		}
 		included[absPath] = true
 		src, err := os.ReadFile(absPath)
 		if err != nil {
 			panic(r.vm.NewGoError(fmt.Errorf("include %q: %w", name, err)))
 		}
-		// Record for client-side replication.
 		r.SourceFiles = append(r.SourceFiles, domain.GameSourceFile{Name: name, Content: string(src)})
-		_, err = r.vm.RunScript(name, string(src))
-		if err != nil {
+		if _, err := r.vm.RunScript(name, string(src)); err != nil {
 			panic(r.vm.NewGoError(fmt.Errorf("include %q: %w", name, err)))
 		}
 	})

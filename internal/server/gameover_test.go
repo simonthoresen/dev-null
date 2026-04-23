@@ -36,7 +36,8 @@ func TestCheckGameOverPostsChatAndUnloads(t *testing.T) {
 	s.state.RLock()
 	game := s.state.ActiveGame
 	s.state.RUnlock()
-	game.OnInput("p1", "space") // triggers gameOver() in the test JS game
+	game.OnInput("p1", "space") // queues an event; Update drains and runs it
+	game.Update(0.01)
 	s.checkGameOver()
 
 	if s.state.GetGamePhase() != domain.PhaseNone {

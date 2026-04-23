@@ -14,8 +14,8 @@ func loadMinimalGame(t *testing.T) *LocalRenderer {
 	lr.LoadGame([]GameSrcFile{
 		{Name: "stub.js", Content: `
 			var Game = {
-				state: null,
-				load: function() { Game.state = { seed: "from-load" }; }
+				contract: 2,
+				state: { seed: "from-load" }
 			};
 		`},
 	})
