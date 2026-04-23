@@ -391,7 +391,7 @@ func (lr *LocalRenderer) resolveMe(playerID string) goja.Value {
 	}
 	me := playersObj.Get(playerID)
 	if me == nil || goja.IsUndefined(me) || goja.IsNull(me) {
-		return goja.Undefined()
+		return lr.minimalMe(playerID)
 	}
 	return me
 }

@@ -154,21 +154,17 @@ func TestV2Contract_FullLifecycle(t *testing.T) {
 	rt.End()
 }
 
-// renderCanvas invoked with an unresolved playerID should no-op (not throw).
-// Chrome/client draw the splash themselves.
-func TestV2Contract_UnresolvedMe_SkipsRender(t *testing.T) {
+// Default resolveMe always returns at least {id: pid} so render is called
+// even for players not explicitly registered. Games that want the "not
+// ready" splash override resolveMe to return null themselves.
+func TestV2Contract_UnregisteredPlayer_GetsMinimalMe(t *testing.T) {
 	rt := loadHookRuntime(t, v2GameJS)
 	rt.Load(nil)
 	rt.Begin()
 
-	// Don't register any player; "unknown" isn't in state.players.
-	data := rt.RenderCanvas("unknown", 20, 20)
-	// The canvas is still encoded but the game's renderCanvas was not called,
-	// so the output is a blank canvas (not a JS throw). The important thing
-	// is the server didn't panic and returned *some* bytes — no thrown
-	// exception means we skipped the call silently.
-	if data == nil {
-		t.Errorf("RenderCanvas should produce a blank PNG when me unresolved, got nil (did JS throw?)")
+	// "unknown" isn't in state.players; minimal me should still be provided.
+	if data := rt.RenderCanvas("unknown", 20, 20); data == nil {
+		t.Error("RenderCanvas with minimal me should produce a PNG")
 	}
 }
 
@@ -197,7 +193,10 @@ func TestV2Contract_CustomResolveMe(t *testing.T) {
 	if got := rt.StatusBar("p1"); got != "zoom=2" {
 		t.Errorf("custom resolveMe not honoured: %q", got)
 	}
+	// When game's resolveMe returns null, framework synthesises a minimal me
+	// so statusBar still gets a non-null value (but without the zoom field
+	// the game expected — it's on the game to check).
 	if got := rt.StatusBar("unknown"); got != "no-me" {
-		t.Errorf("resolveMe returning null should be treated as unresolved; got %q", got)
+		t.Errorf("resolveMe null should degrade gracefully; got %q", got)
 	}
 }

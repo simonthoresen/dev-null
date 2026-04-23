@@ -193,6 +193,9 @@ func (r *Runtime) Begin() {
 	if r.beginFn == nil {
 		return
 	}
+	if r.contractVersion >= 2 {
+		r.injectStateTeams()
+	}
 	defer r.recoverJS("Begin")
 	defer traceCall(r.vm, "Begin")()
 	cancel := Watchdog(r.vm, "Begin")
@@ -215,6 +218,7 @@ func (r *Runtime) End() {
 	cancel := Watchdog(r.vm, "End")
 	defer cancel()
 	if r.contractVersion >= 2 {
+		r.injectStateTeams()
 		_, _ = r.endFn(goja.Undefined(), r.currentState(), r.ctxObj)
 		return
 	}
@@ -406,7 +410,8 @@ func (r *Runtime) Update(dt float64) {
 	defer cancel()
 
 	if r.contractVersion >= 2 && r.updateFn != nil {
-		// Drain pending events and append the per-tick tick event.
+		// Refresh live state.teams and drain pending events.
+		r.injectStateTeams()
 		events := r.pendingEvents
 		r.pendingEvents = nil
 		events = append(events, map[string]any{"type": "tick"})
@@ -449,6 +454,34 @@ func (r *Runtime) injectStateTime() {
 	if stateObj != nil {
 		stateObj.Set("_t", r.elapsedTime)
 	}
+}
+
+// injectStateTeams writes the cached teams onto the live Game.state so v2
+// game code running on the server sees state.teams during begin/update
+// without having to call teams(). Export-time overlay in State() handles
+// the client-synced snapshot; this handles the server-live object.
+// Must be called with r.mu held. No-op when no teams are cached yet.
+func (r *Runtime) injectStateTeams() {
+	if r.cachedTeams == nil {
+		return
+	}
+	gameVal := r.vm.Get("Game")
+	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
+		return
+	}
+	gameObj := gameVal.ToObject(r.vm)
+	if gameObj == nil {
+		return
+	}
+	stateVal := gameObj.Get("state")
+	if stateVal == nil || goja.IsUndefined(stateVal) || goja.IsNull(stateVal) {
+		return
+	}
+	stateObj := stateVal.ToObject(r.vm)
+	if stateObj == nil {
+		return
+	}
+	stateObj.Set("teams", r.vm.ToValue(r.cachedTeams))
 }
 
 func (r *Runtime) RenderAscii(buf *render.ImageBuffer, playerID string, x, y, width, height int) {
@@ -513,12 +546,10 @@ func (r *Runtime) resolveMe(playerID string) goja.Value {
 		}
 		return me
 	}
-	// Default: if state.players exists, look up state.players[pid] (and
-	// return undefined when the player hasn't been registered yet, so
-	// chrome can draw the not-ready splash). If state.players doesn't
-	// exist at all, the game doesn't track per-player state — return a
-	// minimal {id: pid} so screensavers and solo games don't need to
-	// provide a resolveMe hook.
+	// Default: return state.players[pid] if it exists, else a minimal
+	// {id: pid}. The default ALWAYS returns something — games that want
+	// the "not ready" splash override resolveMe to return null when
+	// their player isn't spawned yet.
 	stateObj := state.ToObject(r.vm)
 	if stateObj == nil {
 		return r.minimalMe(playerID)
@@ -533,7 +564,7 @@ func (r *Runtime) resolveMe(playerID string) goja.Value {
 	}
 	me := playersObj.Get(playerID)
 	if me == nil || goja.IsUndefined(me) || goja.IsNull(me) {
-		return goja.Undefined()
+		return r.minimalMe(playerID)
 	}
 	return me
 }
