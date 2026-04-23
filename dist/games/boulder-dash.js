@@ -194,27 +194,26 @@ var CAVES = [
 ];
 
 // ============================================================
-// Module-level state (all reset in loadCave / begin)
-// ============================================================
-var grid=[], fallingGrid=[], movedGrid=[];
-var CAVE_W=0, CAVE_H=0;
-var enemies=[];     // [{type:"firefly"|"butterfly", x, y, dir}]
-var amoebaList=[];  // [{x,y}] current amoeba cells
-var pls={};         // per-player records
-var plOrder=[];     // insertion-order player IDs
+// All mutable game state lives in Game.state; _s is bound to it at the
+// start of each hook so the existing helpers reference _s.X unchanged.
+var _s = null;
 
-var caveIndex=0, caveData=null;
-var caveName="", caveTitle="";
-var startX=1, startY=1;
-var diamondsNeeded=0, diamondsCollected=0;
-var timeLeft=0;
-var exitOpen=false;
-var magicWallActive=false, magicWallTimer=0;
-var physicsTimer=0, enemyTimer=0, amoebaTimer=0;
-var elapsed=0;
-var wonDelay=0;     // > 0 while waiting for next-cave transition
-var gameEnded=false;
-var highScore=0;
+function initialState() {
+    return {
+        grid:[], fallingGrid:[], movedGrid:[],
+        CAVE_W:0, CAVE_H:0,
+        enemies:[], amoebaList:[],
+        pls:{}, plOrder:[],
+        caveIndex:0, caveData:null,
+        caveName:"", caveTitle:"",
+        startX:1, startY:1,
+        diamondsNeeded:0, diamondsCollected:0,
+        timeLeft:0, exitOpen:false,
+        magicWallActive:false, magicWallTimer:0,
+        physicsTimer:0, enemyTimer:0, amoebaTimer:0,
+        elapsed:0, wonDelay:0, gameEnded:false, highScore:0
+    };
+}
 
 // ============================================================
 // Helpers
@@ -223,20 +222,20 @@ function clamp(v,lo,hi){ return v<lo?lo:v>hi?hi:v; }
 function rng(){ return Math.random(); }
 
 function inBounds(x,y){
-    return x>=0 && x<CAVE_W && y>=0 && y<CAVE_H;
+    return x>=0 && x<_s.CAVE_W && y>=0 && y<_s.CAVE_H;
 }
 
 function playerAt(x,y){
-    for(var id in pls){
-        var p=pls[id];
+    for(var id in _s.pls){
+        var p=_s.pls[id];
         if(!p.dead && !p.exited && p.x===x && p.y===y) return id;
     }
     return null;
 }
 
 function enemyAt(x,y){
-    for(var i=0;i<enemies.length;i++){
-        if(enemies[i].x===x && enemies[i].y===y) return i;
+    for(var i=0;i<_s.enemies.length;i++){
+        if(_s.enemies[i].x===x && _s.enemies[i].y===y) return i;
     }
     return -1;
 }
@@ -249,10 +248,10 @@ function parseGrid(raw){
     for(var i=0;i<raw.length;i++){
         if(raw[i].length>maxW) maxW=raw[i].length;
     }
-    CAVE_H=raw.length;
-    CAVE_W=maxW;
+    _s.CAVE_H=raw.length;
+    _s.CAVE_W=maxW;
     var g=[], fg=[], mg=[], ens=[], amL=[], sx=1, sy=1;
-    for(var y=0;y<CAVE_H;y++){
+    for(var y=0;y<_s.CAVE_H;y++){
         var row=raw[y];
         while(row.length<maxW) row+="#";
         g.push([]); fg.push([]); mg.push([]);
@@ -278,29 +277,29 @@ function parseGrid(raw){
 }
 
 function loadCave(idx){
-    caveData          = CAVES[idx];
-    caveIndex         = idx;
-    caveName          = caveData.name;
-    caveTitle         = caveData.title;
-    diamondsNeeded    = caveData.diamondsNeeded;
-    diamondsCollected = 0;
-    timeLeft          = caveData.timeLimit;
-    exitOpen          = false;
-    magicWallActive   = (caveData.magicWallDur > 0);
-    magicWallTimer    = caveData.magicWallDur || 0;
-    wonDelay          = 0;
-    physicsTimer=0; enemyTimer=0; amoebaTimer=0;
+    _s.caveData          = CAVES[idx];
+    _s.caveIndex         = idx;
+    _s.caveName          = _s.caveData.name;
+    _s.caveTitle         = _s.caveData.title;
+    _s.diamondsNeeded    = _s.caveData.diamondsNeeded;
+    _s.diamondsCollected = 0;
+    _s.timeLeft          = _s.caveData.timeLimit;
+    _s.exitOpen          = false;
+    _s.magicWallActive   = (_s.caveData.magicWallDur > 0);
+    _s.magicWallTimer    = _s.caveData.magicWallDur || 0;
+    _s.wonDelay          = 0;
+    _s.physicsTimer=0; _s.enemyTimer=0; _s.amoebaTimer=0;
 
-    var parsed=parseGrid(caveData.raw);
-    grid=parsed.g; fallingGrid=parsed.fg; movedGrid=parsed.mg;
-    enemies=parsed.ens; amoebaList=parsed.amL;
-    startX=parsed.sx; startY=parsed.sy;
+    var parsed=parseGrid(_s.caveData.raw);
+    _s.grid=parsed.g; _s.fallingGrid=parsed.fg; _s.movedGrid=parsed.mg;
+    _s.enemies=parsed.ens; _s.amoebaList=parsed.amL;
+    _s.startX=parsed.sx; _s.startY=parsed.sy;
 
     // Place / reset all living players
-    for(var id in pls){
-        var p=pls[id];
+    for(var id in _s.pls){
+        var p=_s.pls[id];
         if(p.lives>0){
-            p.x=startX; p.y=startY;
+            p.x=_s.startX; p.y=_s.startY;
             p.dead=false; p.exited=false;
             p.respawnTimer=0; p.invulnTimer=INVULN_TIME;
         }
@@ -311,9 +310,9 @@ function loadCave(idx){
 // Physics
 // ============================================================
 function clearMoved(){
-    for(var y=0;y<CAVE_H;y++)
-        for(var x=0;x<CAVE_W;x++)
-            movedGrid[y][x]=false;
+    for(var y=0;y<_s.CAVE_H;y++)
+        for(var x=0;x<_s.CAVE_W;x++)
+            _s.movedGrid[y][x]=false;
 }
 
 // Called when a heavy object lands at (x,y).
@@ -323,8 +322,8 @@ function checkCrush(x,y){
 
     var ei=enemyAt(x,y);
     if(ei>=0){
-        var yTile=(enemies[ei].type==="butterfly")?DIAMOND:EMPTY;
-        enemies.splice(ei,1);
+        var yTile=(_s.enemies[ei].type==="butterfly")?DIAMOND:EMPTY;
+        _s.enemies.splice(ei,1);
         doExplosion(x,y,yTile);
     }
 }
@@ -334,16 +333,16 @@ function doExplosion(cx,cy,yTile){
         for(var dx=-1;dx<=1;dx++){
             var ex=cx+dx, ey=cy+dy;
             if(!inBounds(ex,ey)) continue;
-            if(grid[ey][ex]===WALL) continue;
-            grid[ey][ex]=yTile;
-            fallingGrid[ey][ex]=false;
-            movedGrid[ey][ex]=true;
+            if(_s.grid[ey][ex]===WALL) continue;
+            _s.grid[ey][ex]=yTile;
+            _s.fallingGrid[ey][ex]=false;
+            _s.movedGrid[ey][ex]=true;
             // Kill players in blast
             var pid=playerAt(ex,ey);
             if(pid!==null) triggerDeath(pid);
             // Remove any other enemies in blast
-            for(var i=enemies.length-1;i>=0;i--){
-                if(enemies[i].x===ex && enemies[i].y===ey) enemies.splice(i,1);
+            for(var i=_s.enemies.length-1;i>=0;i--){
+                if(_s.enemies[i].x===ex && _s.enemies[i].y===ey) _s.enemies.splice(i,1);
             }
         }
     }
@@ -352,23 +351,23 @@ function doExplosion(cx,cy,yTile){
 
 function physicsTick(){
     clearMoved();
-    for(var y=0;y<CAVE_H-1;y++){
-        for(var x=0;x<CAVE_W;x++){
-            if(movedGrid[y][x]) continue;
-            var tile=grid[y][x];
+    for(var y=0;y<_s.CAVE_H-1;y++){
+        for(var x=0;x<_s.CAVE_W;x++){
+            if(_s.movedGrid[y][x]) continue;
+            var tile=_s.grid[y][x];
             if(tile!==BOULDER && tile!==DIAMOND) continue;
 
-            var below=grid[y+1][x];
+            var below=_s.grid[y+1][x];
 
             // ── Magic wall pass-through ──────────────────────
-            if(below===MAGIC_WALL && magicWallActive){
-                if(y+2<CAVE_H && grid[y+2][x]===EMPTY && !movedGrid[y+2][x]){
-                    grid[y][x]=EMPTY;
-                    fallingGrid[y][x]=false;
+            if(below===MAGIC_WALL && _s.magicWallActive){
+                if(y+2<_s.CAVE_H && _s.grid[y+2][x]===EMPTY && !_s.movedGrid[y+2][x]){
+                    _s.grid[y][x]=EMPTY;
+                    _s.fallingGrid[y][x]=false;
                     var out=(tile===BOULDER)?DIAMOND:BOULDER;
-                    grid[y+2][x]=out;
-                    fallingGrid[y+2][x]=true;
-                    movedGrid[y+2][x]=true;
+                    _s.grid[y+2][x]=out;
+                    _s.fallingGrid[y+2][x]=true;
+                    _s.movedGrid[y+2][x]=true;
                     checkCrush(x,y+2);
                 }
                 continue;
@@ -376,41 +375,41 @@ function physicsTick(){
 
             // ── Direct fall ──────────────────────────────────
             // Note: no player/enemy exclusion — falling onto them is the crush mechanic.
-            if(below===EMPTY && !movedGrid[y+1][x]){
-                grid[y][x]=EMPTY;
-                fallingGrid[y][x]=false;
-                grid[y+1][x]=tile;
-                fallingGrid[y+1][x]=true;
-                movedGrid[y+1][x]=true;
+            if(below===EMPTY && !_s.movedGrid[y+1][x]){
+                _s.grid[y][x]=EMPTY;
+                _s.fallingGrid[y][x]=false;
+                _s.grid[y+1][x]=tile;
+                _s.fallingGrid[y+1][x]=true;
+                _s.movedGrid[y+1][x]=true;
                 checkCrush(x,y+1);
                 continue;
             }
 
             // ── Roll off round surfaces ──────────────────────
             // Only rolls if was actively falling last tick (fallingGrid).
-            if(fallingGrid[y][x] && (below===BOULDER||below===DIAMOND||below===WALL||below===MAGIC_WALL)){
+            if(_s.fallingGrid[y][x] && (below===BOULDER||below===DIAMOND||below===WALL||below===MAGIC_WALL)){
                 // Try left
-                if(x>0 && grid[y][x-1]===EMPTY && grid[y+1][x-1]===EMPTY && !movedGrid[y][x-1]){
-                    grid[y][x]=EMPTY;
-                    fallingGrid[y][x]=false;
-                    grid[y][x-1]=tile;
-                    fallingGrid[y][x-1]=true;
-                    movedGrid[y][x-1]=true;
+                if(x>0 && _s.grid[y][x-1]===EMPTY && _s.grid[y+1][x-1]===EMPTY && !_s.movedGrid[y][x-1]){
+                    _s.grid[y][x]=EMPTY;
+                    _s.fallingGrid[y][x]=false;
+                    _s.grid[y][x-1]=tile;
+                    _s.fallingGrid[y][x-1]=true;
+                    _s.movedGrid[y][x-1]=true;
                     continue;
                 }
                 // Try right
-                if(x+1<CAVE_W && grid[y][x+1]===EMPTY && grid[y+1][x+1]===EMPTY && !movedGrid[y][x+1]){
-                    grid[y][x]=EMPTY;
-                    fallingGrid[y][x]=false;
-                    grid[y][x+1]=tile;
-                    fallingGrid[y][x+1]=true;
-                    movedGrid[y][x+1]=true;
+                if(x+1<_s.CAVE_W && _s.grid[y][x+1]===EMPTY && _s.grid[y+1][x+1]===EMPTY && !_s.movedGrid[y][x+1]){
+                    _s.grid[y][x]=EMPTY;
+                    _s.fallingGrid[y][x]=false;
+                    _s.grid[y][x+1]=tile;
+                    _s.fallingGrid[y][x+1]=true;
+                    _s.movedGrid[y][x+1]=true;
                     continue;
                 }
             }
 
             // Settled this tick
-            fallingGrid[y][x]=false;
+            _s.fallingGrid[y][x]=false;
         }
     }
 }
@@ -430,7 +429,7 @@ function moveEnemy(e){
         var d=dirs[i];
         var nx=e.x+DX[d], ny=e.y+DY[d];
         if(!inBounds(nx,ny)) continue;
-        if(grid[ny][nx]!==EMPTY) continue;
+        if(_s.grid[ny][nx]!==EMPTY) continue;
         if(enemyAt(nx,ny)>=0) continue;
         e.dir=d; e.x=nx; e.y=ny;
         return;
@@ -438,44 +437,44 @@ function moveEnemy(e){
 }
 
 function enemyTick(){
-    for(var i=0;i<enemies.length;i++){
-        moveEnemy(enemies[i]);
-        var pid=playerAt(enemies[i].x,enemies[i].y);
+    for(var i=0;i<_s.enemies.length;i++){
+        moveEnemy(_s.enemies[i]);
+        var pid=playerAt(_s.enemies[i].x,_s.enemies[i].y);
         if(pid!==null) triggerDeath(pid);
     }
 }
 
 function amoebaGrow(){
     var grew=false;
-    var snapshot=amoebaList.slice(); // avoid index drift while pushing
+    var snapshot=_s.amoebaList.slice(); // avoid index drift while pushing
     for(var i=0;i<snapshot.length;i++){
         var a=snapshot[i];
-        if(grid[a.y][a.x]!==AMOEBA) continue;
+        if(_s.grid[a.y][a.x]!==AMOEBA) continue;
         var d=Math.floor(rng()*4);
         var nx=a.x+DX[d], ny=a.y+DY[d];
         if(!inBounds(nx,ny)) continue;
-        var t=grid[ny][nx];
+        var t=_s.grid[ny][nx];
         if(t===EMPTY||t===DIRT){
-            grid[ny][nx]=AMOEBA;
-            amoebaList.push({x:nx,y:ny});
+            _s.grid[ny][nx]=AMOEBA;
+            _s.amoebaList.push({x:nx,y:ny});
             grew=true;
         }
     }
     // Rebuild authoritative list
     var newL=[];
-    for(var y=0;y<CAVE_H;y++)
-        for(var x=0;x<CAVE_W;x++)
-            if(grid[y][x]===AMOEBA) newL.push({x:x,y:y});
-    amoebaList=newL;
+    for(var y=0;y<_s.CAVE_H;y++)
+        for(var x=0;x<_s.CAVE_W;x++)
+            if(_s.grid[y][x]===AMOEBA) newL.push({x:x,y:y});
+    _s.amoebaList=newL;
 
-    if(amoebaList.length>AMOEBA_MAX){
-        for(var ka=0;ka<amoebaList.length;ka++) grid[amoebaList[ka].y][amoebaList[ka].x]=BOULDER;
-        amoebaList=[];
+    if(_s.amoebaList.length>AMOEBA_MAX){
+        for(var ka=0;ka<_s.amoebaList.length;ka++) _s.grid[_s.amoebaList[ka].y][_s.amoebaList[ka].x]=BOULDER;
+        _s.amoebaList=[];
         chat("Amoeba too large - turned to boulders!");
-    } else if(!grew && amoebaList.length>0){
-        for(var kb=0;kb<amoebaList.length;kb++) grid[amoebaList[kb].y][amoebaList[kb].x]=DIAMOND;
+    } else if(!grew && _s.amoebaList.length>0){
+        for(var kb=0;kb<_s.amoebaList.length;kb++) _s.grid[_s.amoebaList[kb].y][_s.amoebaList[kb].x]=DIAMOND;
         chat("Amoeba suffocated - turned to diamonds!");
-        amoebaList=[];
+        _s.amoebaList=[];
     }
 }
 
@@ -483,15 +482,15 @@ function amoebaGrow(){
 // Player actions
 // ============================================================
 function openExit(){
-    exitOpen=true;
-    for(var y=0;y<CAVE_H;y++)
-        for(var x=0;x<CAVE_W;x++)
-            if(grid[y][x]===EXIT_C) grid[y][x]=EXIT_O;
+    _s.exitOpen=true;
+    for(var y=0;y<_s.CAVE_H;y++)
+        for(var x=0;x<_s.CAVE_W;x++)
+            if(_s.grid[y][x]===EXIT_C) _s.grid[y][x]=EXIT_O;
     chat("Exit open! Get to the X!");
 }
 
 function triggerDeath(playerID){
-    var p=pls[playerID];
+    var p=_s.pls[playerID];
     if(!p||p.dead||p.invulnTimer>0) return;
     p.dead=true;
     p.lives--;
@@ -504,37 +503,37 @@ function triggerDeath(playerID){
 }
 
 function tryMove(playerID, dx, dy){
-    var p=pls[playerID];
-    if(!p||p.dead||p.exited||p.invulnTimer>0||wonDelay>0) return;
+    var p=_s.pls[playerID];
+    if(!p||p.dead||p.exited||p.invulnTimer>0||_s.wonDelay>0) return;
     var tx=p.x+dx, ty=p.y+dy;
     if(!inBounds(tx,ty)) return;
-    var t=grid[ty][tx];
+    var t=_s.grid[ty][tx];
 
     if(t===EMPTY){
         p.x=tx; p.y=ty;
     } else if(t===DIRT){
-        grid[ty][tx]=EMPTY;
+        _s.grid[ty][tx]=EMPTY;
         p.x=tx; p.y=ty;
     } else if(t===DIAMOND){
-        grid[ty][tx]=EMPTY;
+        _s.grid[ty][tx]=EMPTY;
         p.x=tx; p.y=ty;
         p.diamonds++;
         p.score+=PTS_DIAMOND;
-        diamondsCollected++;
-        if(diamondsCollected>=diamondsNeeded && !exitOpen) openExit();
+        _s.diamondsCollected++;
+        if(_s.diamondsCollected>=_s.diamondsNeeded && !_s.exitOpen) openExit();
     } else if(t===EXIT_O){
         p.x=tx; p.y=ty;
         p.exited=true;
-        p.score+=Math.floor(timeLeft)*PTS_TIME+PTS_CAVE;
+        p.score+=Math.floor(_s.timeLeft)*PTS_TIME+PTS_CAVE;
         checkCaveWon();
         return;
     } else if(t===BOULDER && dy===0){
         // Horizontal push: one empty space needed behind boulder
         var bx=tx+dx;
-        if(inBounds(bx,ty) && grid[ty][bx]===EMPTY && playerAt(bx,ty)===null && enemyAt(bx,ty)<0){
-            grid[ty][tx]=EMPTY;
-            grid[ty][bx]=BOULDER;
-            fallingGrid[ty][bx]=false;
+        if(inBounds(bx,ty) && _s.grid[ty][bx]===EMPTY && playerAt(bx,ty)===null && enemyAt(bx,ty)<0){
+            _s.grid[ty][tx]=EMPTY;
+            _s.grid[ty][bx]=BOULDER;
+            _s.fallingGrid[ty][bx]=false;
             p.x=tx; p.y=ty;
         }
         return;
@@ -547,10 +546,10 @@ function tryMove(playerID, dx, dy){
 }
 
 function checkCaveWon(){
-    for(var id in pls){
-        if(pls[id].exited){
-            wonDelay=CAVE_WIN_DELAY;
-            chat("Cave "+caveName+" cleared! Next cave in "+Math.ceil(CAVE_WIN_DELAY)+"s...");
+    for(var id in _s.pls){
+        if(_s.pls[id].exited){
+            _s.wonDelay=CAVE_WIN_DELAY;
+            chat("Cave "+_s.caveName+" cleared! Next cave in "+Math.ceil(CAVE_WIN_DELAY)+"s...");
             return;
         }
     }
@@ -560,25 +559,25 @@ function checkCaveWon(){
 // Rendering
 // ============================================================
 function doRenderAscii(buf, playerID, ox, oy, width, height){
-    var me=pls[playerID];
-    var px=me?me.x:startX;
-    var py=me?me.y:startY;
-    var camX=clamp(px-Math.floor(width/2), 0, Math.max(0,CAVE_W-width));
-    var camY=clamp(py-Math.floor(height/2), 0, Math.max(0,CAVE_H-height));
+    var me=_s.pls[playerID];
+    var px=me?me.x:_s.startX;
+    var py=me?me.y:_s.startY;
+    var camX=clamp(px-Math.floor(width/2), 0, Math.max(0,_s.CAVE_W-width));
+    var camY=clamp(py-Math.floor(height/2), 0, Math.max(0,_s.CAVE_H-height));
 
     // Build quick lookup maps
     var eMap={};
-    for(var i=0;i<enemies.length;i++){
-        var e=enemies[i];
+    for(var i=0;i<_s.enemies.length;i++){
+        var e=_s.enemies[i];
         eMap[e.x+","+e.y]=e;
     }
     var pMap={};
-    for(var id in pls){
-        var p=pls[id];
+    for(var id in _s.pls){
+        var p=_s.pls[id];
         if(!p.exited) pMap[p.x+","+p.y]=id;
     }
 
-    var blink=Math.floor(elapsed*2)%2===0;
+    var blink=Math.floor(_s.elapsed*2)%2===0;
 
     for(var sy=0;sy<height;sy++){
         for(var sx=0;sx<width;sx++){
@@ -591,7 +590,7 @@ function doRenderAscii(buf, playerID, ox, oy, width, height){
             var ch=" ", fg=null, bg=null;
 
             // Base tile
-            switch(grid[gy][gx]){
+            switch(_s.grid[gy][gx]){
                 case EMPTY:      ch=" "; break;
                 case DIRT:       ch=":"; fg=C_DIRT_FG; bg=C_DIRT_BG; break;
                 case WALL:       ch="#"; fg=C_WALL_FG; bg=C_WALL_BG; break;
@@ -613,7 +612,7 @@ function doRenderAscii(buf, playerID, ox, oy, width, height){
             // Overlay: player
             if(pMap[key]){
                 var pid2=pMap[key];
-                var p2=pls[pid2];
+                var p2=_s.pls[pid2];
                 if(p2.dead){ ch="x"; fg=C_DEAD_FG; bg=null; }
                 else if(pid2===playerID){ ch="@"; fg=C_PLAYER; bg=null; }
                 else { ch="@"; fg=C_OTHER; bg=null; }
@@ -629,10 +628,10 @@ function doRenderAscii(buf, playerID, ox, oy, width, height){
 // ============================================================
 function buildResults(){
     var arr=[];
-    for(var id in pls){
-        var p=pls[id];
+    for(var id in _s.pls){
+        var p=_s.pls[id];
         arr.push({name:p.name, score:p.score});
-        if(p.score>highScore) highScore=p.score;
+        if(p.score>_s.highScore) _s.highScore=p.score;
     }
     arr.sort(function(a,b){ return b.score-a.score; });
     var res=[];
@@ -641,15 +640,15 @@ function buildResults(){
 }
 
 function addPlayer(id, name, team){
-    if(pls[id]) return;
-    pls[id]={
+    if(_s.pls[id]) return;
+    _s.pls[id]={
         name:name, team:team,
-        x:startX, y:startY,
+        x:_s.startX, y:_s.startY,
         lives:3, score:0, diamonds:0,
         exited:false, dead:false,
         respawnTimer:0, invulnTimer:INVULN_TIME
     };
-    plOrder.push(id);
+    _s.plOrder.push(id);
 }
 
 // ============================================================
@@ -657,31 +656,29 @@ function addPlayer(id, name, team){
 // ============================================================
 var Game = {
     gameName:  "Boulder Dash",
+    contract:  2,
     teamRange: { min:1, max:4 },
 
-    load: function(savedState){
-        if(savedState && savedState.highScore) highScore=savedState.highScore;
-        var t=teams();
-        var totalPlayers=0;
-        for(var i=0;i<t.length;i++) totalPlayers+=t[i].players.length;
-        Game.splashScreen =
-            "=== BOULDER DASH ===\n" +
-            "Dig through dirt, collect diamonds, reach the exit!\n\n" +
-            "Controls: arrow keys to move / dig / push boulders\n" +
-            "Collect enough diamonds to open the exit door [X]\n" +
-            "Watch out for falling boulders and enemies!\n\n" +
-            "  Firefly [/] — explodes into empty space when crushed\n" +
-            "  Butterfly [%] — explodes into diamonds when crushed!\n" +
-            "  Amoeba [~] — suffocate it for diamonds, or it turns to boulders\n" +
-            "  Magic Wall [M] — boulders falling through become diamonds\n\n" +
-            (highScore>0?"High score: "+highScore+"\n\n":"") +
-            "Caves: "+CAVES.length+"   Players: "+totalPlayers;
+    splashScreen:
+        "=== BOULDER DASH ===\n" +
+        "Dig through dirt, collect diamonds, reach the exit!\n\n" +
+        "Controls: arrow keys to move / dig / push boulders\n" +
+        "Collect enough diamonds to open the exit door [X]\n" +
+        "Watch out for falling boulders and enemies!\n\n" +
+        "  Firefly [/] — explodes into empty space when crushed\n" +
+        "  Butterfly [%] — explodes into diamonds when crushed!\n" +
+        "  Amoeba [~] — suffocate it for diamonds, or it turns to boulders\n" +
+        "  Magic Wall [M] — boulders falling through become diamonds",
+
+    init: function(ctx){
+        return initialState();
     },
 
-    begin: function(){
-        caveIndex=0; elapsed=0; gameEnded=false;
-        pls={}; plOrder=[];
-        var t=teams();
+    begin: function(state, ctx){
+        _s = state;
+        _s.caveIndex=0; _s.elapsed=0; _s.gameEnded=false;
+        _s.pls={}; _s.plOrder=[];
+        var t = _s.teams || [];
         for(var i=0;i<t.length;i++){
             for(var j=0;j<t[i].players.length;j++){
                 var p=t[i].players[j];
@@ -689,176 +686,134 @@ var Game = {
             }
         }
         loadCave(0);
-        log("Boulder Dash started: cave 0, "+plOrder.length+" players");
+        ctx.log("Boulder Dash started: cave 0, "+_s.plOrder.length+" players");
     },
 
-    onPlayerJoin: function(playerID){
-        var t=teams();
-        for(var i=0;i<t.length;i++){
-            for(var j=0;j<t[i].players.length;j++){
-                if(t[i].players[j].id===playerID){
-                    addPlayer(playerID, t[i].players[j].name, t[i].name);
-                    return;
+    update: function(state, dt, events, ctx){
+        _s = state;
+        // Drain input/join/leave events first.
+        for(var i=0;i<events.length;i++){
+            var e = events[i];
+            if(e.type === "join"){
+                var t = _s.teams || [];
+                for(var ti=0;ti<t.length;ti++){
+                    for(var tj=0;tj<t[ti].players.length;tj++){
+                        if(t[ti].players[tj].id === e.playerID){
+                            addPlayer(e.playerID, t[ti].players[tj].name, t[ti].name);
+                            ti = t.length;
+                            break;
+                        }
+                    }
                 }
+            } else if(e.type === "leave"){
+                delete _s.pls[e.playerID];
+                for(var li=0;li<_s.plOrder.length;li++){
+                    if(_s.plOrder[li]===e.playerID){ _s.plOrder.splice(li,1); break; }
+                }
+            } else if(e.type === "input"){
+                var p = _s.pls[e.playerID];
+                if(!p || p.dead) continue;
+                if(e.key==="up")    tryMove(e.playerID, 0,-1);
+                if(e.key==="down")  tryMove(e.playerID, 0, 1);
+                if(e.key==="left")  tryMove(e.playerID,-1, 0);
+                if(e.key==="right") tryMove(e.playerID, 1, 0);
             }
         }
-    },
 
-    onPlayerLeave: function(playerID){
-        delete pls[playerID];
-        for(var i=0;i<plOrder.length;i++){
-            if(plOrder[i]===playerID){ plOrder.splice(i,1); break; }
-        }
-    },
+        if(_s.gameEnded) return;
+        _s.elapsed+=dt;
+        _s.timeLeft-=dt;
 
-    onInput: function(playerID, key){
-        var p=pls[playerID];
-        if(!p||p.dead) return;
-        if(key==="up")    tryMove(playerID, 0,-1);
-        if(key==="down")  tryMove(playerID, 0, 1);
-        if(key==="left")  tryMove(playerID,-1, 0);
-        if(key==="right") tryMove(playerID, 1, 0);
-    },
-
-    update: function(dt){
-        if(gameEnded) return;
-        elapsed+=dt;
-        timeLeft-=dt;
-
-        // Cave-won delay: load next cave or end game
-        if(wonDelay>0){
-            wonDelay-=dt;
-            if(wonDelay<=0){
-                if(caveIndex+1>=CAVES.length){
-                    gameEnded=true;
-                    gameOver(buildResults(), {highScore:highScore});
+        if(_s.wonDelay>0){
+            _s.wonDelay-=dt;
+            if(_s.wonDelay<=0){
+                if(_s.caveIndex+1>=CAVES.length){
+                    _s.gameEnded=true;
+                    ctx.gameOver(buildResults());
                 } else {
-                    loadCave(caveIndex+1);
+                    loadCave(_s.caveIndex+1);
                 }
             }
             return;
         }
 
-        // Time expired
-        if(timeLeft<=0){
-            timeLeft=0; gameEnded=true;
-            chat("Time's up!");
-            gameOver(buildResults(), {highScore:highScore});
+        if(_s.timeLeft<=0){
+            _s.timeLeft=0; _s.gameEnded=true;
+            ctx.chat("Time's up!");
+            ctx.gameOver(buildResults());
             return;
         }
 
-        // All players out of lives
         var anyAlive=false;
-        for(var id in pls){ if(pls[id].lives>0){ anyAlive=true; break; } }
+        for(var id in _s.pls){ if(_s.pls[id].lives>0){ anyAlive=true; break; } }
         if(!anyAlive){
-            gameEnded=true;
-            gameOver(buildResults(), {highScore:highScore});
+            _s.gameEnded=true;
+            ctx.gameOver(buildResults());
             return;
         }
 
-        // Respawn / invulnerability timers
-        for(var id in pls){
-            var p=pls[id];
+        for(var id in _s.pls){
+            var p=_s.pls[id];
             if(p.dead && p.lives>0){
                 p.respawnTimer-=dt;
                 if(p.respawnTimer<=0){
                     p.dead=false;
-                    p.x=startX; p.y=startY;
+                    p.x=_s.startX; p.y=_s.startY;
                     p.invulnTimer=INVULN_TIME;
                 }
             }
             if(p.invulnTimer>0) p.invulnTimer-=dt;
         }
 
-        // Magic wall countdown
-        if(magicWallActive){
-            magicWallTimer-=dt;
-            if(magicWallTimer<=0){ magicWallActive=false; chat("Magic walls have expired!"); }
+        if(_s.magicWallActive){
+            _s.magicWallTimer-=dt;
+            if(_s.magicWallTimer<=0){ _s.magicWallActive=false; ctx.chat("Magic walls have expired!"); }
         }
 
-        // Physics
-        physicsTimer+=dt;
-        while(physicsTimer>=PHYSICS_INTERVAL){
-            physicsTimer-=PHYSICS_INTERVAL;
+        _s.physicsTimer+=dt;
+        while(_s.physicsTimer>=PHYSICS_INTERVAL){
+            _s.physicsTimer-=PHYSICS_INTERVAL;
             physicsTick();
         }
 
-        // Enemy movement
-        enemyTimer+=dt;
-        if(enemyTimer>=ENEMY_INTERVAL){
-            enemyTimer-=ENEMY_INTERVAL;
+        _s.enemyTimer+=dt;
+        if(_s.enemyTimer>=ENEMY_INTERVAL){
+            _s.enemyTimer-=ENEMY_INTERVAL;
             enemyTick();
         }
 
-        // Amoeba
-        if(amoebaList.length>0){
-            amoebaTimer+=dt;
-            if(amoebaTimer>=AMOEBA_INTERVAL){
-                amoebaTimer-=AMOEBA_INTERVAL;
+        if(_s.amoebaList.length>0){
+            _s.amoebaTimer+=dt;
+            if(_s.amoebaTimer>=AMOEBA_INTERVAL){
+                _s.amoebaTimer-=AMOEBA_INTERVAL;
                 amoebaGrow();
             }
         }
     },
 
-    renderAscii: function(buf, playerID, ox, oy, width, height){
-        doRenderAscii(buf, playerID, ox, oy, width, height);
+    renderAscii: function(state, me, cells){
+        _s = state;
+        doRenderAscii(cells, me.id, 0, 0, cells.width, cells.height);
     },
 
-    statusBar: function(playerID){
-        var p=pls[playerID];
+    statusBar: function(state, me){
+        _s = state;
+        var p = _s.pls[me.id];
         if(!p) return "Boulder Dash";
-        var need=Math.max(0, diamondsNeeded-diamondsCollected);
-        var t=Math.max(0, Math.ceil(timeLeft));
-        var mw=magicWallActive?" [Magic:"+Math.ceil(magicWallTimer)+"s]":"";
-        return "Cave "+caveName+": "+caveTitle+mw+
+        var need=Math.max(0, _s.diamondsNeeded-_s.diamondsCollected);
+        var t=Math.max(0, Math.ceil(_s.timeLeft));
+        var mw=_s.magicWallActive?" [Magic:"+Math.ceil(_s.magicWallTimer)+"s]":"";
+        return "Cave "+_s.caveName+": "+_s.caveTitle+mw+
                "  | need:"+need+" got:"+p.diamonds+
                "  | lives:"+Math.max(0,p.lives)+
                "  | score:"+p.score+
                "  | "+t+"s";
     },
 
-    commandBar: function(playerID){
-        var p=pls[playerID];
+    commandBar: function(state, me){
+        _s = state;
+        var p = _s.pls[me.id];
         if(!p||p.dead) return "Boulder Dash — waiting to respawn...";
         return "[arrows] Move/Dig  [arrow into boulder] Push  [Enter] Chat";
-    },
-
-    suspend: function(){
-        return {
-            grid:grid, fallingGrid:fallingGrid,
-            enemies:enemies, pls:pls, plOrder:plOrder,
-            amoebaList:amoebaList, caveIndex:caveIndex,
-            diamondsCollected:diamondsCollected, diamondsNeeded:diamondsNeeded,
-            timeLeft:timeLeft, exitOpen:exitOpen, elapsed:elapsed,
-            magicWallActive:magicWallActive, magicWallTimer:magicWallTimer
-        };
-    },
-
-    resume: function(s){
-        if(!s) return;
-        caveData   = CAVES[s.caveIndex];
-        caveIndex  = s.caveIndex;
-        caveName   = caveData.name;
-        caveTitle  = caveData.title;
-        // Re-parse to get CAVE_W/H and startX/Y
-        var parsed = parseGrid(caveData.raw);
-        // CAVE_W and CAVE_H are set as side-effects of parseGrid
-        startX=parsed.sx; startY=parsed.sy;
-        // Restore dynamic state
-        grid=s.grid; fallingGrid=s.fallingGrid;
-        movedGrid=[];
-        for(var y=0;y<CAVE_H;y++){
-            movedGrid.push([]);
-            for(var x=0;x<CAVE_W;x++) movedGrid[y].push(false);
-        }
-        enemies=s.enemies; pls=s.pls; plOrder=s.plOrder;
-        amoebaList=s.amoebaList;
-        diamondsCollected=s.diamondsCollected; diamondsNeeded=s.diamondsNeeded;
-        timeLeft=s.timeLeft; exitOpen=s.exitOpen; elapsed=s.elapsed;
-        magicWallActive=s.magicWallActive; magicWallTimer=s.magicWallTimer;
-    },
-
-    unload: function(){
-        return { highScore:highScore };
     }
 };
