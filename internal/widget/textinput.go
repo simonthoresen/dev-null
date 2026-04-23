@@ -189,8 +189,10 @@ func (ci *CommandInput) Update(msg tea.Msg) {
 			ci.Model.SetValue("")
 			ci.historyIdx = -1
 			ci.historyDraft = ""
-			if text != "" && ci.OnSubmit != nil {
+			if text != "" {
 				ci.AddHistory(text)
+			}
+			if ci.OnSubmit != nil {
 				ci.OnSubmit(text)
 			}
 			return
