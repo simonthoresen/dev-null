@@ -178,17 +178,32 @@ function findPlayerTeam(pid) {
 
 // Ensure a connected player has a live player record. Used from begin(),
 // onPlayerJoin, and defensively from the renderer if teams() arrived late.
+// If the player isn't on any team (e.g. single-team sandbox where only the
+// shooter joined), spawn them anyway on a synthetic team so they can walk
+// the map instead of being stuck on the Spectator screen.
 function ensureSpawned(pid) {
     if (players[pid]) return players[pid];
     refreshTeamData();
     var info = findPlayerTeam(pid);
-    if (!info) return null;
-    spawnPlayer(pid, info.name, info.idx, true);
+    if (info) {
+        spawnPlayer(pid, info.name, info.idx, true);
+    } else {
+        // No team info — fabricate a solo entry so they aren't stranded.
+        if (teamData.length === 0) {
+            teamData = [{ name: "Solo", color: TEAM_COLORS[0], players: [] }];
+            teamKills = [0];
+        }
+        spawnPlayer(pid, pid, 0, true);
+    }
     return players[pid] || null;
 }
 
 function spawnPlayer(pid, pname, teamIdx, firstSpawn) {
-    var cell = randomSpawnCell(null);
+    if (!mapGenerated || openCells.length === 0) {
+        generateMap();
+        mapGenerated = true;
+    }
+    var cell = randomSpawnCell(null) || { x: Math.floor(MAP_W / 2), z: Math.floor(MAP_D / 2) };
     var facing = Math.floor(Math.random() * 8);
     if (!players[pid]) {
         players[pid] = {
@@ -847,6 +862,7 @@ Game = {
             }
         }
         log("wolf-3d begin: teams=" + teamData.length + " players_spawned=" + spawned);
+        chat("[wolf-3d] ready — teams: " + teamData.length + ", players spawned: " + spawned);
         // MIDI setup: channel 9 is the GM drum channel on most SoundFonts.
         // Program doesn't matter on ch9, but set it anyway so voices pick
         // something percussive/noisy.
