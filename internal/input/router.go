@@ -6,8 +6,11 @@
 //
 // Design notes:
 //
-//   - A small, fixed set of keys is framework-reserved (Ctrl+C/D, Esc,
+//   - A small, fixed set of keys is framework-reserved (Ctrl+C, Esc,
 //     Enter, PgUp/PgDn, Tab). Games never receive these via OnInput.
+//     Ctrl+D is deliberately NOT reserved — games may bind it (some
+//     roguelikes use it). Users can still exit via Ctrl+C or the
+//     File → Exit menu item.
 //   - Esc and Enter are two-step on Desktop: the focused widget may
 //     consume them by implementing EscConsumer / EnterConsumer and
 //     returning true from WantsEsc / WantsEnter. Otherwise the framework
@@ -35,7 +38,7 @@ type Action int
 const (
 	// ActionNone means the key was ignored (no-op).
 	ActionNone Action = iota
-	// ActionQuit means terminate the session (Ctrl+C / Ctrl+D).
+	// ActionQuit means terminate the session (Ctrl+C).
 	ActionQuit
 	// ActionScrollChatUp means scroll the chat panel up.
 	ActionScrollChatUp
@@ -79,7 +82,7 @@ type EscConsumer interface {
 // decide whether Enter / Esc should pass through.
 func Route(key string, mode Mode, focused any) Action {
 	// Quit is never overridable.
-	if key == "ctrl+c" || key == "ctrl+d" {
+	if key == "ctrl+c" {
 		return ActionQuit
 	}
 

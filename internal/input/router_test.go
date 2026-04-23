@@ -20,17 +20,30 @@ func (b bothWanter) WantsEnter() bool { return b.enter }
 func (b bothWanter) WantsEsc() bool   { return b.esc }
 
 func TestQuitKeys(t *testing.T) {
-	// Ctrl+C / Ctrl+D always quit, in any mode, regardless of focus.
+	// Ctrl+C always quits, in any mode, regardless of focus. Ctrl+D is
+	// deliberately NOT reserved so games may bind it.
 	modes := []Mode{ModeDesktop, ModeMenu, ModeDialog}
 	focuses := []any{nil, noConsumer{}, bothWanter{enter: true, esc: true}}
 	for _, mode := range modes {
 		for _, f := range focuses {
-			for _, key := range []string{"ctrl+c", "ctrl+d"} {
-				if got := Route(key, mode, f); got != ActionQuit {
-					t.Errorf("Route(%q, mode=%d, focus=%T) = %v, want ActionQuit", key, mode, f, got)
-				}
+			if got := Route("ctrl+c", mode, f); got != ActionQuit {
+				t.Errorf("Route(ctrl+c, mode=%d, focus=%T) = %v, want ActionQuit", mode, f, got)
 			}
 		}
+	}
+}
+
+func TestCtrlDNotReserved(t *testing.T) {
+	// Ctrl+D must pass through to the focused widget so games can bind it.
+	// Dialog/menu modes route it to the modal handler (not Quit).
+	if got := Route("ctrl+d", ModeDesktop, nil); got != ActionRouteToFocused {
+		t.Errorf("Route(ctrl+d, Desktop) = %v, want ActionRouteToFocused", got)
+	}
+	if got := Route("ctrl+d", ModeDialog, nil); got != ActionRouteToDialog {
+		t.Errorf("Route(ctrl+d, Dialog) = %v, want ActionRouteToDialog", got)
+	}
+	if got := Route("ctrl+d", ModeMenu, nil); got != ActionRouteToMenu {
+		t.Errorf("Route(ctrl+d, Menu) = %v, want ActionRouteToMenu", got)
 	}
 }
 

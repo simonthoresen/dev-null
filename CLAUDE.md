@@ -145,17 +145,19 @@ All keyboard input flows through `internal/input/router.go`. The router is a pur
 
 | Key           | Action                                                     | Widget opt-in          |
 |---------------|------------------------------------------------------------|------------------------|
-| `ctrl+c/d`    | Quit                                                       | Never                  |
+| `ctrl+c`      | Quit                                                       | Never                  |
 | `esc`         | Focused widget consumes if `WantsEsc()`, else activate menu | `input.EscConsumer`    |
 | `enter`       | Focused widget consumes if `WantsEnter()`, else focus chat | `input.EnterConsumer`  |
 | `pgup/pgdown` | Scroll chat                                                | Never                  |
 | `tab/shift+tab` | Cycle focus                                              | `TabWanter` (existing) |
 
+Ctrl+D is deliberately NOT reserved — games may bind it (some roguelikes use it for descend, drop, etc). Users can still exit via Ctrl+C or File → Exit.
+
 **Two-step Esc/Enter contract.** A focused widget may claim Esc/Enter by implementing the consumer interface. `CommandInput`/`TextInput.WantsEsc()` returns true only when focused *with a non-empty draft*, so: first Esc clears the draft, second Esc activates the menu. Same shape for Enter: focused command-input submits; empty/unfocused → framework takes Enter to focus chat.
 
 **Three modes.** Dialog > Menu > Desktop (top-down priority). Dialog and Menu are modal — the router sends everything there. On Desktop the router asks the focused widget first, then falls back to the framework action.
 
-**No chord shortcuts.** Neither `F10`, `Alt+X`, nor menu-item `Ctrl+Q`-style hotkeys exist. The only way to open the menu from Desktop is Esc. Once the bar is focused, typing the ampersand-letter jumps to that menu (then to that item inside the dropdown) — so navigation is still fast, just without reserving Ctrl/Alt keys that a game might want. The `Hotkey` field on `MenuItemDef` has been removed; menu item activation is only via menu navigation or command-line commands. Ctrl+C and Ctrl+D still quit the session (router-reserved, not menu bindings).
+**No chord shortcuts.** Neither `F10`, `Alt+X`, nor menu-item `Ctrl+Q`-style hotkeys exist. The only way to open the menu from Desktop is Esc. Once the bar is focused, typing the ampersand-letter jumps to that menu (then to that item inside the dropdown) — so navigation is still fast, just without reserving Ctrl/Alt keys that a game might want. The `Hotkey` field on `MenuItemDef` has been removed; menu item activation is only via menu navigation or command-line commands. Ctrl+C still quits the session (router-reserved, not a menu binding).
 
 **Phase buttons (Starting/Ending).** The `phaseReadyButton` / `phaseContinueButton` are the effective focus target during their phases (they live as standalone fields, not in a Window hierarchy). Enter → button.OnPress → `ReadyUp` / `AcknowledgeGameOver`. No phase-specific branches in the dispatcher.
 
