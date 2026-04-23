@@ -93,6 +93,15 @@ type Runtime struct {
 	statusBarFn       goja.Callable
 	commandBarFn      goja.Callable
 
+	// v2 contract hooks (nil under v1)
+	initFn      goja.Callable // init(ctx) -> initial state
+	resolveMeFn goja.Callable // resolveMe(state, playerID) -> me
+
+	// v2 runtime state
+	contractVersion int                  // 1 (default) or 2 (declared via Game.contract === 2)
+	ctxObj          *goja.Object         // prebuilt ctx object passed to update/begin/end/init
+	pendingEvents   []map[string]any     // queued inputs/joins/leaves drained by next Update
+
 	// lifecycle
 	gameNameProp  string
 	teamRangeProp domain.TeamRange
@@ -161,20 +170,37 @@ func (r *Runtime) Load(savedState any) {
 	defer traceCall(r.vm, "Load")()
 	cancel := Watchdog(r.vm, "Load")
 	defer cancel()
+
+	if r.contractVersion >= 2 {
+		// v2: init(ctx) returns the initial state; framework installs it as
+		// Game.state. savedState is ignored here — resume lives on suspend/
+		// resume hooks, which still receive it the way v1 games do.
+		res, err := r.initFn(goja.Undefined(), r.ctxObj)
+		if err == nil && res != nil && !goja.IsUndefined(res) && !goja.IsNull(res) {
+			if gameObj := r.vm.Get("Game").ToObject(r.vm); gameObj != nil {
+				gameObj.Set("state", res)
+			}
+		}
+		return
+	}
 	_, _ = r.loadFn(goja.Undefined(), r.vm.ToValue(savedState))
 }
 
 func (r *Runtime) Begin() {
-	if r.beginFn == nil {
-		return
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.elapsedTime = 0
+	if r.beginFn == nil {
+		return
+	}
 	defer r.recoverJS("Begin")
 	defer traceCall(r.vm, "Begin")()
 	cancel := Watchdog(r.vm, "Begin")
 	defer cancel()
+	if r.contractVersion >= 2 {
+		_, _ = r.beginFn(goja.Undefined(), r.currentState(), r.ctxObj)
+		return
+	}
 	_, _ = r.beginFn(goja.Undefined())
 }
 
@@ -188,7 +214,29 @@ func (r *Runtime) End() {
 	defer traceCall(r.vm, "End")()
 	cancel := Watchdog(r.vm, "End")
 	defer cancel()
+	if r.contractVersion >= 2 {
+		_, _ = r.endFn(goja.Undefined(), r.currentState(), r.ctxObj)
+		return
+	}
 	_, _ = r.endFn(goja.Undefined())
+}
+
+// currentState reads Game.state from the VM without locking. Callers must
+// hold r.mu. Used by v2 dispatch when invoking state-taking hooks.
+func (r *Runtime) currentState() goja.Value {
+	gameVal := r.vm.Get("Game")
+	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
+		return goja.Undefined()
+	}
+	gameObj := gameVal.ToObject(r.vm)
+	if gameObj == nil {
+		return goja.Undefined()
+	}
+	v := gameObj.Get("state")
+	if v == nil {
+		return goja.Undefined()
+	}
+	return v
 }
 
 func (r *Runtime) extractGameObject() error {
@@ -213,16 +261,36 @@ func (r *Runtime) extractGameObject() error {
 	r.statusBarFn = extractCallable(gameObj, "statusBar")
 	r.commandBarFn = extractCallable(gameObj, "commandBar")
 
-	// load is mandatory; begin, end, unload are optional
+	// Contract version. v2 is opt-in via Game.contract === 2. Under v2,
+	// init(ctx) replaces load(savedState) as the one-time setup hook, and
+	// resolveMe(state, playerID) gives the game control over how the
+	// framework maps a session ID to its render-ready "me" object.
+	if v := gameObj.Get("contract"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
+		r.contractVersion = int(v.ToInteger())
+	} else {
+		r.contractVersion = 1
+	}
+	r.initFn = extractCallable(gameObj, "init")
+	r.resolveMeFn = extractCallable(gameObj, "resolveMe")
+
+	// Under v1, load() is mandatory. Under v2 we treat init() as the
+	// equivalent — the mandatory one-time setup — and loadFn is optional.
 	r.loadFn = extractCallable(gameObj, "load")
-	if r.loadFn == nil {
+	if r.contractVersion < 2 && r.loadFn == nil {
 		return fmt.Errorf("Game must define a load(savedState) function")
+	}
+	if r.contractVersion >= 2 && r.initFn == nil {
+		return fmt.Errorf("v2 Game must define an init(ctx) function")
 	}
 	r.beginFn = extractCallable(gameObj, "begin")
 	r.endFn = extractCallable(gameObj, "end")
 	r.unloadFn = extractCallable(gameObj, "unload")
 	r.suspendFn = extractCallable(gameObj, "suspend")
 	r.resumeFn = extractCallable(gameObj, "resume")
+
+	if r.contractVersion >= 2 {
+		r.ctxObj = r.buildCtxObject()
+	}
 
 	// Read gameName property (string, not callable)
 	if v := gameObj.Get("gameName"); v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) {
@@ -261,6 +329,16 @@ func extractCallable(obj *goja.Object, name string) goja.Callable {
 // Implement domain.Game
 
 func (r *Runtime) OnPlayerJoin(playerID, playerName string) {
+	if r.contractVersion >= 2 {
+		r.mu.Lock()
+		r.pendingEvents = append(r.pendingEvents, map[string]any{
+			"type":       "join",
+			"playerID":   playerID,
+			"playerName": playerName,
+		})
+		r.mu.Unlock()
+		return
+	}
 	if r.onPlayerJoin == nil {
 		return
 	}
@@ -274,6 +352,15 @@ func (r *Runtime) OnPlayerJoin(playerID, playerName string) {
 }
 
 func (r *Runtime) OnPlayerLeave(playerID string) {
+	if r.contractVersion >= 2 {
+		r.mu.Lock()
+		r.pendingEvents = append(r.pendingEvents, map[string]any{
+			"type":     "leave",
+			"playerID": playerID,
+		})
+		r.mu.Unlock()
+		return
+	}
 	if r.onPlayerLeave == nil {
 		return
 	}
@@ -287,6 +374,16 @@ func (r *Runtime) OnPlayerLeave(playerID string) {
 }
 
 func (r *Runtime) OnInput(playerID, key string) {
+	if r.contractVersion >= 2 {
+		r.mu.Lock()
+		r.pendingEvents = append(r.pendingEvents, map[string]any{
+			"type":     "input",
+			"playerID": playerID,
+			"key":      key,
+		})
+		r.mu.Unlock()
+		return
+	}
 	if r.onInput == nil {
 		return
 	}
@@ -300,17 +397,28 @@ func (r *Runtime) OnInput(playerID, key string) {
 }
 
 func (r *Runtime) Update(dt float64) {
-	if r.updateFn == nil {
-		return
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.elapsedTime += dt
 	defer r.recoverJS("Update")
 	defer traceCall(r.vm, "Update")()
 	cancel := Watchdog(r.vm, "Update")
 	defer cancel()
-	r.elapsedTime += dt
-	_, _ = r.updateFn(goja.Undefined(), r.vm.ToValue(dt))
+
+	if r.contractVersion >= 2 && r.updateFn != nil {
+		// Drain pending events and append the per-tick tick event.
+		events := r.pendingEvents
+		r.pendingEvents = nil
+		events = append(events, map[string]any{"type": "tick"})
+		_, _ = r.updateFn(goja.Undefined(),
+			r.currentState(),
+			r.vm.ToValue(dt),
+			r.vm.ToValue(events),
+			r.ctxObj,
+		)
+	} else if r.updateFn != nil {
+		_, _ = r.updateFn(goja.Undefined(), r.vm.ToValue(dt))
+	}
 
 	// Auto-inject _t (elapsed game time) into Game.state so the pixel-mode
 	// client always has the current time, even if the game doesn't set it.
@@ -353,11 +461,76 @@ func (r *Runtime) RenderAscii(buf *render.ImageBuffer, playerID string, x, y, wi
 	defer traceCall(r.vm, "RenderAscii")()
 	cancel := Watchdog(r.vm, "RenderAscii")
 	defer cancel()
+
+	if r.contractVersion >= 2 {
+		// v2: renderAscii(state, me, cells). Framework resolves me; if it
+		// can't, skip render so chrome/client can draw the not-ready splash.
+		me := r.resolveMe(playerID)
+		if goja.IsUndefined(me) || goja.IsNull(me) {
+			return
+		}
+		cells := r.newJSImageBuffer(buf, x, y, width, height)
+		// Expose ATTR_* and log on the cells object so v2 games never need
+		// to reach for globals.
+		cells["ATTR_NONE"] = int(render.AttrNone)
+		cells["ATTR_BOLD"] = int(render.AttrBold)
+		cells["ATTR_FAINT"] = int(render.AttrFaint)
+		cells["ATTR_ITALIC"] = int(render.AttrItalic)
+		cells["ATTR_UNDERLINE"] = int(render.AttrUnderline)
+		cells["ATTR_REVERSE"] = int(render.AttrReverse)
+		cells["log"] = func(msg string) {
+			slog.Debug("cells.log", "game", r.gameNameProp, "msg", msg)
+		}
+		_, err := r.renderAsciiFn(goja.Undefined(), r.currentState(), me, r.vm.ToValue(cells))
+		if err != nil {
+			slog.Error("v2 JS renderAscii error", "error", err)
+		}
+		return
+	}
+
 	jsBuf := r.newJSImageBuffer(buf, x, y, width, height)
 	_, err := r.renderAsciiFn(goja.Undefined(), r.vm.ToValue(jsBuf), r.vm.ToValue(playerID), r.vm.ToValue(x), r.vm.ToValue(y), r.vm.ToValue(width), r.vm.ToValue(height))
 	if err != nil {
 		slog.Error("JS RenderAscii error", "error", err)
 	}
+}
+
+// resolveMe produces the "me" value passed to v2 render hooks. Prefers the
+// game-defined resolveMe hook; otherwise falls back to state.players[pid].
+// Returns goja undefined when me can't be resolved, signalling the framework
+// to draw the not-ready splash instead of invoking render.
+// Must be called with r.mu held.
+func (r *Runtime) resolveMe(playerID string) goja.Value {
+	state := r.currentState()
+	if r.resolveMeFn != nil {
+		me, err := r.resolveMeFn(goja.Undefined(), state, r.vm.ToValue(playerID))
+		if err != nil {
+			slog.Error("v2 JS resolveMe error", "error", err)
+			return goja.Undefined()
+		}
+		if me == nil || goja.IsNull(me) {
+			return goja.Undefined()
+		}
+		return me
+	}
+	// Default: look up state.players[pid].
+	stateObj := state.ToObject(r.vm)
+	if stateObj == nil {
+		return goja.Undefined()
+	}
+	players := stateObj.Get("players")
+	if players == nil || goja.IsUndefined(players) || goja.IsNull(players) {
+		return goja.Undefined()
+	}
+	playersObj := players.ToObject(r.vm)
+	if playersObj == nil {
+		return goja.Undefined()
+	}
+	me := playersObj.Get(playerID)
+	if me == nil || goja.IsUndefined(me) || goja.IsNull(me) {
+		return goja.Undefined()
+	}
+	return me
 }
 
 func (r *Runtime) Layout(playerID string, width, height int) *domain.WidgetNode {
@@ -391,7 +564,13 @@ func (r *Runtime) StatusBar(playerID string) string {
 	defer traceCall(r.vm, "StatusBar")()
 	cancel := Watchdog(r.vm, "StatusBar")
 	defer cancel()
-	val, err := r.statusBarFn(goja.Undefined(), r.vm.ToValue(playerID))
+	var val goja.Value
+	var err error
+	if r.contractVersion >= 2 {
+		val, err = r.statusBarFn(goja.Undefined(), r.currentState(), r.resolveMe(playerID))
+	} else {
+		val, err = r.statusBarFn(goja.Undefined(), r.vm.ToValue(playerID))
+	}
 	if err != nil {
 		slog.Error("JS StatusBar error", "error", err)
 		return ""
@@ -409,7 +588,13 @@ func (r *Runtime) CommandBar(playerID string) string {
 	defer traceCall(r.vm, "CommandBar")()
 	cancel := Watchdog(r.vm, "CommandBar")
 	defer cancel()
-	val, err := r.commandBarFn(goja.Undefined(), r.vm.ToValue(playerID))
+	var val goja.Value
+	var err error
+	if r.contractVersion >= 2 {
+		val, err = r.commandBarFn(goja.Undefined(), r.currentState(), r.resolveMe(playerID))
+	} else {
+		val, err = r.commandBarFn(goja.Undefined(), r.vm.ToValue(playerID))
+	}
 	if err != nil {
 		slog.Error("JS CommandBar error", "error", err)
 		return ""
@@ -534,9 +719,8 @@ func (r *Runtime) RenderCanvas(playerID string, width, height int) []byte {
 	defer cancel()
 
 	canvas := NewJSCanvas(width, height, 1.0)
-	ctx := canvas.ToJSObject(r.vm)
-	_, err := r.renderCanvasFn(goja.Undefined(), r.vm.ToValue(ctx), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(canvas.height))
-	if err != nil {
+	canvasObj := canvas.ToJSObject(r.vm)
+	if err := r.invokeRenderCanvasFn(playerID, canvasObj, width, canvas.height); err != nil {
 		slog.Error("JS RenderCanvas error", "error", err)
 		return nil
 	}
@@ -561,13 +745,31 @@ func (r *Runtime) RenderCanvasImage(playerID string, width, height int) *image.R
 	defer cancel()
 
 	canvas := NewJSCanvas(width, height, 1.0)
-	ctx := canvas.ToJSObject(r.vm)
-	_, err := r.renderCanvasFn(goja.Undefined(), r.vm.ToValue(ctx), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(canvas.height))
-	if err != nil {
+	canvasObj := canvas.ToJSObject(r.vm)
+	if err := r.invokeRenderCanvasFn(playerID, canvasObj, width, canvas.height); err != nil {
 		slog.Error("JS RenderCanvasImage error", "error", err)
 		return nil
 	}
 	return canvas.ToRGBA()
+}
+
+// invokeRenderCanvasFn dispatches to the right v1 vs v2 render-canvas
+// signature and installs the v2-only log/ATTR additions on the canvas object.
+// Must be called with r.mu held.
+func (r *Runtime) invokeRenderCanvasFn(playerID string, canvasObj map[string]any, width, height int) error {
+	if r.contractVersion >= 2 {
+		me := r.resolveMe(playerID)
+		if goja.IsUndefined(me) || goja.IsNull(me) {
+			return nil // framework will paint the not-ready splash; render is a no-op
+		}
+		canvasObj["log"] = func(msg string) {
+			slog.Debug("canvas.log", "game", r.gameNameProp, "msg", msg)
+		}
+		_, err := r.renderCanvasFn(goja.Undefined(), r.currentState(), me, r.vm.ToValue(canvasObj))
+		return err
+	}
+	_, err := r.renderCanvasFn(goja.Undefined(), r.vm.ToValue(canvasObj), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
+	return err
 }
 
 // IsGameOverPending returns true if JS called gameOver() and clears the flag.
