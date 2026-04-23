@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"image"
 	"log"
+	"math"
 	"sync"
+	"time"
 
 	"github.com/dop251/goja"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -13,9 +15,19 @@ import (
 	"dev-null/internal/render"
 )
 
+// driftLogThreshold is the |local _gameTime − server _gameTime| above which
+// the renderer reports drift via DriftLogger. Below it, snap silently.
+const driftLogThreshold = 0.2 // seconds
+
 // LocalRenderer runs game render hooks locally on the client, reading from
 // server-provided Game.state (via SetState / MergeStatePatch) instead of
 // receiving pre-rendered frames.
+//
+// State.\_gameTime contract: the server is authoritative; clients extrapolate
+// _gameTime from their own wall clock between snapshots. Whenever a snapshot
+// brings a fresh _gameTime, the local clock snaps to it. The renderer measures
+// the gap between extrapolated and snapped values and reports drift through
+// DriftLogger so a UI layer can surface it.
 type LocalRenderer struct {
 	mu            sync.Mutex
 	vm            *goja.Runtime
@@ -23,11 +35,33 @@ type LocalRenderer struct {
 	resolveMeFn   goja.Callable // optional: resolveMe(state, pid) -> me | null
 	renderAsciiFn goja.Callable // renderAscii(state, me, cells)
 	canvasFn      goja.Callable // renderCanvas(state, me, canvas)
+
+	// Local clock extrapolation. The renderer reads serverGameTime as
+	// "what the server said _gameTime was at snapAt", and at render time
+	// publishes (serverGameTime + wall-elapsed) onto Game.state._gameTime.
+	clockKnown      bool
+	serverGameTime  float64
+	snapAt          time.Time
+	now             func() time.Time           // overridable for tests
+	driftLogger     func(driftSec float64)     // called when |drift| > threshold
 }
 
 // NewLocalRenderer creates a renderer ready to receive game source and state.
 func NewLocalRenderer() *LocalRenderer {
-	return &LocalRenderer{}
+	return &LocalRenderer{
+		now: time.Now,
+		driftLogger: func(d float64) {
+			log.Printf("[clock drift] _gameTime snap moved local clock by %+0.3fs", d)
+		},
+	}
+}
+
+// SetDriftLogger replaces the callback fired on every drift > driftLogThreshold.
+// Pass nil to silence drift reports.
+func (lr *LocalRenderer) SetDriftLogger(fn func(driftSec float64)) {
+	lr.mu.Lock()
+	defer lr.mu.Unlock()
+	lr.driftLogger = fn
 }
 
 // LoadGame loads game JS source files into the goja VM.
@@ -83,7 +117,10 @@ func (lr *LocalRenderer) LoadGame(files []GameSrcFile) {
 }
 
 // SetState updates Game.state in the JS VM from a full JSON baseline,
-// replacing any previous state.
+// replacing any previous state. A baseline is treated as the authoritative
+// reset of the local clock — any prior extrapolation is discarded without
+// drift logging, since baselines arrive on connect / mode switch / game
+// (re)load where comparing to whatever stale clock we held would be noise.
 func (lr *LocalRenderer) SetState(jsonData []byte) {
 	lr.mu.Lock()
 	defer lr.mu.Unlock()
@@ -101,9 +138,23 @@ func (lr *LocalRenderer) SetState(jsonData []byte) {
 		return
 	}
 	gameObj := gameVal.ToObject(lr.vm)
-	if gameObj != nil {
-		gameObj.Set("state", lr.vm.ToValue(state))
+	if gameObj == nil {
+		return
 	}
+	gameObj.Set("state", lr.vm.ToValue(state))
+
+	// Reset the local clock from whatever the baseline carried.
+	if m, ok := state.(map[string]any); ok {
+		if gt, ok := numberFromAny(m["_gameTime"]); ok {
+			lr.serverGameTime = gt
+			lr.snapAt = lr.now()
+			lr.clockKnown = true
+			return
+		}
+	}
+	// No _gameTime in baseline (game without renderCanvas, or pre-begin
+	// snapshot): clear known-flag so the next patch starts fresh.
+	lr.clockKnown = false
 }
 
 // MergeStatePatch applies a depth-1 JSON merge patch to Game.state. Keys in
@@ -146,6 +197,9 @@ func (lr *LocalRenderer) MergeStatePatch(jsonData []byte) {
 	for k, raw := range patch {
 		if isJSONNull(raw) {
 			stateObj.Delete(k)
+			if k == "_gameTime" {
+				lr.clockKnown = false
+			}
 			continue
 		}
 		var val any
@@ -153,7 +207,70 @@ func (lr *LocalRenderer) MergeStatePatch(jsonData []byte) {
 			continue
 		}
 		stateObj.Set(k, lr.vm.ToValue(val))
+
+		// Snap-and-report on the framework clock. Server suppresses
+		// clock-only patches, so when _gameTime arrives it's because some
+		// other state also changed — that's our chance to re-anchor and
+		// notice if our extrapolation drifted.
+		if k == "_gameTime" {
+			if gt, ok := numberFromAny(val); ok {
+				wallNow := lr.now()
+				if lr.clockKnown && lr.driftLogger != nil {
+					extrap := lr.serverGameTime + wallNow.Sub(lr.snapAt).Seconds()
+					drift := gt - extrap
+					if math.Abs(drift) > driftLogThreshold {
+						lr.driftLogger(drift)
+					}
+				}
+				lr.serverGameTime = gt
+				lr.snapAt = wallNow
+				lr.clockKnown = true
+			}
+		}
 	}
+}
+
+// injectLocalGameTime overwrites Game.state._gameTime with the locally
+// extrapolated value (server-snap + wall-clock elapsed). Called right before
+// each render so canvas/ascii hooks see a continuously advancing clock even
+// while the server stays silent. No-op if we never received a snapshot. Caller
+// holds lr.mu.
+func (lr *LocalRenderer) injectLocalGameTime() {
+	if !lr.clockKnown {
+		return
+	}
+	state := lr.gameState()
+	if goja.IsUndefined(state) || goja.IsNull(state) {
+		return
+	}
+	stateObj := state.ToObject(lr.vm)
+	if stateObj == nil {
+		return
+	}
+	t := lr.serverGameTime + lr.now().Sub(lr.snapAt).Seconds()
+	stateObj.Set("_gameTime", t)
+}
+
+// numberFromAny tolerantly extracts a float from a Go value that might be a
+// json.Number, float64, int, or absent. Returns false on missing/wrong type.
+func numberFromAny(v any) (float64, bool) {
+	switch n := v.(type) {
+	case nil:
+		return 0, false
+	case float64:
+		return n, true
+	case float32:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		if f, err := n.Float64(); err == nil {
+			return f, true
+		}
+	}
+	return 0, false
 }
 
 // isJSONNull checks whether raw decodes to JSON null (whitespace-tolerant).
@@ -192,6 +309,7 @@ func (lr *LocalRenderer) RenderCells(playerID string, width, height int) *render
 	buf := render.NewImageBuffer(width, height)
 	jsBuf := newLocalJSBuffer(lr.vm, buf, 0, 0, width, height)
 
+	lr.injectLocalGameTime()
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -224,6 +342,7 @@ func (lr *LocalRenderer) renderCanvasRaw(playerID string, pixelW, pixelH int) *i
 	canvas := engine.NewJSCanvas(pixelW, pixelH, 1.0)
 	ctx := canvas.ToJSObject(lr.vm)
 
+	lr.injectLocalGameTime()
 	func() {
 		defer func() {
 			if r := recover(); r != nil {

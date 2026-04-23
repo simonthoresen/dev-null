@@ -2,7 +2,9 @@ package client
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
+	"time"
 )
 
 // loadMinimalGame puts a skeletal Game object in the VM so the renderer's
@@ -94,6 +96,109 @@ func TestMergeStatePatch_WithoutBaselineIsNoop(t *testing.T) {
 	}
 	if got["seed"].(string) != "from-load" {
 		t.Errorf("untouched 'seed' should remain, got %v", got)
+	}
+}
+
+// fakeClock returns a controllable time-source for the renderer.
+type fakeClock struct{ now time.Time }
+
+func (c *fakeClock) Now() time.Time { return c.now }
+
+func loadTimeStub(t *testing.T) (*LocalRenderer, *fakeClock, *float64) {
+	t.Helper()
+	lr := loadMinimalGame(t)
+	clk := &fakeClock{now: time.Unix(1700000000, 0)}
+	lr.now = clk.Now
+	var lastDrift float64 = math.NaN()
+	lr.driftLogger = func(d float64) { lastDrift = d }
+	// expose pointer so callers can read it back
+	return lr, clk, &lastDrift
+}
+
+func readGameTime(t *testing.T, lr *LocalRenderer) float64 {
+	t.Helper()
+	got := readGameState(t, lr)
+	if v, ok := got["_gameTime"].(float64); ok {
+		return v
+	}
+	t.Fatalf("_gameTime missing or not a number in state: %v", got)
+	return 0
+}
+
+func TestGameTime_ExtrapolatesBetweenSnapshots(t *testing.T) {
+	lr, clk, _ := loadTimeStub(t)
+	lr.SetState([]byte(`{"_gameTime":10.0}`))
+
+	// Advance wall-clock half a second; render should see _gameTime ~= 10.5
+	clk.now = clk.now.Add(500 * time.Millisecond)
+	lr.mu.Lock()
+	lr.injectLocalGameTime()
+	lr.mu.Unlock()
+	got := readGameTime(t, lr)
+	if math.Abs(got-10.5) > 1e-6 {
+		t.Fatalf("expected extrapolated _gameTime ~10.5, got %v", got)
+	}
+
+	// Another quarter second of wall-clock without any server input.
+	clk.now = clk.now.Add(250 * time.Millisecond)
+	lr.mu.Lock()
+	lr.injectLocalGameTime()
+	lr.mu.Unlock()
+	got = readGameTime(t, lr)
+	if math.Abs(got-10.75) > 1e-6 {
+		t.Fatalf("expected extrapolated _gameTime ~10.75, got %v", got)
+	}
+}
+
+func TestGameTime_PatchSnapsAndReportsDrift(t *testing.T) {
+	lr, clk, lastDrift := loadTimeStub(t)
+	lr.SetState([]byte(`{"_gameTime":10.0}`))
+
+	// 1 second of wall clock passes — extrapolated _gameTime = 11.0.
+	clk.now = clk.now.Add(time.Second)
+	// Server sends a patch claiming _gameTime is 11.5 (drift +0.5 — server
+	// must have advanced faster than us, which is exactly what should be
+	// reported).
+	lr.MergeStatePatch([]byte(`{"_gameTime":11.5}`))
+
+	if math.IsNaN(*lastDrift) {
+		t.Fatal("expected drift logger to fire")
+	}
+	if math.Abs(*lastDrift-0.5) > 1e-6 {
+		t.Fatalf("expected reported drift ~+0.5, got %v", *lastDrift)
+	}
+
+	// After snap, future renders extrapolate from the new anchor.
+	clk.now = clk.now.Add(time.Second)
+	lr.mu.Lock()
+	lr.injectLocalGameTime()
+	lr.mu.Unlock()
+	got := readGameTime(t, lr)
+	if math.Abs(got-12.5) > 1e-6 {
+		t.Fatalf("expected extrapolation from new anchor 11.5+1.0=12.5, got %v", got)
+	}
+}
+
+func TestGameTime_SmallDriftIsSilent(t *testing.T) {
+	lr, clk, lastDrift := loadTimeStub(t)
+	lr.SetState([]byte(`{"_gameTime":0.0}`))
+
+	// Wall ticks 1.0s. Server reports 1.05 — drift 0.05s is below threshold.
+	clk.now = clk.now.Add(time.Second)
+	lr.MergeStatePatch([]byte(`{"_gameTime":1.05}`))
+	if !math.IsNaN(*lastDrift) {
+		t.Fatalf("sub-threshold drift should not fire logger, got %v", *lastDrift)
+	}
+}
+
+func TestGameTime_BaselineIsSilent(t *testing.T) {
+	lr, _, lastDrift := loadTimeStub(t)
+	// Two baselines back-to-back must NOT report drift even if the times
+	// disagree wildly — baselines reset the anchor unconditionally.
+	lr.SetState([]byte(`{"_gameTime":1.0}`))
+	lr.SetState([]byte(`{"_gameTime":99.0}`))
+	if !math.IsNaN(*lastDrift) {
+		t.Fatalf("baseline reset must not call drift logger, got %v", *lastDrift)
 	}
 }
 
