@@ -114,7 +114,7 @@ type Runtime struct {
 
 	isFolderGame bool // true when the game was loaded from <name>/main.js (not a flat .js file)
 
-	elapsedTime float64 // cumulative game time in seconds, injected into Game.state._t
+	elapsedTime float64 // cumulative game time in seconds, injected into Game.state._gameTime
 }
 
 // LoadGame loads and executes a game script (.js), extracts the Game
@@ -343,14 +343,16 @@ func (r *Runtime) Update(dt float64) {
 		)
 	}
 
-	// Auto-inject _t (elapsed game time) into Game.state so the pixel-mode
-	// client always has the current time, even if the game doesn't set it.
+	// Auto-inject _gameTime (elapsed game time, seconds since begin) into
+	// Game.state so canvas/local renderers always have the current time, even
+	// if the game itself never writes to state during update().
 	r.injectStateTime()
 }
 
-// injectStateTime sets Game.state._t to the cumulative elapsed time.
-// If Game.state is nil/undefined, it creates { _t: ... }; otherwise it
-// merges _t into the existing object. Must be called with r.mu held.
+// injectStateTime sets Game.state._gameTime to the cumulative elapsed time
+// in seconds. If Game.state is nil/undefined it creates { _gameTime: ... };
+// otherwise it merges _gameTime into the existing object. Must be called
+// with r.mu held.
 func (r *Runtime) injectStateTime() {
 	gameVal := r.vm.Get("Game")
 	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
@@ -362,15 +364,15 @@ func (r *Runtime) injectStateTime() {
 	}
 	stateVal := gameObj.Get("state")
 	if stateVal == nil || goja.IsUndefined(stateVal) || goja.IsNull(stateVal) {
-		// Game.state not set — create it with just _t
+		// Game.state not set — create it with just _gameTime
 		obj := r.vm.NewObject()
-		obj.Set("_t", r.elapsedTime)
+		obj.Set("_gameTime", r.elapsedTime)
 		gameObj.Set("state", obj)
 		return
 	}
 	stateObj := stateVal.ToObject(r.vm)
 	if stateObj != nil {
-		stateObj.Set("_t", r.elapsedTime)
+		stateObj.Set("_gameTime", r.elapsedTime)
 	}
 }
 

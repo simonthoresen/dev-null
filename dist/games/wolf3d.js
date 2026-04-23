@@ -4,8 +4,8 @@
 // All render-relevant state lives in Game.state so that local canvas rendering
 // (Pixels / Blocks-local) on the GUI client sees the same world as the server.
 // The client's goja VM receives Game.state via OSC every frame; module-level
-// variables would never be synced. Time uses Game.state._t (auto-injected by
-// the engine after each update) because the client stubs now() to 0.
+// variables would never be synced. Time uses Game.state._gameTime (auto-injected
+// by the engine after each update) because the client stubs now() to 0.
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -61,7 +61,7 @@ function initialState() {
     };
 }
 
-function gameTime() { return (_s && _s._t) || 0; }
+function gameTime() { return (_s && _s._gameTime) || 0; }
 
 // ── Map ──────────────────────────────────────────────────────────────────────
 

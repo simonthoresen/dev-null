@@ -482,14 +482,14 @@ var Game = {
     },
 
     update: function(state, dt, events, ctx) {
-        // state._t is auto-injected by the engine; use it as our tour clock.
-        updateCamera(state, state._t || 0);
+        // state._gameTime is auto-injected by the engine; use it as our tour clock.
+        updateCamera(state, state._gameTime || 0);
     },
 
     renderCanvas: function(state, me, canvas) {
         var w = canvas.width;
         var h = canvas.height;
-        var t = state._t || 0;
+        var t = state._gameTime || 0;
         if (!state.tour || state.tour.length < 2) {
             canvas.setFillStyle("#000008");
             canvas.fillRect(0, 0, w, h);
@@ -504,7 +504,7 @@ var Game = {
         if (state.phase === "orbit") {
             return "Orbiting " + PLANETS[state.tour[state.tourIdx]].name;
         }
-        var s = clamp(((state._t || 0) - state.phaseStart) / TRAVEL_DURATION, 0, 1);
+        var s = clamp(((state._gameTime || 0) - state.phaseStart) / TRAVEL_DURATION, 0, 1);
         return PLANETS[state.travel.from].name + " → " + PLANETS[state.travel.to].name
              + "  [" + Math.round(s * 100) + "%]";
     },

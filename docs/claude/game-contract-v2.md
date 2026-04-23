@@ -133,7 +133,7 @@ The server populates these keys on `state` each tick before marshalling:
 | Key | Shape | Notes |
 |-----|-------|-------|
 | `state.teams` | `[{name, color, players: [{id, name}]}]` | replaces the `teams()` global; authors read it like any other state |
-| `state._t` | seconds since game start | already injected in v1; carried forward |
+| `state._gameTime` | seconds since game start | always present after `begin()`; client extrapolates between snapshots and snaps on every non-clock patch |
 
 Games may not write to these keys. In dev mode they're frozen; in prod the
 framework overwrites them after update returns.

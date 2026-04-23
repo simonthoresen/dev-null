@@ -579,15 +579,22 @@ renderAscii: function(buf, playerID, ox, oy, width, height) {
 
 **ANSI escape codes** still work in `statusBar()` and `commandBar()` output.
 
-**Pixel mode and `Game.state`.** In Pixels render mode, the GUI client re-executes your game JS locally and calls `renderCanvas()` each frame — but never calls `update()`. Any mutable state your renderer needs must be on `Game.state` so the server can send it to the client each tick. The engine automatically injects `Game.state._t` (cumulative elapsed seconds since `begin()`), so canvas games can always read the current time:
+**Pixel mode and `Game.state`.** In Pixels render mode, the GUI client re-executes your game JS locally and calls `renderCanvas()` each frame — but never calls `update()`. Any mutable state your renderer needs must be on `Game.state` so the server can send it to the client each tick. The engine automatically injects `Game.state._gameTime` (cumulative elapsed seconds since `begin()`), so canvas games can always read the current time:
 
 ```js
 renderCanvas: function(ctx, pid, w, h) {
-    // _t is available in both server and pixel-mode client
-    if (Game.state && Game.state._t !== undefined) time = Game.state._t;
+    // _gameTime is available in both server and pixel-mode client
+    if (Game.state && Game.state._gameTime !== undefined) time = Game.state._gameTime;
     // ... render using time ...
 }
 ```
+
+The client extrapolates `_gameTime` between server snapshots from its own
+wall clock, so games that derive everything from `_gameTime` get smooth
+motion at the client's render fps even though the server only ticks at
+~10 Hz. Whenever a non-clock state change arrives, the snapshot's
+`_gameTime` is treated as authoritative and the local clock is snapped
+to it.
 
 If your game needs additional state for rendering (player positions, scores, etc.), set them on `Game.state` in `update()` and read them back in `renderCanvas()`. Module-level variables are only updated on the server — they stay at their initial values on the pixel-mode client.
 
