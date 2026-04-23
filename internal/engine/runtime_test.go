@@ -108,3 +108,37 @@ func TestHoldemGameLoads(t *testing.T) {
 		t.Errorf("got gameName=%q, want %q", game.GameName(), "Texas Hold'em")
 	}
 }
+
+// TestVoyageRendersCanvas loads voyage.js and renders one canvas frame.
+// This is a smoke test for the 3D rasterizer bindings: if the JS side
+// hits an undefined method (e.g. fillTriangle3DLit) the call panics and
+// is converted to an error, which would surface here. It also catches
+// regressions in voyage's sphere-mesh generator and lighting math.
+func TestVoyageRendersCanvas(t *testing.T) {
+	mainJS := filepath.Join("../../dist/games", "voyage.js")
+	if _, err := os.Stat(mainJS); err != nil {
+		t.Skip("voyage game not found at", mainJS)
+	}
+	chatCh := make(chan domain.Message, 64)
+	game, err := LoadGame(mainJS, func(string) {}, chatCh, domain.RealClock{}, "../../dist")
+	if err != nil {
+		t.Fatalf("LoadGame voyage: %v", err)
+	}
+	game.Load(nil)
+	game.Begin()
+	game.Update(0.016)
+	img := game.RenderCanvasImage("alice", 200, 200)
+	if img == nil {
+		t.Fatal("voyage RenderCanvasImage returned nil")
+	}
+	// Expect at least some non-background pixels (the scene has stars+planets).
+	touched := 0
+	for i := 3; i < len(img.Pix); i += 4 {
+		if img.Pix[i-3] > 8 || img.Pix[i-2] > 8 || img.Pix[i-1] > 8 {
+			touched++
+		}
+	}
+	if touched == 0 {
+		t.Error("voyage rendered an empty canvas")
+	}
+}

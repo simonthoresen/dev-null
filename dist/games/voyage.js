@@ -111,14 +111,6 @@ function hex(r, g, b, a) {
     return s;
 }
 
-function parseCol(col) {
-    return [
-        parseInt(col.substring(1, 3), 16),
-        parseInt(col.substring(3, 5), 16),
-        parseInt(col.substring(5, 7), 16)
-    ];
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // SOLAR SYSTEM GEOMETRY
 // ═══════════════════════════════════════════════════════════════════════════
@@ -309,47 +301,109 @@ function renderSun(ctx, p) {
     ctx.fillCircle(p.x, p.y, r * 0.6);
 }
 
-// Draw a Sun-lit shaded disk. Used for both planets and moons.
-// The lit hemisphere is painted via a radial gradient whose inner
-// (highlight) centre is offset toward the Sun in screen space.
-function renderBody(ctx, proj, wp, p, Rworld, col) {
-    var r = Rworld * p.scale;
-    if (r < 0.5) {
-        ctx.setFillStyle(col);
-        ctx.fillCircle(p.x, p.y, Math.max(0.6, r));
-        return;
+// ── Unit sphere mesh (generated once) ──────────────────────────────────────
+// Lat-long tessellation. For a unit sphere, a vertex position IS its
+// outward normal, so we store one array and use it as both.
+var SPHERE_LATS  = 10;
+var SPHERE_LONGS = 16;
+
+var UNIT_SPHERE = (function makeUnitSphere(lats, longs) {
+    var verts = [[0, 1, 0]];                               // top pole
+    for (var i = 1; i < lats; i++) {
+        var theta = i * Math.PI / lats;
+        var y = Math.cos(theta);
+        var r = Math.sin(theta);
+        for (var j = 0; j < longs; j++) {
+            var phi = j * 2 * Math.PI / longs;
+            verts.push([r * Math.cos(phi), y, r * Math.sin(phi)]);
+        }
     }
-    // Lit direction in screen space: project a point offset toward the Sun
-    // (origin) and take the screen-space delta.
-    var sunDir = vNorm(vSub([0, 0, 0], wp));
-    var litRef = proj.project(vAdd(wp, vScale(sunDir, Rworld * 0.4)));
-    var lx = 0, ly = 0;
-    if (litRef) {
-        var dx = litRef.x - p.x, dy = litRef.y - p.y;
-        var L  = Math.sqrt(dx*dx + dy*dy) || 1;
-        lx = dx / L; ly = dy / L;
+    verts.push([0, -1, 0]);                                // bottom pole
+    var bottom = verts.length - 1;
+    var tris = [];
+    // Top cap.
+    for (var j = 0; j < longs; j++) {
+        tris.push([0, 1 + ((j + 1) % longs), 1 + j]);
     }
-    var c = parseCol(col);
-    var darkR = Math.round(c[0] * 0.22), darkG = Math.round(c[1] * 0.22), darkB = Math.round(c[2] * 0.30);
-    // Highlight centre sits inside the disk on the lit side; gradient
-    // radius extends to the opposite edge so the shadow falls off smoothly.
-    var hx = p.x + lx * r * 0.55;
-    var hy = p.y + ly * r * 0.55;
-    var g = ctx.createRadialGradient(hx, hy, r * 0.05, hx, hy, r * 1.8);
-    g.addColorStop(0.00, hex(Math.min(255, c[0] + 90), Math.min(255, c[1] + 90), Math.min(255, c[2] + 90)));
-    g.addColorStop(0.35, col);
-    g.addColorStop(1.00, hex(darkR, darkG, darkB));
-    ctx.setFillStyle(g);
-    ctx.fillCircle(p.x, p.y, r);
+    // Mid rings.
+    for (var i = 0; i < lats - 2; i++) {
+        var r1 = 1 + i * longs, r2 = 1 + (i + 1) * longs;
+        for (var j = 0; j < longs; j++) {
+            var jN = (j + 1) % longs;
+            tris.push([r1 + j, r2 + j, r1 + jN]);
+            tris.push([r1 + jN, r2 + j, r2 + jN]);
+        }
+    }
+    // Bottom cap.
+    var lastRing = 1 + (lats - 2) * longs;
+    for (var j = 0; j < longs; j++) {
+        tris.push([bottom, lastRing + j, lastRing + ((j + 1) % longs)]);
+    }
+    return { verts: verts, tris: tris };
+})(SPHERE_LATS, SPHERE_LONGS);
+
+// Draw a Sun-lit body (planet or moon) as a depth-tested triangle mesh.
+// Rotation around Y gives the surface a slow spin even on untextured
+// spheres — without it the Lambert term is constant and spheres look
+// painted. Light direction is approximated as constant across the body
+// (sun is far away relative to body size).
+function renderBody(ctx, proj, wp, Rworld, col, spinAngle) {
+    var cosS = Math.cos(spinAngle), sinS = Math.sin(spinAngle);
+
+    // Precompute screen positions and world-space normals for every mesh
+    // vertex, then iterate triangles. Each vertex is projected once even
+    // when it belongs to several triangles.
+    var N = UNIT_SPHERE.verts.length;
+    var sx = new Array(N), sy = new Array(N), sz = new Array(N);
+    var nx = new Array(N), ny = new Array(N), nz = new Array(N);
+    for (var i = 0; i < N; i++) {
+        var v  = UNIT_SPHERE.verts[i];
+        // Rotate around Y (the spin axis). For a unit sphere this is also
+        // the rotated normal.
+        var rx = v[0] * cosS + v[2] * sinS;
+        var ry = v[1];
+        var rz = -v[0] * sinS + v[2] * cosS;
+        nx[i] = rx; ny[i] = ry; nz[i] = rz;
+        var sp = proj.project([wp[0] + rx*Rworld, wp[1] + ry*Rworld, wp[2] + rz*Rworld]);
+        if (sp) {
+            sx[i] = sp.x; sy[i] = sp.y; sz[i] = sp.z;
+        } else {
+            sz[i] = -1; // flag: behind camera
+        }
+    }
+
+    var lightDir = vNorm(vSub([0, 0, 0], wp));
+    var ambient = 0.08;
+
+    // Self-occlusion is handled by the depth buffer; the outer painter's
+    // sort in renderScene handles inter-body ordering.
+    ctx.clearDepth();
+    for (var k = 0; k < UNIT_SPHERE.tris.length; k++) {
+        var tri = UNIT_SPHERE.tris[k];
+        var a = tri[0], b = tri[1], c = tri[2];
+        if (sz[a] < 0 || sz[b] < 0 || sz[c] < 0) continue;  // any vertex behind camera
+        ctx.fillTriangle3DLit(
+            [sx[a], sy[a], sz[a]],
+            [sx[b], sy[b], sz[b]],
+            [sx[c], sy[c], sz[c]],
+            [nx[a], ny[a], nz[a]],
+            [nx[b], ny[b], nz[b]],
+            [nx[c], ny[c], nz[c]],
+            lightDir, col, ambient
+        );
+    }
 }
 
-function renderPlanet(ctx, proj, idx, wp, p) {
-    renderBody(ctx, proj, wp, p, PLANETS[idx].r, PLANETS[idx].col);
+function renderPlanet(ctx, proj, idx, wp, t) {
+    // Each planet spins on its Y axis at a rate loosely tied to its orbit
+    // period for visual variety.
+    var spin = t * (0.15 + 0.35 * PLANETS[idx].spd);
+    renderBody(ctx, proj, wp, PLANETS[idx].r, PLANETS[idx].col, spin);
     if (PLANETS[idx].ring) renderRings(ctx, proj, wp, idx);
 }
 
-function renderMoon(ctx, proj, m, wp, p) {
-    renderBody(ctx, proj, wp, p, m.r, m.col);
+function renderMoon(ctx, proj, m, wp, t) {
+    renderBody(ctx, proj, wp, m.r, m.col, t * m.spd);
 }
 
 function renderRings(ctx, proj, planetWP, idx) {
@@ -402,8 +456,8 @@ function renderScene(ctx, cam, t, w, h) {
     for (var k = 0; k < items.length; k++) {
         var it = items[k];
         if      (it.kind === "sun")    renderSun(ctx, it.p);
-        else if (it.kind === "planet") renderPlanet(ctx, proj, it.idx, it.wp, it.p);
-        else                           renderMoon(ctx, proj, it.m, it.wp, it.p);
+        else if (it.kind === "planet") renderPlanet(ctx, proj, it.idx, it.wp, t);
+        else                           renderMoon(ctx, proj, it.m, it.wp, t);
     }
 }
 

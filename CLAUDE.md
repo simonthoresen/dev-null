@@ -117,6 +117,8 @@ On first run or version upgrade, `datadir.Bootstrap()` copies bundled assets fro
 | `internal/widget/reconcile.go` | Widget tree reconciler for game viewports |
 | `internal/theme/theme.go` | Theme system: palettes, borders, depth layers |
 | `internal/engine/runtime.go` | JS game runtime (goja): lifecycle, Game interface impl |
+| `internal/engine/rasterizer.go` | Software 3D rasterizer: depth buffer, barycentric triangle fill, Lambert helper |
+| `internal/engine/canvas.go` | JSCanvas: 2D ops, gradients, 3D triangle primitives (fillTriangle3DLit) |
 | `internal/engine/bindings.go` | JS global functions: log, chat, teams, gameOver, etc. |
 | `internal/engine/shader.go` | Per-player JS shader post-processing |
 | `internal/engine/plugin.go` | Per-player JS plugin system |
