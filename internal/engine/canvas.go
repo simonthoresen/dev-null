@@ -2,19 +2,31 @@ package engine
 
 import (
 	"bytes"
+	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"math"
+	"strconv"
+	"strings"
 
 	"github.com/dop251/goja"
 	"github.com/fogleman/gg"
 )
 
 // JSCanvas wraps a fogleman/gg context and exposes Canvas2D-like methods to JS.
+//
+// Gradients returned from createRadialGradient/createLinearGradient are
+// keyed by a per-canvas opaque id string; setFillStyle/setStrokeStyle
+// inspect their argument to decide whether it is a color string or a
+// gradient handle. The canvas is recreated each frame, so the registry
+// does not outlive a render pass.
 type JSCanvas struct {
-	dc     *gg.Context
-	width  int
-	height int
+	dc          *gg.Context
+	width       int
+	height      int
+	gradients   map[string]gg.Pattern
+	gradCounter int
 }
 
 // NewJSCanvas creates a new headless canvas with the given pixel dimensions.
@@ -30,7 +42,38 @@ func NewJSCanvas(width, height int, scaleY float64) *JSCanvas {
 	if scaleY != 1.0 {
 		dc.Scale(1.0, scaleY)
 	}
-	return &JSCanvas{dc: dc, width: width, height: logicalH}
+	return &JSCanvas{dc: dc, width: width, height: logicalH, gradients: map[string]gg.Pattern{}}
+}
+
+// parseCanvasHexColor parses a "#rgb", "#rgba", "#rrggbb", or "#rrggbbaa"
+// color string into an image/color.RGBA. Returns black on parse error.
+func parseCanvasHexColor(s string) color.RGBA {
+	s = strings.TrimPrefix(s, "#")
+	expand := func(h string) string {
+		var b strings.Builder
+		for _, r := range h {
+			b.WriteRune(r)
+			b.WriteRune(r)
+		}
+		return b.String()
+	}
+	switch len(s) {
+	case 3:
+		s = expand(s) + "ff"
+	case 4:
+		s = expand(s)
+	case 6:
+		s = s + "ff"
+	case 8:
+		// already 8
+	default:
+		return color.RGBA{}
+	}
+	v, err := strconv.ParseUint(s, 16, 32)
+	if err != nil {
+		return color.RGBA{}
+	}
+	return color.RGBA{R: uint8(v >> 24), G: uint8(v >> 16), B: uint8(v >> 8), A: uint8(v)}
 }
 
 // ToPNG renders the canvas to a PNG byte slice.
@@ -75,11 +118,27 @@ func (c *JSCanvas) ToJSObject(vm *goja.Runtime) map[string]any {
 		"scale":     func(sx, sy float64) { c.dc.Scale(sx, sy) },
 
 		// ── Style ──
-		"setFillStyle": func(color string) {
-			c.dc.SetHexColor(color)
+		// setFillStyle / setStrokeStyle accept either a hex color string
+		// or a gradient handle returned from createRadialGradient /
+		// createLinearGradient.
+		"setFillStyle": func(arg any) {
+			if !c.applyPattern(arg, true) {
+				// Fallback: treat non-string/non-gradient as opaque black.
+				c.dc.SetRGBA(0, 0, 0, 1)
+			}
 		},
-		"setStrokeStyle": func(color string) {
-			c.dc.SetHexColor(color)
+		"setStrokeStyle": func(arg any) {
+			if !c.applyPattern(arg, false) {
+				c.dc.SetRGBA(0, 0, 0, 1)
+			}
+		},
+
+		// ── Gradients ──
+		"createRadialGradient": func(x0, y0, r0, x1, y1, r1 float64) map[string]any {
+			return c.registerGradient(gg.NewRadialGradient(x0, y0, r0, x1, y1, r1))
+		},
+		"createLinearGradient": func(x0, y0, x1, y1 float64) map[string]any {
+			return c.registerGradient(gg.NewLinearGradient(x0, y0, x1, y1))
 		},
 		"setLineWidth": func(w float64) {
 			c.dc.SetLineWidth(w)
@@ -170,4 +229,49 @@ func (c *JSCanvas) ToJSObject(vm *goja.Runtime) map[string]any {
 		"PI":  math.Pi,
 		"TAU": 2 * math.Pi,
 	}
+}
+
+// registerGradient stores a gradient under an opaque id and returns a JS
+// handle object exposing addColorStop. The id is hidden in the handle so
+// setFillStyle/setStrokeStyle can recover it.
+func (c *JSCanvas) registerGradient(grad gg.Pattern) map[string]any {
+	c.gradCounter++
+	id := fmt.Sprintf("__grad_%d", c.gradCounter)
+	c.gradients[id] = grad
+	if g, ok := grad.(gg.Gradient); ok {
+		return map[string]any{
+			"_id": id,
+			"addColorStop": func(offset float64, colorHex string) {
+				g.AddColorStop(offset, parseCanvasHexColor(colorHex))
+			},
+		}
+	}
+	return map[string]any{"_id": id}
+}
+
+// applyPattern sets either a solid color or a gradient as the fill/stroke
+// style. Returns false if arg was neither a known hex string nor a
+// gradient handle.
+func (c *JSCanvas) applyPattern(arg any, fill bool) bool {
+	switch v := arg.(type) {
+	case string:
+		c.dc.SetHexColor(v)
+		return true
+	case map[string]any:
+		id, ok := v["_id"].(string)
+		if !ok {
+			return false
+		}
+		g, ok := c.gradients[id]
+		if !ok {
+			return false
+		}
+		if fill {
+			c.dc.SetFillStyle(g)
+		} else {
+			c.dc.SetStrokeStyle(g)
+		}
+		return true
+	}
+	return false
 }

@@ -310,6 +310,8 @@ function renderSun(ctx, p) {
 }
 
 // Draw a Sun-lit shaded disk. Used for both planets and moons.
+// The lit hemisphere is painted via a radial gradient whose inner
+// (highlight) centre is offset toward the Sun in screen space.
 function renderBody(ctx, proj, wp, p, Rworld, col) {
     var r = Rworld * p.scale;
     if (r < 0.5) {
@@ -317,8 +319,8 @@ function renderBody(ctx, proj, wp, p, Rworld, col) {
         ctx.fillCircle(p.x, p.y, Math.max(0.6, r));
         return;
     }
-    // Lit direction in screen space: offset a point toward the Sun (origin)
-    // and see which way that shifts in screen coords.
+    // Lit direction in screen space: project a point offset toward the Sun
+    // (origin) and take the screen-space delta.
     var sunDir = vNorm(vSub([0, 0, 0], wp));
     var litRef = proj.project(vAdd(wp, vScale(sunDir, Rworld * 0.4)));
     var lx = 0, ly = 0;
@@ -328,17 +330,17 @@ function renderBody(ctx, proj, wp, p, Rworld, col) {
         lx = dx / L; ly = dy / L;
     }
     var c = parseCol(col);
-    // Dark side, mid, lit — concentric disks offset toward the light.
-    ctx.setFillStyle(hex(c[0]*0.30, c[1]*0.30, c[2]*0.45));
+    var darkR = Math.round(c[0] * 0.22), darkG = Math.round(c[1] * 0.22), darkB = Math.round(c[2] * 0.30);
+    // Highlight centre sits inside the disk on the lit side; gradient
+    // radius extends to the opposite edge so the shadow falls off smoothly.
+    var hx = p.x + lx * r * 0.55;
+    var hy = p.y + ly * r * 0.55;
+    var g = ctx.createRadialGradient(hx, hy, r * 0.05, hx, hy, r * 1.8);
+    g.addColorStop(0.00, hex(Math.min(255, c[0] + 90), Math.min(255, c[1] + 90), Math.min(255, c[2] + 90)));
+    g.addColorStop(0.35, col);
+    g.addColorStop(1.00, hex(darkR, darkG, darkB));
+    ctx.setFillStyle(g);
     ctx.fillCircle(p.x, p.y, r);
-    ctx.setFillStyle(hex(c[0]*0.65, c[1]*0.65, c[2]*0.70));
-    ctx.fillCircle(p.x + lx*r*0.25, p.y + ly*r*0.25, r*0.85);
-    ctx.setFillStyle(col);
-    ctx.fillCircle(p.x + lx*r*0.45, p.y + ly*r*0.45, r*0.55);
-    if (r > 3) {
-        ctx.setFillStyle(hex(c[0]*0.4 + 150, c[1]*0.4 + 150, c[2]*0.4 + 150));
-        ctx.fillCircle(p.x + lx*r*0.6, p.y + ly*r*0.6, r*0.22);
-    }
 }
 
 function renderPlanet(ctx, proj, idx, wp, p) {
