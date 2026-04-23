@@ -27,6 +27,7 @@ type JSCanvas struct {
 	height      int
 	gradients   map[string]gg.Pattern
 	gradCounter int
+	raster      *Rasterizer // lazily initialized on first 3D call
 }
 
 // NewJSCanvas creates a new headless canvas with the given pixel dimensions.
@@ -225,10 +226,81 @@ func (c *JSCanvas) ToJSObject(vm *goja.Runtime) map[string]any {
 			c.dc.SetPixel(x, y)
 		},
 
+		// ── 3D triangle rasterizer ──
+		// All 3D primitives share a depth buffer that is allocated on the
+		// first call and reset by clearDepth(). A fresh canvas starts with
+		// no depth buffer, so a game that never calls fillTriangle3D* pays
+		// zero memory overhead.
+		"fillTriangle3D": func(v0, v1, v2 []float64, colors []string) {
+			if len(v0) < 3 || len(v1) < 3 || len(v2) < 3 || len(colors) < 3 {
+				return
+			}
+			c.ensureRaster().FillTriangle(
+				v0[0], v0[1], v0[2],
+				v1[0], v1[1], v1[2],
+				v2[0], v2[1], v2[2],
+				parseCanvasHexColor(colors[0]),
+				parseCanvasHexColor(colors[1]),
+				parseCanvasHexColor(colors[2]),
+			)
+		},
+		"fillTriangle3DFlat": func(v0, v1, v2 []float64, colorHex string) {
+			if len(v0) < 3 || len(v1) < 3 || len(v2) < 3 {
+				return
+			}
+			col := parseCanvasHexColor(colorHex)
+			c.ensureRaster().FillTriangle(
+				v0[0], v0[1], v0[2],
+				v1[0], v1[1], v1[2],
+				v2[0], v2[1], v2[2],
+				col, col, col,
+			)
+		},
+		"fillTriangle3DLit": func(
+			v0, v1, v2 []float64,
+			n0, n1, n2 []float64,
+			lightDir []float64,
+			colorHex string,
+			ambient float64,
+		) {
+			if len(v0) < 3 || len(v1) < 3 || len(v2) < 3 {
+				return
+			}
+			if len(n0) < 3 || len(n1) < 3 || len(n2) < 3 || len(lightDir) < 3 {
+				return
+			}
+			base := parseCanvasHexColor(colorHex)
+			lx, ly, lz := lightDir[0], lightDir[1], lightDir[2]
+			c0 := Lambert(n0[0], n0[1], n0[2], lx, ly, lz, base, ambient)
+			c1 := Lambert(n1[0], n1[1], n1[2], lx, ly, lz, base, ambient)
+			c2 := Lambert(n2[0], n2[1], n2[2], lx, ly, lz, base, ambient)
+			c.ensureRaster().FillTriangle(
+				v0[0], v0[1], v0[2],
+				v1[0], v1[1], v1[2],
+				v2[0], v2[1], v2[2],
+				c0, c1, c2,
+			)
+		},
+		"clearDepth": func() {
+			if c.raster != nil {
+				c.raster.ClearDepth()
+			}
+		},
+
 		// ── Math constants (convenience) ──
 		"PI":  math.Pi,
 		"TAU": 2 * math.Pi,
 	}
+}
+
+// ensureRaster lazily constructs the rasterizer tied to this canvas's RGBA
+// backing buffer. Reusing the same image means 2D and 3D ops composite
+// naturally.
+func (c *JSCanvas) ensureRaster() *Rasterizer {
+	if c.raster == nil {
+		c.raster = NewRasterizer(c.ToRGBA())
+	}
+	return c.raster
 }
 
 // registerGradient stores a gradient under an opaque id and returns a JS
