@@ -33,8 +33,10 @@ func (m *Model) currentWindow() *widget.Window {
 
 // currentFocus returns the focused widget that the router should consult
 // for WantsEnter/WantsEsc. During starting/ending phases the phase buttons
-// are the effective focus target; otherwise it is the focused child of the
-// active window.
+// are the effective focus target; otherwise it is the focused child of
+// the active window, descending into a GameView's inner widget tree when
+// one has inner focus (so a focused TextInput inside a game is what the
+// router asks about, not the GameView wrapper).
 func (m *Model) currentFocus() any {
 	if m.inActiveGame {
 		phase := m.api.State().GetGamePhase()
@@ -52,7 +54,13 @@ func (m *Model) currentFocus() any {
 	if win.FocusIdx < 0 || win.FocusIdx >= len(win.Children) {
 		return nil
 	}
-	return win.Children[win.FocusIdx].Control
+	ctrl := win.Children[win.FocusIdx].Control
+	if gv, ok := ctrl.(*widget.GameView); ok {
+		if inner := gv.FocusedChild(); inner != nil {
+			return inner
+		}
+	}
+	return ctrl
 }
 
 // focusCommandInput moves focus to the chat command input in the current

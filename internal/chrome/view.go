@@ -263,19 +263,26 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 		m.playingGameView.OnKey = nil // ending screen ignores game keys
 	default: // PhasePlaying
 		if ncTree := game.Layout(m.playerID, m.width, gameH); ncTree != nil {
-			// NC-tree game: reconcile into a GameWindow and render/route through it.
+			// NC-tree game: reconcile into a GameWindow. The reconciled
+			// window becomes GameView.Inner so keys delegate to its
+			// focused child naturally; focus wraps pop out to the
+			// chrome's command input.
 			m.gameWindow = widget.ReconcileGameWindow(m.gameWindow, ncTree,
 				func(gbuf *render.ImageBuffer, bx, by, bw, bh int) { game.RenderAscii(gbuf, m.playerID, bx, by, bw, bh) },
 				func(action string) { game.OnInput(m.playerID, action) })
+			m.playingGameView.Inner = m.gameWindow.Window
 			m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
 				m.gameWindow.Window.RenderToBuf(gbuf, x, y, w, h, m.theme.LayerAt(0))
 			}
-			// Route keys to the reconciled window's focused control.
+			// Fallback OnKey for events outside the focus hierarchy (unused
+			// when Inner has focusable children, but kept for mouse-only
+			// layouts).
 			m.playingGameView.OnKey = func(key string) {
 				game.OnInput(m.playerID, key)
 			}
 		} else {
 			m.gameWindow = nil
+			m.playingGameView.Inner = nil
 			m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
 				game.RenderAscii(gbuf, m.playerID, x, y, w, h)
 			}

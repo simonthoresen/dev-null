@@ -291,6 +291,48 @@ func (w *Window) focusOrder() []int {
 	return order
 }
 
+// HasFocusable reports whether the window contains any focusable child.
+func (w *Window) HasFocusable() bool {
+	return len(w.focusOrder()) > 0
+}
+
+// AtFirstFocusable reports whether FocusIdx points to the first focusable
+// child in TabIndex order. Used by focus containers (e.g. GameView) to
+// decide whether Shift+Tab should pop out to the parent window.
+func (w *Window) AtFirstFocusable() bool {
+	order := w.focusOrder()
+	if len(order) == 0 {
+		return true
+	}
+	return w.FocusIdx == order[0]
+}
+
+// AtLastFocusable reports whether FocusIdx points to the last focusable
+// child in TabIndex order. Used by focus containers to decide whether
+// Tab should pop out to the parent window.
+func (w *Window) AtLastFocusable() bool {
+	order := w.focusOrder()
+	if len(order) == 0 {
+		return true
+	}
+	return w.FocusIdx == order[len(order)-1]
+}
+
+// FocusFirstOrLast sets FocusIdx to the first (if last=false) or last
+// (if last=true) focusable child in TabIndex order. Used when focus
+// enters a focus container from outside.
+func (w *Window) FocusFirstOrLast(last bool) {
+	order := w.focusOrder()
+	if len(order) == 0 {
+		return
+	}
+	if last {
+		w.FocusIdx = order[len(order)-1]
+	} else {
+		w.FocusIdx = order[0]
+	}
+}
+
 // CycleFocus advances focus to the next focusable control by TabIndex order.
 func (w *Window) CycleFocus() tea.Cmd {
 	return w.cycleFocusDir(+1)
