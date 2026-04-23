@@ -3,7 +3,6 @@ package chrome
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -165,9 +164,6 @@ func (m *Model) handleGameUnloaded() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleGamePhase(msg domain.GamePhaseMsg) (tea.Model, tea.Cmd) {
-	if msg.Phase == domain.PhaseEnding {
-		m.gameOverStart = time.Now()
-	}
 	if msg.Phase == domain.PhaseNone {
 		m.inActiveGame = false
 		m.lobbyWindow.FocusIdx = 4

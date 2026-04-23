@@ -38,14 +38,8 @@ func (m *Model) currentWindow() *widget.Window {
 // one has inner focus (so a focused TextInput inside a game is what the
 // router asks about, not the GameView wrapper).
 func (m *Model) currentFocus() any {
-	if m.inActiveGame {
-		phase := m.api.State().GetGamePhase()
-		switch phase {
-		case domain.PhaseStarting:
-			return m.phaseReadyButton
-		case domain.PhaseEnding:
-			return m.phaseContinueButton
-		}
+	if m.inActiveGame && m.api.State().GetGamePhase() == domain.PhaseStarting {
+		return m.phaseReadyButton
 	}
 	win := m.currentWindow()
 	if win == nil {
@@ -160,18 +154,11 @@ func (m *Model) routeToFocused(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key != "tab" {
 		m.tabCandidates = nil
 	}
-	// Phase buttons are the focus target during starting/ending. They are
+	// The Ready button is the focus target during PhaseStarting. It is
 	// not part of any Window's focus hierarchy, so dispatch directly.
-	if m.inActiveGame {
-		phase := m.api.State().GetGamePhase()
-		switch phase {
-		case domain.PhaseStarting:
-			m.phaseReadyButton.Update(msg)
-			return m, nil
-		case domain.PhaseEnding:
-			m.phaseContinueButton.Update(msg)
-			return m, nil
-		}
+	if m.inActiveGame && m.api.State().GetGamePhase() == domain.PhaseStarting {
+		m.phaseReadyButton.Update(msg)
+		return m, nil
 	}
 	win := m.currentWindow()
 	if win == nil {

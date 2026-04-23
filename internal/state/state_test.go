@@ -55,22 +55,22 @@ func TestSetGamePhase(t *testing.T) {
 	s := New("")
 	s.AddPlayer(&domain.Player{ID: "p1", Name: "alice"})
 
-	// Transition to game over creates the ready map.
-	s.SetGamePhase(domain.PhaseEnding)
-	if s.GetGamePhase() != domain.PhaseEnding {
-		t.Fatal("expected PhaseEnding")
+	// Transition to starting creates the ready map.
+	s.SetGamePhase(domain.PhaseStarting)
+	if s.GetGamePhase() != domain.PhaseStarting {
+		t.Fatal("expected PhaseStarting")
 	}
 	s.RLock()
-	if s.GameOverReady == nil {
-		t.Fatal("expected GameOverReady to be initialized")
+	if s.StartingReady == nil {
+		t.Fatal("expected StartingReady to be initialized")
 	}
 	s.RUnlock()
 
 	// Transition to none clears everything.
 	s.SetGamePhase(domain.PhaseNone)
 	s.RLock()
-	if s.GameOverReady != nil {
-		t.Fatal("expected GameOverReady to be nil")
+	if s.StartingReady != nil {
+		t.Fatal("expected StartingReady to be nil")
 	}
 	if s.GameTeams != nil {
 		t.Fatal("expected GameTeams to be nil")
@@ -219,54 +219,6 @@ func TestGameTeamOperations(t *testing.T) {
 	gameTeams := s.GetGameTeams()
 	if gameTeams[0].Players[0] != "p1-new" {
 		t.Fatalf("expected p1-new, got %q", gameTeams[0].Players[0])
-	}
-}
-
-func TestAllPlayersReady(t *testing.T) {
-	s := New("")
-	s.AddPlayer(&domain.Player{ID: "p1", Name: "alice"})
-	s.AddPlayer(&domain.Player{ID: "p2", Name: "bob"})
-
-	s.Lock()
-	s.GameTeams = []domain.Team{
-		{Name: "Red", Players: []string{"p1", "p2"}},
-	}
-	s.Unlock()
-
-	s.SetGamePhase(domain.PhaseEnding)
-
-	if s.AllPlayersReady() {
-		t.Fatal("expected not all ready")
-	}
-
-	s.MarkPlayerReady("p1")
-	if s.AllPlayersReady() {
-		t.Fatal("expected not all ready (only p1)")
-	}
-
-	s.MarkPlayerReady("p2")
-	if !s.AllPlayersReady() {
-		t.Fatal("expected all ready")
-	}
-}
-
-func TestAllPlayersReadyIgnoresDisconnected(t *testing.T) {
-	s := New("")
-	s.AddPlayer(&domain.Player{ID: "p1", Name: "alice"})
-	// p2 was in the game but disconnected (not in Players map).
-
-	s.Lock()
-	s.GameTeams = []domain.Team{
-		{Name: "Red", Players: []string{"p1", "p2"}},
-	}
-	s.Unlock()
-
-	s.SetGamePhase(domain.PhaseEnding)
-	s.MarkPlayerReady("p1")
-
-	// p2 is disconnected (not in Players), so only p1 needs to be ready.
-	if !s.AllPlayersReady() {
-		t.Fatal("expected all ready (disconnected player should be skipped)")
 	}
 }
 

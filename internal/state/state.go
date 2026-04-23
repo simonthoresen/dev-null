@@ -44,10 +44,6 @@ type CentralState struct {
 	StartingReady map[string]bool
 	StartingStart time.Time // when the starting phase began (for countdown)
 
-	// GameOverReady tracks which players have acknowledged the game-over screen.
-	GameOverReady   map[string]bool
-	GameOverResults []domain.GameResult // ranked results from gameOver()
-
 	// Teams configured in the lobby before a game starts.
 	Teams []domain.Team
 
@@ -171,12 +167,6 @@ func (s *CentralState) SetGamePhase(phase domain.GamePhase) {
 	} else {
 		s.StartingReady = nil
 	}
-	if phase == domain.PhaseEnding {
-		s.GameOverReady = make(map[string]bool)
-	} else {
-		s.GameOverReady = nil
-		s.GameOverResults = nil
-	}
 	if phase == domain.PhaseNone {
 		s.GameTeams = nil
 		s.GameDisconnected = nil
@@ -187,32 +177,6 @@ func (s *CentralState) GetGamePhase() domain.GamePhase {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.GamePhase
-}
-
-func (s *CentralState) MarkPlayerReady(playerID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.GameOverReady != nil {
-		s.GameOverReady[playerID] = true
-	}
-}
-
-// AllPlayersReady returns true if every connected game player has acknowledged.
-func (s *CentralState) AllPlayersReady() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.GameOverReady == nil {
-		return false
-	}
-	for _, t := range s.GameTeams {
-		for _, id := range t.Players {
-			// Only check players who are still connected.
-			if s.Players[id] != nil && !s.GameOverReady[id] {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 // MarkStartingReady marks a player as ready on the starting screen.

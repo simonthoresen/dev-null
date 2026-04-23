@@ -69,7 +69,6 @@ const (
 	PhaseNone     GamePhase = 0 // lobby — no game loaded
 	PhaseStarting GamePhase = 1 // starting screen before game begins
 	PhasePlaying  GamePhase = 2 // game is actively running
-	PhaseEnding   GamePhase = 3 // ending screen, waiting for acknowledgment
 )
 
 // GameResult is a single entry in the game-over results, displayed in the

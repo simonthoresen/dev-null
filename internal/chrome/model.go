@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -38,7 +37,6 @@ type ServerAPI interface {
 	// Game lifecycle
 	StartGame()
 	ReadyUp(playerID string)
-	AcknowledgeGameOver(playerID string)
 	SuspendGame(saveName string) error
 	ResumeGame(gameName, saveName string) error
 	ListSuspends() []state.SuspendInfo
@@ -71,9 +69,6 @@ type Model struct {
 	tabPrefix     string
 	tabCandidates []string
 	tabIndex      int
-
-	// Game-over countdown tracking
-	gameOverStart time.Time
 
 	// Init commands from ~/.dev-null/client.txt (dispatched on first tick)
 	InitCommands []string
@@ -135,13 +130,10 @@ type Model struct {
 	playingChatView  *widget.TextView
 	playingInput     *widget.CommandInput
 
-	// Phase action buttons — focus targets during starting/ending phases.
-	// They are standalone: not part of any Window's focus hierarchy. Input
-	// routing sets the current focused widget to the appropriate phase
-	// button while in PhaseStarting / PhaseEnding, and their Render method
-	// is called directly by renderStartingScreen / renderGameOverScreen.
-	phaseReadyButton    *widget.Button
-	phaseContinueButton *widget.Button
+	// Ready button for PhaseStarting — standalone focus target, rendered
+	// directly by renderStartingScreen at a position in the game viewport.
+	// Not part of any Window's focus hierarchy.
+	phaseReadyButton *widget.Button
 
 	// Cached menu tree — rebuilt only on invalidation.
 	menuCache      []domain.MenuDef
@@ -250,12 +242,10 @@ func NewModel(api ServerAPI, playerID string) *Model {
 		StatusBar: playingStatusBar,
 	}
 
-	// Phase action buttons — standalone focus targets during starting/
-	// ending phases. Their Render method is called by
-	// renderStartingScreen / renderGameOverScreen at a fixed position in
-	// the game viewport; they are not part of any Window's focus hierarchy.
+	// Standalone Ready button for PhaseStarting. Its Render method is
+	// called by renderStartingScreen at a computed viewport position; it
+	// is not part of any Window's focus hierarchy.
 	phaseReadyButton := &widget.Button{Label: "Ready", Align: "left"}
-	phaseContinueButton := &widget.Button{Label: "Continue", Align: "left"}
 
 	m := Model{
 		api:           api,
@@ -280,8 +270,7 @@ func NewModel(api ServerAPI, playerID string) *Model {
 		playingGameView:  playingGameView,
 		playingChatView:  playingChatView,
 		playingInput:     playingInputCtrl,
-		phaseReadyButton:    phaseReadyButton,
-		phaseContinueButton: phaseContinueButton,
+		phaseReadyButton: phaseReadyButton,
 	}
 	lobbyMenuBar.Overlay = &m.overlay
 	playingMenuBar.Overlay = &m.overlay
@@ -300,7 +289,9 @@ func NewModel(api ServerAPI, playerID string) *Model {
 	}
 	playingInputCtrl.OnTab = m.lobbyTabComplete // same tab completion logic
 
-	// Wire phase action buttons.
+	// Wire the Ready button for the starting phase. There is no
+	// equivalent for ending — the server posts results to chat and
+	// unloads directly without a player-ack step.
 	phaseReadyButton.OnPress = func() { m.api.ReadyUp(m.playerID) }
 	phaseReadyButton.Disabled = func() bool {
 		st := m.api.State()
@@ -308,7 +299,6 @@ func NewModel(api ServerAPI, playerID string) *Model {
 		defer st.RUnlock()
 		return st.StartingReady != nil && st.StartingReady[m.playerID]
 	}
-	phaseContinueButton.OnPress = func() { m.api.AcknowledgeGameOver(m.playerID) }
 
 	// Wire team panel callbacks.
 	lobbyTeamPanel.OnMoveToTeam = func(teamIdx int) {

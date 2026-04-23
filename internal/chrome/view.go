@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -253,14 +252,6 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 			m.renderStartingScreen(gbuf, displayName, x, y, w, h)
 		}
 		m.playingGameView.OnKey = nil // starting screen ignores game keys
-	case domain.PhaseEnding:
-		m.api.State().RLock()
-		results := m.api.State().GameOverResults
-		m.api.State().RUnlock()
-		m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
-			m.renderGameOverScreen(gbuf, results, x, y, w, h)
-		}
-		m.playingGameView.OnKey = nil // ending screen ignores game keys
 	default: // PhasePlaying
 		if ncTree := game.Layout(m.playerID, m.width, gameH); ncTree != nil {
 			// NC-tree game: reconcile into a GameWindow. The reconciled
@@ -324,12 +315,6 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 		} else {
 			m.playingStatusBar.LeftText = " [Enter] Ready up"
 		}
-	case domain.PhaseEnding:
-		remaining := 15 - int(time.Since(m.gameOverStart).Seconds())
-		if remaining < 0 {
-			remaining = 0
-		}
-		m.playingStatusBar.LeftText = fmt.Sprintf(" [Enter] Continue to lobby (%ds remaining)", remaining)
 	default:
 		m.playingStatusBar.LeftText = " " + game.StatusBar(m.playerID)
 	}
@@ -460,74 +445,7 @@ func figletLines(text, font string, maxW int) []string {
 	return lines
 }
 
-// renderGameOverScreen renders a figlet "GAME OVER" title with ranked results.
-func (m *Model) renderGameOverScreen(buf *render.ImageBuffer, results []domain.GameResult, x, y, w, h int) {
-	var lines []string
-
-	// Figlet title.
-	figletTitle := strings.TrimRight(engine.Figlet("GAME OVER", "slant"), "\n")
-	figletLines := strings.Split(figletTitle, "\n")
-	maxW := 0
-	for _, l := range figletLines {
-		if len(l) > maxW {
-			maxW = len(l)
-		}
-	}
-	if figletTitle != "" && maxW <= w {
-		lines = append(lines, figletLines...)
-	} else {
-		lines = append(lines, "G A M E   O V E R")
-	}
-	lines = append(lines, "")
-
-	// Results table.
-	if len(results) > 0 {
-		lines = append(lines, "")
-		maxNameLen := 0
-		for _, r := range results {
-			if len(r.Name) > maxNameLen {
-				maxNameLen = len(r.Name)
-			}
-		}
-		for i, r := range results {
-			pos := fmt.Sprintf("%d.", i+1)
-			lines = append(lines, fmt.Sprintf("  %-3s %-*s  %s", pos, maxNameLen, r.Name, r.Result))
-		}
-	}
-
-	// Reserve a row at the bottom for the Continue button.
-	reserveBtn := 2 // blank line + button row
-	availH := h - reserveBtn
-	if availH < 1 {
-		availH = 1
-	}
-
-	// Center vertically within the available area (above the button).
-	topPad := (availH - len(lines)) / 2
-	if topPad < 0 {
-		topPad = 0
-	}
-	for i, line := range lines {
-		row := y + topPad + i
-		if row >= y+availH {
-			break
-		}
-		col := x + (w-len(line))/2
-		if col < x {
-			col = x
-		}
-		buf.WriteString(col, row, line, nil, nil, render.AttrNone)
-	}
-
-	// Continue button, centered on the last row of the viewport. Drawn
-	// with focused=true because it is the focus target during PhaseEnding.
-	btnLabel := m.phaseContinueButton.Label
-	btnText := "[ " + btnLabel + " ]"
-	btnW := len(btnText)
-	btnX := x + (w-btnW)/2
-	btnY := y + h - 1
-	if btnX >= x && btnY >= y {
-		m.phaseContinueButton.Render(buf, btnX, btnY, btnW, 1, true, m.theme.LayerAt(0))
-	}
-}
+// Game-over rendering was removed along with PhaseEnding — results go
+// straight to chat history (see server's checkGameOver) where they
+// persist for post-game discussion and can be scrolled via PgUp/PgDn.
 

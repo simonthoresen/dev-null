@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"dev-null/internal/domain"
@@ -12,10 +13,15 @@ import (
 	"dev-null/internal/state"
 )
 
-// checkGameOver detects if the JS runtime signaled game over and initiates the transition.
+// checkGameOver detects if the JS runtime signaled game-over, posts the
+// results to chat as a system message, and unloads the game so everyone
+// returns to the lobby. There is no ending phase or dedicated screen —
+// the results stay in chat history (scrollable via PgUp/PgDn) so
+// players can read and discuss them after the game ends.
 func (a *Server) checkGameOver() {
 	a.state.RLock()
 	game := a.state.ActiveGame
+	gameName := a.state.GameName
 	phase := a.state.GamePhase
 	a.state.RUnlock()
 
@@ -27,43 +33,37 @@ func (a *Server) checkGameOver() {
 		return
 	}
 
-	// Call End() hook before transitioning phase.
 	game.End()
+	results := srt.GameOverResults()
 
-	a.state.SetGamePhase(domain.PhaseEnding)
-	a.state.Lock()
-	a.state.GameOverResults = srt.GameOverResults()
-	a.state.Unlock()
-
-	a.broadcastMsg(domain.GamePhaseMsg{Phase: domain.PhaseEnding})
-	slog.Info("Game over! Waiting for players to acknowledge.")
-
-	// Start 15s timeout for game-over acknowledgment.
-	a.gameOverTimer = make(chan struct{})
-	go a.gameOverTimeout()
+	a.broadcastChat(domain.Message{Text: formatGameOverChat(gameName, results)})
+	slog.Info("Game over, posted results to chat and unloading.")
+	a.unloadGame()
 }
 
-func (a *Server) gameOverTimeout() {
-	select {
-	case <-time.After(15 * time.Second):
-	case <-a.gameOverTimer:
+// formatGameOverChat renders the game-over banner + ranked results as a
+// multi-line string, suitable for a single system chat message. Each
+// "\n" becomes a separate chat line on the client, so the result is a
+// compact scoreboard in the chat panel.
+func formatGameOverChat(gameName string, results []domain.GameResult) string {
+	var b strings.Builder
+	title := "Game Over"
+	if gameName != "" {
+		title += ": " + gameName
 	}
-	// Only unload if still in ending phase.
-	if a.state.GetGamePhase() == domain.PhaseEnding {
-		a.unloadGame()
-	}
-}
-
-// AcknowledgeGameOver marks a player as ready and ends game-over if all are ready.
-func (a *Server) AcknowledgeGameOver(playerID string) {
-	a.state.MarkPlayerReady(playerID)
-	if a.state.AllPlayersReady() {
-		select {
-		case <-a.gameOverTimer:
-		default:
-			close(a.gameOverTimer)
+	b.WriteString(title)
+	if len(results) > 0 {
+		maxName := 0
+		for _, r := range results {
+			if len(r.Name) > maxName {
+				maxName = len(r.Name)
+			}
+		}
+		for i, r := range results {
+			b.WriteString(fmt.Sprintf("\n  %d. %-*s  %s", i+1, maxName, r.Name, r.Result))
 		}
 	}
+	return b.String()
 }
 
 func (a *Server) loadGame(path string) error {
@@ -232,19 +232,12 @@ func (a *Server) StartGame() {
 }
 
 func (a *Server) unloadGame() {
-	// Cancel any pending starting or game-over timers.
+	// Cancel any pending starting timer.
 	if a.startingDone != nil {
 		select {
 		case <-a.startingDone:
 		default:
 			close(a.startingDone)
-		}
-	}
-	if a.gameOverTimer != nil {
-		select {
-		case <-a.gameOverTimer:
-		default:
-			close(a.gameOverTimer)
 		}
 	}
 
@@ -259,7 +252,6 @@ func (a *Server) unloadGame() {
 	a.state.GameName = ""
 	a.state.GamePhase = domain.PhaseNone
 	a.state.StartingReady = nil
-	a.state.GameOverReady = nil
 	a.state.Unlock()
 
 	for _, cmd := range game.Commands() {
@@ -327,19 +319,12 @@ func (a *Server) suspendGame(saveName string) error {
 		return fmt.Errorf("no game is currently playing")
 	}
 
-	// Cancel any pending timers.
+	// Cancel any pending starting timer.
 	if a.startingDone != nil {
 		select {
 		case <-a.startingDone:
 		default:
 			close(a.startingDone)
-		}
-	}
-	if a.gameOverTimer != nil {
-		select {
-		case <-a.gameOverTimer:
-		default:
-			close(a.gameOverTimer)
 		}
 	}
 
@@ -401,7 +386,6 @@ func (a *Server) suspendGame(saveName string) error {
 	a.state.GameName = ""
 	a.state.GamePhase = domain.PhaseNone
 	a.state.StartingReady = nil
-	a.state.GameOverReady = nil
 	a.state.Unlock()
 
 	a.broadcastMsg(domain.GameUnloadedMsg{})

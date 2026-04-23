@@ -120,7 +120,8 @@ type Game interface {
 	Begin()
 	// Update is called once per tick with seconds since last update.
 	Update(dt float64)
-	// End is called when the game signals game-over, before PhaseEnding.
+	// End is called when the game signals game-over, before the server
+	// posts results to chat and unloads the game.
 	End()
 	// Unload tears down the game runtime and returns persistent state to save
 	// across sessions (high scores, unlocks, etc.). Return nil for no state.

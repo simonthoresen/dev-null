@@ -700,8 +700,6 @@ func (m *Model) View() tea.View {
 			gameLabel += " [starting]"
 		case domain.PhasePlaying:
 			gameLabel += " [playing]"
-		case domain.PhaseEnding:
-			gameLabel += " [ending]"
 		}
 	}
 	m.statusBar.RightText = fmt.Sprintf("game: %s | players: %d | uptime %s | %s ", gameLabel, m.api.State().PlayerCount(), m.api.Uptime(), m.api.Clock().Now().Format("15:04:05"))
