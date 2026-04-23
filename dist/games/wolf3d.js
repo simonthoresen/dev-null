@@ -1,5 +1,11 @@
-// wolf-3d.js — Wolfenstein-3D-style team deathmatch on a 64x64 grid
-// Load with: /game load wolf-3d
+// wolf3d.js — Wolfenstein-3D-style team deathmatch on a 64x64 grid
+// Load with: /game load wolf3d
+//
+// All render-relevant state lives in Game.state so that local canvas rendering
+// (Pixels / Blocks-local) on the GUI client sees the same world as the server.
+// The client's goja VM receives Game.state via OSC every frame; module-level
+// variables would never be synced. Time uses Game.state._t (auto-injected by
+// the engine after each update) because the client stubs now() to 0.
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -41,28 +47,48 @@ var FACING_DZ = [];
 var STEP_DX = [ 1,  1,  0, -1, -1, -1,  0,  1];
 var STEP_DZ = [ 0,  1,  1,  1,  0, -1, -1, -1];
 
-// ── Map ──────────────────────────────────────────────────────────────────────
+// ── Server-only state (not needed for rendering) ─────────────────────────────
 
-var mapData = null;
-var mapGenerated = false;
 var openCells = [];             // list of {x, z} for respawn picks
+var winChecked = false;
+
+// ── Shared state (Game.state) ────────────────────────────────────────────────
+
+function ensureState() {
+    if (!Game.state) Game.state = {};
+    var s = Game.state;
+    if (!s.players) s.players = {};
+    if (!s.lasers) s.lasers = [];
+    if (!s.teamData) s.teamData = [];
+    if (!s.teamKills) s.teamKills = [];
+    if (typeof s.mapGenerated !== "boolean") s.mapGenerated = false;
+    if (!s.mapData) s.mapData = null;
+    return s;
+}
+
+function gameTime() { return (Game.state && Game.state._t) || 0; }
+
+// ── Map ──────────────────────────────────────────────────────────────────────
 
 function mapIdx(x, z) { return z * MAP_W + x; }
 
 function isSolid(x, z) {
     if (x < 0 || x >= MAP_W || z < 0 || z >= MAP_D) return true;
-    return mapData[mapIdx(x, z)] === 1;
+    var md = Game.state && Game.state.mapData;
+    if (!md) return true;
+    return md[mapIdx(x, z)] === 1;
 }
 
-function carveRect(x1, z1, x2, z2) {
+function carveRect(md, x1, z1, x2, z2) {
     for (var z = z1; z <= z2; z++)
         for (var x = x1; x <= x2; x++)
-            mapData[mapIdx(x, z)] = 0;
+            md[mapIdx(x, z)] = 0;
 }
 
 function generateMap() {
-    mapData = new Uint8Array(MAP_W * MAP_D);
-    for (var i = 0; i < mapData.length; i++) mapData[i] = 1; // all solid
+    var s = ensureState();
+    var md = new Array(MAP_W * MAP_D);
+    for (var i = 0; i < md.length; i++) md[i] = 1; // all solid
 
     // Carve rectangular rooms, avoiding overlap; keep 1-cell wall between rooms.
     var rooms = [];
@@ -83,7 +109,7 @@ function generateMap() {
         }
         if (overlap) continue;
         var x2 = rx + rw - 1, z2 = rz + rd - 1;
-        carveRect(rx, rz, x2, z2);
+        carveRect(md, rx, rz, x2, z2);
         rooms.push({ x1: rx, z1: rz, x2: x2, z2: z2,
                      cx: Math.floor((rx + x2) / 2), cz: Math.floor((rz + z2) / 2) });
     }
@@ -93,9 +119,8 @@ function generateMap() {
         var a = rooms[i - 1], b = rooms[i];
         var x1c = Math.min(a.cx, b.cx), x2c = Math.max(a.cx, b.cx);
         var z1c = Math.min(a.cz, b.cz), z2c = Math.max(a.cz, b.cz);
-        // Horizontal leg then vertical leg (2 cells thick)
-        carveRect(x1c, a.cz, x2c, a.cz + 1);
-        carveRect(b.cx, z1c, b.cx + 1, z2c);
+        carveRect(md, x1c, a.cz, x2c, a.cz + 1);
+        carveRect(md, b.cx, z1c, b.cx + 1, z2c);
     }
 
     // Sprinkle a few extra cross-links so the layout isn't a single thread.
@@ -105,11 +130,14 @@ function generateMap() {
         if (!a || !b || a === b) continue;
         var x1c = Math.min(a.cx, b.cx), x2c = Math.max(a.cx, b.cx);
         var z1c = Math.min(a.cz, b.cz), z2c = Math.max(a.cz, b.cz);
-        carveRect(x1c, b.cz, x2c, b.cz + 1);
-        carveRect(a.cx, z1c, a.cx + 1, z2c);
+        carveRect(md, x1c, b.cz, x2c, b.cz + 1);
+        carveRect(md, a.cx, z1c, a.cx + 1, z2c);
     }
 
-    // Collect every open cell for respawn picks.
+    s.mapData = md;
+    s.mapGenerated = true;
+
+    // Collect every open cell for respawn picks (server-only).
     openCells = [];
     for (var z = 0; z < MAP_D; z++) {
         for (var x = 0; x < MAP_W; x++) {
@@ -118,7 +146,7 @@ function generateMap() {
     }
     if (openCells.length === 0) {
         // Fallback: blast a small arena so the game is still playable.
-        carveRect(2, 2, MAP_W - 3, MAP_D - 3);
+        carveRect(md, 2, 2, MAP_W - 3, MAP_D - 3);
         for (var z2 = 2; z2 < MAP_D - 2; z2++)
             for (var x2 = 2; x2 < MAP_W - 2; x2++) openCells.push({ x: x2, z: z2 });
     }
@@ -139,6 +167,7 @@ function randomSpawnCell(awayFrom) {
 }
 
 function cellOccupied(x, z) {
+    var players = Game.state.players;
     for (var id in players) {
         var q = players[id];
         if (q.alive && q.gx === x && q.gz === z) return true;
@@ -148,27 +177,25 @@ function cellOccupied(x, z) {
 
 // ── Players ──────────────────────────────────────────────────────────────────
 
-var players = {};               // id → player
-var teamData = [];              // snapshot of teams()
-var teamKills = [];             // parallel to teamData
-var winChecked = false;
-
-function teamOf(p) { return teamData[p.teamIdx]; }
+function teamOf(p) { return Game.state.teamData[p.teamIdx]; }
 
 function teamColor(idx) {
-    if (teamData[idx] && teamData[idx].color) return teamData[idx].color;
+    var td = Game.state && Game.state.teamData;
+    if (td && td[idx] && td[idx].color) return td[idx].color;
     return TEAM_COLORS[idx % TEAM_COLORS.length];
 }
 
 function refreshTeamData() {
+    var s = ensureState();
     var t = teams();
-    if (t && t.length) teamData = t;
-    while (teamKills.length < teamData.length) teamKills.push(0);
+    if (t && t.length) s.teamData = t;
+    while (s.teamKills.length < s.teamData.length) s.teamKills.push(0);
 }
 
 function findPlayerTeam(pid) {
-    for (var i = 0; i < teamData.length; i++) {
-        var tp = teamData[i].players;
+    var td = Game.state.teamData;
+    for (var i = 0; i < td.length; i++) {
+        var tp = td[i].players;
         for (var j = 0; j < tp.length; j++) {
             if (tp[j].id === pid) return { idx: i, name: tp[j].name };
         }
@@ -176,37 +203,36 @@ function findPlayerTeam(pid) {
     return null;
 }
 
-// Ensure a connected player has a live player record. Used from begin(),
-// onPlayerJoin, and defensively from the renderer if teams() arrived late.
-// If the player isn't on any team (e.g. single-team sandbox where only the
-// shooter joined), spawn them anyway on a synthetic team so they can walk
-// the map instead of being stuck on the Spectator screen.
+// Ensure a connected player has a live player record. Server-only — must not
+// be called from the render path because it generates world state and calls
+// teams(). If the player isn't on any team (single-team sandbox) they spawn
+// on a synthetic team so they can still walk the map.
 function ensureSpawned(pid) {
-    if (players[pid]) return players[pid];
+    var s = ensureState();
+    if (s.players[pid]) return s.players[pid];
     refreshTeamData();
     var info = findPlayerTeam(pid);
     if (info) {
         spawnPlayer(pid, info.name, info.idx, true);
     } else {
-        // No team info — fabricate a solo entry so they aren't stranded.
-        if (teamData.length === 0) {
-            teamData = [{ name: "Solo", color: TEAM_COLORS[0], players: [] }];
-            teamKills = [0];
+        if (s.teamData.length === 0) {
+            s.teamData = [{ name: "Solo", color: TEAM_COLORS[0], players: [] }];
+            s.teamKills = [0];
         }
         spawnPlayer(pid, pid, 0, true);
     }
-    return players[pid] || null;
+    return s.players[pid] || null;
 }
 
 function spawnPlayer(pid, pname, teamIdx, firstSpawn) {
-    if (!mapGenerated || openCells.length === 0) {
+    var s = ensureState();
+    if (!s.mapGenerated || openCells.length === 0) {
         generateMap();
-        mapGenerated = true;
     }
     var cell = randomSpawnCell(null) || { x: Math.floor(MAP_W / 2), z: Math.floor(MAP_D / 2) };
     var facing = Math.floor(Math.random() * 8);
-    if (!players[pid]) {
-        players[pid] = {
+    if (!s.players[pid]) {
+        s.players[pid] = {
             id: pid, name: pname, teamIdx: teamIdx,
             gx: cell.x, gz: cell.z, facing: facing,
             hp: PLAYER_HP, alive: true,
@@ -216,14 +242,14 @@ function spawnPlayer(pid, pname, teamIdx, firstSpawn) {
             kills: 0, deaths: 0
         };
     } else {
-        var p = players[pid];
+        var p = s.players[pid];
         p.gx = cell.x; p.gz = cell.z; p.facing = facing;
         p.hp = PLAYER_HP; p.alive = true;
         p.fireCooldown = 0; p.moveCooldown = 0;
         p.deadUntil = 0; p.stepTimer = 0;
     }
     if (!firstSpawn) {
-        playPositionalSound(players[pid], 9, 60, 100, 500); // shimmer
+        playPositionalSound(s.players[pid], 9, 60, 100, 500); // shimmer
     }
 }
 
@@ -241,15 +267,14 @@ function respawnIfReady(p, nowSec) {
 
 function tryStep(p, dirIdx) {
     // dirIdx is an index into STEP_DX/STEP_DZ (0..7). Diagonal steps also
-    // require the two adjacent cardinal cells to be open so players can't
-    // clip through wall corners.
+    // require at least one of the two adjacent cardinal cells to be open
+    // so players can't clip through wall corners.
     var dx = STEP_DX[dirIdx], dz = STEP_DZ[dirIdx];
     var nx = p.gx + dx, nz = p.gz + dz;
     if (isSolid(nx, nz)) return false;
     if (dx !== 0 && dz !== 0) {
         if (isSolid(p.gx + dx, p.gz) && isSolid(p.gx, p.gz + dz)) return false;
     }
-    // Don't stand on another live player.
     if (cellOccupied(nx, nz)) return false;
     p.gx = nx; p.gz = nz;
     return true;
@@ -257,9 +282,8 @@ function tryStep(p, dirIdx) {
 
 // ── Combat ───────────────────────────────────────────────────────────────────
 
-var lasers = [];                // {x1,z1,x2,z2,color,ttl}
-
 function updateLasers(dt) {
+    var lasers = Game.state.lasers;
     for (var i = lasers.length - 1; i >= 0; i--) {
         lasers[i].ttl -= dt;
         if (lasers[i].ttl <= 0) lasers.splice(i, 1);
@@ -274,9 +298,8 @@ function fireLaser(shooter) {
     var angle = FACING_ANGLE[shooter.facing];
     var dx = Math.cos(angle), dz = Math.sin(angle);
 
-    // DDA ray march over grid cells. Walk until we hit a wall OR a player
-    // whose square the ray enters. A player-in-square model means any ray
-    // that enters an occupied square hits that player.
+    // DDA ray march over grid cells. Walk until a wall — or a foe whose cell
+    // the ray enters — is hit.
     var mx = Math.floor(eyeX), mz = Math.floor(eyeZ);
     var stepX = dx >= 0 ? 1 : -1;
     var stepZ = dz >= 0 ? 1 : -1;
@@ -287,6 +310,7 @@ function fireLaser(shooter) {
 
     var hitDist = MAX_RAY_DIST;
     var hitPlayer = null;
+    var players = Game.state.players;
 
     for (var step = 0; step < MAX_RAY_DIST * 3; step++) {
         var t;
@@ -294,7 +318,6 @@ function fireLaser(shooter) {
         else               { t = tMaxZ; tMaxZ += absDZ; mz += stepZ; }
         if (t > MAX_RAY_DIST) break;
         if (isSolid(mx, mz)) { hitDist = t; break; }
-        // Check for player occupying this cell.
         for (var id in players) {
             var q = players[id];
             if (!q.alive || q === shooter) continue;
@@ -311,9 +334,8 @@ function fireLaser(shooter) {
     var hitX = eyeX + dx * hitDist;
     var hitZ = eyeZ + dz * hitDist;
     var color = teamColor(shooter.teamIdx);
-    lasers.push({ x1: eyeX, z1: eyeZ, x2: hitX, z2: hitZ, color: color, ttl: LASER_TTL });
+    Game.state.lasers.push({ x1: eyeX, z1: eyeZ, x2: hitX, z2: hitZ, color: color, ttl: LASER_TTL });
 
-    // Shoot sound — every listener hears it by distance.
     broadcastPositionalSound({ x: eyeX, z: eyeZ }, 9, 40, 120, 180);
 
     if (hitPlayer) {
@@ -328,10 +350,11 @@ function fireLaser(shooter) {
 function killPlayer(victim, killer) {
     victim.alive = false;
     victim.deaths++;
-    victim.deadUntil = now() / 1000 + RESPAWN_SEC;
+    victim.deadUntil = gameTime() + RESPAWN_SEC;
     if (killer) {
         killer.kills++;
-        teamKills[killer.teamIdx] = (teamKills[killer.teamIdx] || 0) + 1;
+        var tk = Game.state.teamKills;
+        tk[killer.teamIdx] = (tk[killer.teamIdx] || 0) + 1;
     }
     var vTeam = teamOf(victim);
     var kTeam = killer ? teamOf(killer) : null;
@@ -348,18 +371,20 @@ function killPlayer(victim, killer) {
 
 function checkWinCondition() {
     if (winChecked) return;
+    var tk = Game.state.teamKills;
+    var td = Game.state.teamData;
     var winner = -1;
-    for (var i = 0; i < teamKills.length; i++) {
-        if ((teamKills[i] || 0) >= KILL_LIMIT) { winner = i; break; }
+    for (var i = 0; i < tk.length; i++) {
+        if ((tk[i] || 0) >= KILL_LIMIT) { winner = i; break; }
     }
     if (winner < 0) return;
     winChecked = true;
 
     var results = [];
-    for (var i = 0; i < teamData.length; i++) {
-        var kills = teamKills[i] || 0;
+    for (var i = 0; i < td.length; i++) {
+        var kills = tk[i] || 0;
         var suffix = (i === winner) ? " — WINNER" : "";
-        results.push({ name: teamData[i].name, result: kills + " kills" + suffix,
+        results.push({ name: td[i].name, result: kills + " kills" + suffix,
                        _k: kills, _w: i === winner ? 1 : 0 });
     }
     results.sort(function (a, b) { return b._w - a._w || b._k - a._k; });
@@ -376,11 +401,11 @@ function velocityFromDistance(d2) {
 }
 
 function playPositionalSound(listener, ch, note, baseVel, durMs) {
-    // Use for a single-listener sound (e.g. respawn for the respawning player).
     midiNotePlayer(listener.id, ch, note, baseVel, durMs);
 }
 
 function broadcastPositionalSound(source, ch, note, baseVel, durMs) {
+    var players = Game.state.players;
     for (var id in players) {
         var q = players[id];
         var dx = (q.gx + 0.5) - source.x;
@@ -392,12 +417,13 @@ function broadcastPositionalSound(source, ch, note, baseVel, durMs) {
     }
 }
 
-// ── Update loop ──────────────────────────────────────────────────────────────
+// ── Update loop (server-only) ────────────────────────────────────────────────
 
 var Game;
 
 function updatePlayers(dt) {
-    var nowSec = now() / 1000;
+    var nowSec = gameTime();
+    var players = Game.state.players;
     for (var id in players) {
         var p = players[id];
         if (p.fireCooldown > 0) p.fireCooldown -= dt;
@@ -407,11 +433,11 @@ function updatePlayers(dt) {
     }
 }
 
-// ── Input ────────────────────────────────────────────────────────────────────
+// ── Input (server-only) ──────────────────────────────────────────────────────
 
 function handleInput(p, key) {
     if (key === "tab") {
-        p.scoreboardUntil = now() / 1000 + SCOREBOARD_TIMEOUT;
+        p.scoreboardUntil = gameTime() + SCOREBOARD_TIMEOUT;
         return;
     }
     if (!p.alive) return;
@@ -452,7 +478,13 @@ function hexByte(v) {
 function rgb(r, g, b) { return "#" + hexByte(r) + hexByte(g) + hexByte(b); }
 
 function renderScene(ctx, playerID, w, h) {
-    var p = players[playerID] || ensureSpawned(playerID);
+    var s = Game.state;
+    // Render paths must never mutate state or call server primitives (teams,
+    // now, midiNote, etc). If the player hasn't been spawned yet — either the
+    // local client's state hasn't arrived, or the player has no team — show
+    // the spectator screen instead of trying to conjure one up.
+    if (!s || !s.mapGenerated) { renderSpectator(ctx, w, h); return; }
+    var p = s.players[playerID];
     if (!p) { renderSpectator(ctx, w, h); return; }
 
     var eyeX = p.gx + 0.5, eyeZ = p.gz + 0.5, eyeY = 0.5;
@@ -532,6 +564,7 @@ function renderScene(ctx, playerID, w, h) {
 
     // Collect and draw player cubes back-to-front, with z-buffer clipping.
     var cubes = [];
+    var players = s.players;
     for (var id in players) {
         var q = players[id];
         if (!q.alive || id === playerID) continue;
@@ -544,6 +577,7 @@ function renderScene(ctx, playerID, w, h) {
     }
 
     // Lasers.
+    var lasers = s.lasers;
     for (var li = 0; li < lasers.length; li++) {
         drawLaser(ctx, lasers[li], eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w, h);
     }
@@ -552,8 +586,7 @@ function renderScene(ctx, playerID, w, h) {
     renderHUD(ctx, p, w, h);
 
     // Scoreboard (if tab recently pressed).
-    var nowSec = now() / 1000;
-    if (p.scoreboardUntil > nowSec) {
+    if (p.scoreboardUntil > gameTime()) {
         renderScoreboard(ctx, w, h);
     }
 }
@@ -584,7 +617,6 @@ function drawPlayerCube(ctx, q, eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w,
     var yBot = 0, yTop = PLAYER_BOX_HEIGHT;
     var color = teamColor(q.teamIdx);
 
-    // Hit flash: low HP players pulse brighter.
     var dxq = cx - eyeX, dzq = cz - eyeZ;
     var dist = Math.sqrt(dxq * dxq + dzq * dzq);
 
@@ -598,31 +630,26 @@ function drawPlayerCube(ctx, q, eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w,
 
     for (var fi = 0; fi < faces.length; fi++) {
         var f = faces[fi];
-        // Visible if normal dotted with (face-to-eye) is positive.
         var fcx = (f.x0 + f.x1) / 2, fcz = (f.z0 + f.z1) / 2;
         var toEyeX = eyeX - fcx, toEyeZ = eyeZ - fcz;
         if (f.nx * toEyeX + f.nz * toEyeZ <= 0) continue;
 
-        // Project the 4 corners.
         var c0 = projectPoint(f.x0, yBot, f.z0, eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w, h);
         var c1 = projectPoint(f.x1, yBot, f.z1, eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w, h);
         var c2 = projectPoint(f.x1, yTop, f.z1, eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w, h);
         var c3 = projectPoint(f.x0, yTop, f.z0, eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w, h);
         if (!c0 || !c1 || !c2 || !c3) continue;
 
-        // Face-center depth for z-buffer test.
         var faceCam = worldToCamera(fcx, fcz, eyeX, eyeZ, dirX, dirZ, planeX, planeZ);
         if (!faceCam) continue;
         var faceDepth = faceCam.camZ;
         if (faceDepth <= 0.05) continue;
 
-        // Screen X range.
         var xMin = Math.min(c0.sx, c1.sx, c2.sx, c3.sx);
         var xMax = Math.max(c0.sx, c1.sx, c2.sx, c3.sx);
         xMin = Math.max(0, xMin); xMax = Math.min(w - 1, xMax);
         if (xMax < xMin) continue;
 
-        // Top/bottom interpolation across x.
         var leftSx = c0.sx, rightSx = c1.sx;
         if (leftSx === rightSx) continue;
         var leftYTop = c3.sy, rightYTop = c2.sy;
@@ -633,7 +660,6 @@ function drawPlayerCube(ctx, q, eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w,
             t = leftYBot; leftYBot = rightYBot; rightYBot = t;
         }
 
-        // Face shading: compute dot with camera forward, plus a warm key light.
         var lightDot = -(f.nx * dirX + f.nz * dirZ);
         var shade = 0.55 + 0.4 * Math.max(0, lightDot);
         shade *= Math.max(0.2, 1 - dist / 25);
@@ -657,7 +683,6 @@ function drawPlayerCube(ctx, q, eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w,
             if (hx <= 0) continue;
             ctx.setFillStyle(faceColor);
             ctx.fillRect(sx, py, 1, hx);
-            // Thin outline on edges.
             if (sx === xMin || sx === xMax) {
                 ctx.setFillStyle(outlineColor);
                 ctx.fillRect(sx, py, 1, hx);
@@ -683,7 +708,6 @@ function drawLaser(ctx, l, eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w, h) {
     if (!a && !b) return;
     var ax = a ? a.sx : w / 2, ay = a ? a.sy : h - 10;
     var bx = b ? b.sx : w / 2, by = b ? b.sy : h / 2;
-    // Fade alpha over lifetime.
     var tFade = Math.max(0, Math.min(1, l.ttl / LASER_TTL));
     var pulse = 0.4 + 0.6 * tFade;
     var passes = [
@@ -704,7 +728,6 @@ function drawLaser(ctx, l, eyeX, eyeY, eyeZ, dirX, dirZ, planeX, planeZ, w, h) {
 }
 
 function renderHUD(ctx, p, w, h) {
-    // Crosshair.
     var cx = Math.floor(w / 2), cy = Math.floor(h / 2);
     ctx.setFillStyle("#FFFFFFBB");
     ctx.fillRect(cx - 5, cy, 4, 1);
@@ -712,7 +735,6 @@ function renderHUD(ctx, p, w, h) {
     ctx.fillRect(cx, cy - 5, 1, 4);
     ctx.fillRect(cx, cy + 2, 1, 4);
 
-    // Hearts bottom-left (3 pips).
     for (var i = 0; i < PLAYER_HP; i++) {
         var hx = 10 + i * 16, hy = h - 18;
         var col = i < p.hp ? "#FF4455" : "#332233";
@@ -728,26 +750,25 @@ function renderHUD(ctx, p, w, h) {
         ctx.fill();
     }
 
-    // Team swatch and kills bottom-right.
     var tc = teamColor(p.teamIdx);
     ctx.setFillStyle(tc);
     ctx.fillRect(w - 80, h - 20, 10, 10);
     ctx.setFillStyle("#FFFFFFDD");
     ctx.fillText("K:" + p.kills + " D:" + p.deaths, w - 65, h - 10);
 
-    // Death overlay with respawn counter.
     if (!p.alive) {
         ctx.setFillStyle("#330000A0");
         ctx.fillRect(0, 0, w, h);
         ctx.setFillStyle("#FF4444");
-        var sec = Math.max(0, Math.ceil(p.deadUntil - now() / 1000));
+        var sec = Math.max(0, Math.ceil(p.deadUntil - gameTime()));
         ctx.fillText("YOU DIED — respawning in " + sec + "s", w / 2 - 90, h / 2);
     }
 }
 
 function renderScoreboard(ctx, w, h) {
+    var td = Game.state.teamData;
     var rowH = 18;
-    var rows = teamData.length;
+    var rows = td.length;
     var boxW = Math.min(420, w - 40);
     var boxH = rowH * (rows + 2) + 20;
     var bx = Math.floor((w - boxW) / 2), by = 40;
@@ -762,11 +783,12 @@ function renderScoreboard(ctx, w, h) {
     ctx.fillText("Kills", bx + 200, by + 18 + rowH);
     ctx.fillText("Deaths", bx + 260, by + 18 + rowH);
     ctx.fillText("K/D", bx + 340, by + 18 + rowH);
+    var players = Game.state.players;
     for (var i = 0; i < rows; i++) {
-        var td = teamData[i];
+        var t = td[i];
         var k = 0, d = 0;
-        for (var j = 0; j < td.players.length; j++) {
-            var q = players[td.players[j].id];
+        for (var j = 0; j < t.players.length; j++) {
+            var q = players[t.players[j].id];
             if (q) { k += q.kills; d += q.deaths; }
         }
         var kd = d === 0 ? (k === 0 ? "0.00" : "∞") : (k / d).toFixed(2);
@@ -774,7 +796,7 @@ function renderScoreboard(ctx, w, h) {
         ctx.setFillStyle(teamColor(i));
         ctx.fillRect(bx + 14, y - 10, 10, 10);
         ctx.setFillStyle("#FFFFFF");
-        ctx.fillText(td.name, bx + 30, y);
+        ctx.fillText(t.name, bx + 30, y);
         ctx.fillText("" + k, bx + 200, y);
         ctx.fillText("" + d, bx + 260, y);
         ctx.fillText(kd, bx + 340, y);
@@ -791,8 +813,9 @@ function renderSpectator(ctx, w, h) {
 // ── ASCII fallback: top-down mini-map ────────────────────────────────────────
 
 function renderAsciiMap(buf, playerID, ox, oy, width, height) {
+    var s = Game.state;
     buf.fill(ox, oy, width, height, " ", null, "#08080F");
-    if (!mapGenerated) return;
+    if (!s || !s.mapGenerated) return;
     var scaleX = width / MAP_W, scaleZ = height / MAP_D;
     for (var z = 0; z < MAP_D; z++) {
         for (var x = 0; x < MAP_W; x++) {
@@ -802,6 +825,7 @@ function renderAsciiMap(buf, playerID, ox, oy, width, height) {
             if (isSolid(x, z)) buf.setChar(bx, by, "█", "#443322", "#08080F");
         }
     }
+    var players = s.players;
     var me = players[playerID];
     for (var id in players) {
         var p = players[id];
@@ -811,14 +835,13 @@ function renderAsciiMap(buf, playerID, ox, oy, width, height) {
         if (px < ox || px >= ox + width || pz < oy || pz >= oy + height) continue;
         var tc = teamColor(p.teamIdx);
         var ch = id === playerID ? "@" : "o";
-        // Rough 8-way arrow.
         if (id !== playerID) {
             var arrows = [">", "↘", "v", "↙", "<", "↖", "^", "↗"];
             ch = arrows[p.facing];
         }
         buf.setChar(px, pz, ch, tc, null);
     }
-    buf.writeString(ox + 1, oy, "Wolf-3D (ASCII fallback — use canvas/GUI client)", "#888899", null);
+    buf.writeString(ox + 1, oy, "wolf3d (ASCII fallback — use canvas/GUI client)", "#888899", null);
     if (me) {
         buf.writeString(ox + 1, oy + height - 1,
             "HP " + me.hp + "/" + PLAYER_HP + "  K " + me.kills + "  D " + me.deaths,
@@ -829,50 +852,47 @@ function renderAsciiMap(buf, playerID, ox, oy, width, height) {
 // ── Game object ──────────────────────────────────────────────────────────────
 
 Game = {
-    gameName: "Wolf-3D",
+    gameName: "wolf3d",
     teamRange: { min: 1, max: 6 },
 
+    // load() runs on both server and client. On the client, Game.state will
+    // be replaced by a SetState call immediately after; we only need to make
+    // sure our module-local helpers won't touch state before then. The server
+    // gets its real map in begin().
     load: function (savedState) {
-        if (!mapGenerated) {
-            generateMap();
-            mapGenerated = true;
-        }
-        players = {};
-        lasers = [];
-        teamKills = [];
+        ensureState();
+        openCells = [];
         winChecked = false;
     },
 
     begin: function () {
-        generateMap();
-        mapGenerated = true;
-        players = {};
-        lasers = [];
+        var s = ensureState();
+        s.players = {};
+        s.lasers = [];
+        s.teamData = teams() || [];
+        s.teamKills = [];
+        for (var i = 0; i < s.teamData.length; i++) s.teamKills.push(0);
         winChecked = false;
-        teamData = teams() || [];
-        teamKills = [];
-        for (var i = 0; i < teamData.length; i++) teamKills.push(0);
+        generateMap();
         var spawned = 0;
-        for (var ti = 0; ti < teamData.length; ti++) {
-            var tps = teamData[ti].players || [];
+        for (var ti = 0; ti < s.teamData.length; ti++) {
+            var tps = s.teamData[ti].players || [];
             for (var j = 0; j < tps.length; j++) {
                 var tp = tps[j];
                 spawnPlayer(tp.id, tp.name, ti, true);
                 spawned++;
             }
         }
-        log("wolf-3d begin: teams=" + teamData.length + " players_spawned=" + spawned);
-        chat("[wolf-3d] ready — teams: " + teamData.length + ", players spawned: " + spawned);
+        log("wolf3d begin: teams=" + s.teamData.length + " players_spawned=" + spawned);
+        chat("[wolf3d] ready — teams: " + s.teamData.length + ", players spawned: " + spawned);
         // MIDI setup: channel 9 is the GM drum channel on most SoundFonts.
-        // Program doesn't matter on ch9, but set it anyway so voices pick
-        // something percussive/noisy.
         midiProgram(9, 0);
     },
 
     onPlayerJoin: function (playerID, playerName) {
         refreshTeamData();
         if (!ensureSpawned(playerID)) {
-            log("wolf-3d: onPlayerJoin " + playerID + " has no team; skipping spawn");
+            log("wolf3d: onPlayerJoin " + playerID + " has no team; skipping spawn");
         }
     },
 
@@ -882,18 +902,19 @@ Game = {
     },
 
     onInput: function (playerID, key) {
-        var p = players[playerID] || ensureSpawned(playerID);
+        var p = Game.state.players[playerID] || ensureSpawned(playerID);
         if (!p) return;
         handleInput(p, key);
     },
 
     onPlayerLeave: function (playerID) {
-        delete players[playerID];
+        delete Game.state.players[playerID];
         checkWinCondition();
     },
 
     renderCanvas: function (ctx, playerID, w, h) {
-        if (!mapGenerated) {
+        var s = Game.state;
+        if (!s || !s.mapGenerated) {
             ctx.setFillStyle("#000");
             ctx.fillRect(0, 0, w, h);
             return;
@@ -906,15 +927,19 @@ Game = {
     },
 
     statusBar: function (playerID) {
-        var p = players[playerID] || ensureSpawned(playerID);
-        if (!p) return "Wolf-3D";
-        var tn = (teamData[p.teamIdx] && teamData[p.teamIdx].name) || "?";
+        var s = Game.state;
+        if (!s) return "wolf3d";
+        var p = s.players[playerID];
+        if (!p) return "wolf3d";
+        var td = s.teamData;
+        var tk = s.teamKills;
+        var tn = (td[p.teamIdx] && td[p.teamIdx].name) || "?";
         var scores = [];
-        for (var i = 0; i < teamData.length; i++) {
-            scores.push(teamData[i].name + ":" + (teamKills[i] || 0));
+        for (var i = 0; i < td.length; i++) {
+            scores.push(td[i].name + ":" + (tk[i] || 0));
         }
         var state = p.alive ? ("HP " + p.hp + "/" + PLAYER_HP) : "DEAD";
-        return "Wolf-3D | " + tn + " | " + state + " | K/D " + p.kills + "/" + p.deaths +
+        return "wolf3d | " + tn + " | " + state + " | K/D " + p.kills + "/" + p.deaths +
                " | " + scores.join("  ") + " | first to " + KILL_LIMIT;
     },
 
@@ -922,3 +947,6 @@ Game = {
         return "[WASD] Move  [Q/E] Turn 45°  [Space] Fire  [Tab] Scores";
     }
 };
+
+// Initialize Game.state early so module-level helpers can touch it safely.
+ensureState();
