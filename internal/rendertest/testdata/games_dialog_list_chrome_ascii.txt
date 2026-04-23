@@ -1,7 +1,7 @@
  File │ Graphics │ View │ Help
 ╔══════════════╗══════════════════════════════╤════════════════════════════════╗
 ║►Start game ► ║╔══════════════╗             ░│    Unassigned                  ║
-║ Load game    ║║►Add...       ║             ░│                                ║
+║ Load game  ► ║║►Add...       ║             ░│                                ║
 ║──────────────║║──────────────║             ░│    Team alice                  ║
 ║ Plugins    ► ║║ cube*        ║             ░│    alice                       ║
 ║ Synths     ► ║║ orbits       ║             ░│                                ║

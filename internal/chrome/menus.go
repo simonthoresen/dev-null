@@ -26,7 +26,7 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 
 	fileItems := []domain.MenuItemDef{
 		{Label: "&Start game", SubItems: m.buildGameSubItems()},
-		{Label: "&Load game", Handler: func(_ string) { m.pushSavesDialog(0) }},
+		{Label: "&Load game", SubItems: m.buildLoadGameSubItems()},
 		{Label: "---"},
 		{Label: "&Plugins", SubItems: m.buildPluginSubItems()},
 		{Label: "S&ynths", SubItems: m.buildSynthSubItems()},
@@ -122,15 +122,12 @@ func (m *Model) cachedMenus() []domain.MenuDef {
 	return menus
 }
 
-func (m *Model) pushSavesDialog(cursor int) {
-	localcmd.PushSaveDialog(cursor, localcmd.SaveDialogOptions{
-		DataDir:  m.api.DataDir(),
-		Overlay:  &m.overlay,
-		CanLoad:  m.isAdmin(),
+func (m *Model) buildLoadGameSubItems() []domain.MenuItemDef {
+	return localcmd.BuildLoadGameSubItems(localcmd.LoadGameSubMenuOptions{
+		DataDir: m.api.DataDir(),
 		OnLoad: func(gameName, saveName string) {
 			m.dispatchInput("/game-resume " + gameName + "/" + saveName)
 		},
-		Reload: m.pushSavesDialog,
 	})
 }
 

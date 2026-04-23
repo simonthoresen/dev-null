@@ -1,7 +1,7 @@
  File │ Graphics │ View │ Help
 ╔══════════════╗══════════════════════════════╤════════════════════════════════╗
 ║►Start game   ║                             ░│    Unassigned                  ║
-║ Load game    ║                             ░│                                ║
+║ Load game  ► ║                             ░│                                ║
 ║──────────────║                             ░│    Team alice                  ║
 ║ Plugins      ║                             ░│    alice                       ║
 ║ Synths       ║                             ░│                                ║

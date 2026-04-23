@@ -26,7 +26,7 @@ type renderScenario struct {
 	inActiveGame bool
 	// gameName is used in GameLoadedMsg when inActiveGame is true.
 	gameName string
-	// chromeKeys is a sequence of key names (e.g. "f10", "alt+h", "enter") sent
+	// chromeKeys is a sequence of key names (e.g. "esc", "f", "enter") sent
 	// only to the chrome model after initial setup, to drive chrome overlay/menu
 	// state. Leave nil for state-only scenarios or console-targeted ones.
 	chromeKeys []string
@@ -234,7 +234,7 @@ var scenarios = []renderScenario{
 				{Name: "Blue"},
 			}
 		},
-		chromeKeys:    []string{"alt+f", "enter", "down"},
+		chromeKeys:    []string{"esc", "f", "enter", "down"},
 		noIntegration: true,
 	},
 	{
@@ -242,7 +242,7 @@ var scenarios = []renderScenario{
 		name:          "games_dialog_empty_console",
 		playerID:      "alice",
 		setup:         func(st *state.CentralState) {},
-		consoleKeys:   []string{"alt+f", "enter"},
+		consoleKeys:   []string{"esc", "f", "enter"},
 		noIntegration: true,
 	},
 	{
@@ -258,7 +258,7 @@ var scenarios = []renderScenario{
 				{Name: "Blue"},
 			}
 		},
-		consoleKeys: []string{"alt+f", "enter", "down"},
+		consoleKeys: []string{"esc", "f", "enter", "down"},
 		noIntegration: true,
 	},
 
@@ -268,7 +268,7 @@ var scenarios = []renderScenario{
 		name:          "saves_dialog_empty",
 		playerID:      "alice",
 		setup:         func(st *state.CentralState) {},
-		chromeKeys:    []string{"alt+f", "down", "enter"},
+		chromeKeys:    []string{"esc", "f", "down", "enter"},
 		noIntegration: true,
 	},
 	{
@@ -284,7 +284,7 @@ var scenarios = []renderScenario{
 				TermWidth: termW, TermHeight: termH,
 			}
 		},
-		chromeKeys:    []string{"alt+f", "down", "enter"},
+		chromeKeys:    []string{"esc", "f", "down", "enter"},
 		noIntegration: true,
 	},
 	{
@@ -300,7 +300,7 @@ var scenarios = []renderScenario{
 				TermWidth: termW, TermHeight: termH,
 			}
 		},
-		chromeKeys:    []string{"alt+f", "down", "enter", "enter"},
+		chromeKeys:    []string{"esc", "f", "down", "enter", "enter"},
 		noIntegration: true,
 	},
 	{
@@ -308,7 +308,7 @@ var scenarios = []renderScenario{
 		name:          "saves_dialog_empty_console",
 		playerID:      "alice",
 		setup:         func(st *state.CentralState) {},
-		consoleKeys:   []string{"alt+f", "down", "enter"},
+		consoleKeys:   []string{"esc", "f", "down", "enter"},
 		noIntegration: true,
 	},
 	{
@@ -317,7 +317,7 @@ var scenarios = []renderScenario{
 		dataDir:  "testdata/fixtures",
 		playerID: "alice",
 		setup:    func(st *state.CentralState) {},
-		consoleKeys: []string{"alt+f", "down", "enter", "enter"},
+		consoleKeys: []string{"esc", "f", "down", "enter", "enter"},
 		noIntegration: true,
 	},
 }

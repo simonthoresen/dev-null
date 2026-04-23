@@ -7,6 +7,7 @@ import (
 
 	"dev-null/internal/domain"
 	"dev-null/internal/engine"
+	"dev-null/internal/state"
 	"dev-null/internal/theme"
 )
 
@@ -44,6 +45,41 @@ func BuildGameSubItems(opts GameSubMenuOptions) []domain.MenuItemDef {
 		}
 		if opts.OnDelete != nil {
 			item.OnDelete = func(playerID string) { opts.OnDelete(n, playerID) }
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
+// ─── Load-game sub-menu ──────────────────────────────────────────────────────
+
+// LoadGameSubMenuOptions configures the Load game sub-menu.
+type LoadGameSubMenuOptions struct {
+	DataDir  string
+	OnLoad   func(gameName, saveName string) // called on Enter
+	OnDelete func(gameName, saveName, playerID string) // nil → no Del support
+}
+
+// BuildLoadGameSubItems returns the menu items for the Load game sub-menu.
+// Each save appears as one item labeled "gameName/saveName". If no saves
+// exist the sub-menu shows a single disabled "(no saves)" item so the
+// user sees something rather than an empty dropdown.
+func BuildLoadGameSubItems(opts LoadGameSubMenuOptions) []domain.MenuItemDef {
+	saves := state.ListSuspends(opts.DataDir, "")
+	if len(saves) == 0 {
+		return []domain.MenuItemDef{
+			{Label: "(no saves)", Disabled: true},
+		}
+	}
+	items := make([]domain.MenuItemDef, 0, len(saves))
+	for _, s := range saves {
+		gn, sn := s.GameName, s.SaveName
+		item := domain.MenuItemDef{
+			Label:   gn + "/" + sn,
+			Handler: func(_ string) { opts.OnLoad(gn, sn) },
+		}
+		if opts.OnDelete != nil {
+			item.OnDelete = func(playerID string) { opts.OnDelete(gn, sn, playerID) }
 		}
 		items = append(items, item)
 	}

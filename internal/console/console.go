@@ -375,7 +375,7 @@ func (m *Model) consoleMenus() []domain.MenuDef {
 			Label: "&File",
 			Items: []domain.MenuItemDef{
 				{Label: "&Start game", SubItems: m.buildGameSubItems()},
-				{Label: "&Load game", Handler: func(_ string) { m.pushSavesDialog(0) }},
+				{Label: "&Load game", SubItems: m.buildLoadGameSubItems()},
 				{Label: "---"},
 				{Label: "&Themes", SubItems: m.buildThemeSubItems()},
 				{Label: "&Plugins", SubItems: m.buildPluginSubItems()},
@@ -526,22 +526,21 @@ func (m *Model) buildInviteSubItems() []domain.MenuItemDef {
 	}
 }
 
-// ─── Saves dialog (still a dialog, not a sub-menu) ─────────────────────────
+// ─── Load-game sub-menu ────────────────────────────────────────────────────
 
-func (m *Model) pushSavesDialog(cursor int) {
-	localcmd.PushSaveDialog(cursor, localcmd.SaveDialogOptions{
-		DataDir:   m.api.DataDir(),
-		Overlay:   &m.overlay,
-		CanRemove: true,
+func (m *Model) buildLoadGameSubItems() []domain.MenuItemDef {
+	return localcmd.BuildLoadGameSubItems(localcmd.LoadGameSubMenuOptions{
+		DataDir: m.api.DataDir(),
 		OnLoad: func(gameName, saveName string) {
 			m.submitInput("/game-resume " + gameName + "/" + saveName)
 		},
-		OnRemove: m.showSaveRemoveConfirm,
-		Reload:   m.pushSavesDialog,
+		OnDelete: func(gameName, saveName, _ string) {
+			m.showSaveRemoveConfirm(gameName, saveName)
+		},
 	})
 }
 
-func (m *Model) showSaveRemoveConfirm(gameName, saveName string, cursor int) {
+func (m *Model) showSaveRemoveConfirm(gameName, saveName string) {
 	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   "Delete Save",
 		Body:    fmt.Sprintf("Delete save?\n\n  %s/%s\n\nThis cannot be undone.", gameName, saveName),
@@ -551,7 +550,6 @@ func (m *Model) showSaveRemoveConfirm(gameName, saveName string, cursor int) {
 			if btn == "Delete" {
 				state.DeleteSuspend(m.api.DataDir(), gameName, saveName) //nolint:errcheck
 			}
-			m.pushSavesDialog(cursor)
 		},
 	})
 }
