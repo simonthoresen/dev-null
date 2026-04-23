@@ -57,8 +57,12 @@ type TerminalGrid struct {
 
 	// Game source files for local rendering.
 	GameSrcFiles []GameSrcFile // accumulated from ns;gamesrc OSC
-	// Game state for local rendering (gzipped JSON from ns;state OSC).
+	// Game state baseline (gzipped JSON from ns;state OSC). The client
+	// replaces Game.state wholesale when this arrives.
 	StateData []byte
+	// Depth-1 merge patch (gzipped JSON from ns;state-patch OSC). The client
+	// merges changed keys into Game.state and deletes keys whose value is null.
+	StatePatch []byte
 	// Render mode from ns;mode OSC ("local" or "remote").
 	RenderMode string
 
@@ -788,6 +792,10 @@ func (g *TerminalGrid) handleOSC(payload string) {
 		case "state":
 			if decoded, err := decodeBase64Str(data); err == nil {
 				g.StateData = decoded
+			}
+		case "state-patch":
+			if decoded, err := decodeBase64Str(data); err == nil {
+				g.StatePatch = decoded
 			}
 		case "mode":
 			g.RenderMode = data

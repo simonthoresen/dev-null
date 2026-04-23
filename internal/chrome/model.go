@@ -104,7 +104,8 @@ type Model struct {
 	oscModeSent      bool     // true after the initial mode OSC has been sent
 	gameSrcSent      bool     // true after game source files have been sent
 	assetsSent       bool     // true after game assets (audio/images) have been sent
-	lastStateHash    uint64   // FNV-64a hash of last sent Game.state JSON (for delta detection)
+	lastSentKeys     map[string][]byte // marshaled bytes of each top-level state key we last sent; drives the depth-1 merge diff
+	sentBaseline     bool              // true once we've sent the full baseline state at least once this render-local session
 	pendingSoundOSC  []string // sound/stop-sound OSC strings to inject into next View()
 	pendingMidiOSC   []string // MIDI event OSC strings to inject into next View()
 	synthName        string   // active SoundFont name (e.g. "chiptune", "gm"); default = "chiptune"
@@ -451,7 +452,8 @@ func (m *Model) applyGraphicsPrefs() {
 	// run. Re-send when transitioning into local mode.
 	if !wasLocal && local {
 		m.gameSrcSent = false
-		m.lastStateHash = 0
+		m.lastSentKeys = nil
+		m.sentBaseline = false
 	}
 }
 

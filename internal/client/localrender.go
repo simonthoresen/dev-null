@@ -102,7 +102,8 @@ func (lr *LocalRenderer) LoadGame(files []GameSrcFile) {
 	lr.loaded = true
 }
 
-// SetState updates Game.state in the JS VM from JSON.
+// SetState updates Game.state in the JS VM from a full JSON baseline,
+// replacing any previous state.
 func (lr *LocalRenderer) SetState(jsonData []byte) {
 	lr.mu.Lock()
 	defer lr.mu.Unlock()
@@ -123,6 +124,67 @@ func (lr *LocalRenderer) SetState(jsonData []byte) {
 	if gameObj != nil {
 		gameObj.Set("state", lr.vm.ToValue(state))
 	}
+}
+
+// MergeStatePatch applies a depth-1 JSON merge patch to Game.state. Keys in
+// the patch replace the corresponding top-level key; keys whose patch value
+// is JSON null are deleted. Keys not present in the patch are left alone.
+//
+// The patch machinery assumes SetState has been called at least once this
+// session to seed Game.state — the server's broadcast path guarantees this.
+func (lr *LocalRenderer) MergeStatePatch(jsonData []byte) {
+	lr.mu.Lock()
+	defer lr.mu.Unlock()
+	if !lr.loaded {
+		return
+	}
+
+	var patch map[string]json.RawMessage
+	if err := json.Unmarshal(jsonData, &patch); err != nil {
+		return
+	}
+
+	gameVal := lr.vm.Get("Game")
+	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
+		return
+	}
+	gameObj := gameVal.ToObject(lr.vm)
+	if gameObj == nil {
+		return
+	}
+	stateVal := gameObj.Get("state")
+	if stateVal == nil || goja.IsUndefined(stateVal) || goja.IsNull(stateVal) {
+		// No baseline yet — patch without a baseline is ill-defined.
+		// Drop silently; the next baseline send will restore full state.
+		return
+	}
+	stateObj := stateVal.ToObject(lr.vm)
+	if stateObj == nil {
+		return
+	}
+
+	for k, raw := range patch {
+		if isJSONNull(raw) {
+			stateObj.Delete(k)
+			continue
+		}
+		var val any
+		if err := json.Unmarshal(raw, &val); err != nil {
+			continue
+		}
+		stateObj.Set(k, lr.vm.ToValue(val))
+	}
+}
+
+// isJSONNull checks whether raw decodes to JSON null (whitespace-tolerant).
+func isJSONNull(raw json.RawMessage) bool {
+	for _, b := range raw {
+		if b == ' ' || b == '\t' || b == '\n' || b == '\r' {
+			continue
+		}
+		return b == 'n' // start of "null"
+	}
+	return false
 }
 
 // IsLoaded returns true if game JS has been loaded and render functions extracted.

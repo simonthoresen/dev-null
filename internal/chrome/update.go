@@ -144,7 +144,8 @@ func (m *Model) handleGameLoaded(_ domain.GameLoadedMsg) (tea.Model, tea.Cmd) {
 	m.pendingSoundOSC = nil
 	m.pendingMidiOSC = nil
 	m.synthSent = false
-	m.lastStateHash = 0
+	m.lastSentKeys = nil
+	m.sentBaseline = false
 	m.oscModeSent = false
 	m.invalidateMenuCache()
 	m.lobbyInput.Model.Blur()

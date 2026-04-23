@@ -43,6 +43,9 @@ func EncodeGameSourceOSC(filename, content string) string {
 
 // EncodeStateOSC returns an OSC sequence containing game state (gzipped JSON).
 // data must be the raw JSON bytes of the state object.
+//
+// This is the full-baseline path; the client replaces Game.state wholesale.
+// For incremental updates prefer EncodeStatePatchOSC.
 func EncodeStateOSC(data []byte) string {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
@@ -53,6 +56,26 @@ func EncodeStateOSC(data []byte) string {
 		return ""
 	}
 	return "\x1b]ns;state;" + base64.StdEncoding.EncodeToString(buf.Bytes()) + "\x07"
+}
+
+// EncodeStatePatchOSC returns an OSC sequence containing a depth-1 JSON merge
+// patch against Game.state. Keys present in data replace the corresponding
+// key on the client; keys with a JSON null are deleted; keys not in data are
+// left untouched.
+//
+// The client must have received an ns;state baseline before this patch is
+// applied — the framework's state-broadcast path always sends the baseline
+// first after (re)connection, mode switch, or game load.
+func EncodeStatePatchOSC(data []byte) string {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := gz.Write(data); err != nil {
+		return ""
+	}
+	if err := gz.Close(); err != nil {
+		return ""
+	}
+	return "\x1b]ns;state-patch;" + base64.StdEncoding.EncodeToString(buf.Bytes()) + "\x07"
 }
 
 // EncodeModeOSC returns an OSC sequence to switch the client rendering mode.

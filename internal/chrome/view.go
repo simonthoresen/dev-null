@@ -1,9 +1,7 @@
 package chrome
 
 import (
-	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -139,22 +137,16 @@ func (m *Model) View() tea.View {
 		if m.viewportW > 0 && m.viewportH > 0 {
 			oscData += render.EncodeViewportOSC(m.viewportX, m.viewportY, m.viewportW, m.viewportH)
 
-			// Send Game.state if it changed since last frame (for Canvas HD).
-			// Marshal to JSON first, hash it cheaply, only gzip+encode if changed.
+			// Send Game.state to local renderers. First broadcast per session
+			// is the full baseline; subsequent ones are depth-1 merge patches
+			// containing only the top-level keys whose JSON bytes changed.
 			if isLocal && phase == domain.PhasePlaying {
 				var stateObj any
 				if srt, ok := game.(engine.ScriptRuntime); ok {
 					stateObj = srt.State()
 				}
-				if data, err := json.Marshal(stateObj); err == nil {
-					h := fnv.New64a()
-					h.Write(data)
-					if hash := h.Sum64(); hash != m.lastStateHash {
-						if osc := render.EncodeStateOSC(data); osc != "" {
-							oscData += osc
-							m.lastStateHash = hash
-						}
-					}
+				if osc := m.encodeStateBroadcast(stateObj); osc != "" {
+					oscData += osc
 				}
 			}
 		}

@@ -134,13 +134,26 @@ func (r *ClientRenderer) readLoop() {
 				r.grid.GameSrcFiles = nil
 				r.localRenderer.LoadGame(r.gameSrcFiles)
 			}
-			// Game state delta — update local renderer.
+			// Game state baseline — replace Game.state wholesale.
 			if r.grid.StateData != nil {
 				r.gameStateJSON = decompressBytes(r.grid.StateData)
 				r.grid.StateData = nil
 				if r.gameStateJSON != nil {
 					r.localRenderer.SetState(r.gameStateJSON)
 				}
+			}
+			// Game state patch — merge changed top-level keys into Game.state.
+			// The server guarantees a baseline (ns;state) has arrived first.
+			if r.grid.StatePatch != nil {
+				if patch := decompressBytes(r.grid.StatePatch); patch != nil {
+					r.localRenderer.MergeStatePatch(patch)
+					// Cache an updated "gameStateJSON != nil" signal so
+					// render paths that gate on it keep working.
+					if r.gameStateJSON == nil {
+						r.gameStateJSON = patch
+					}
+				}
+				r.grid.StatePatch = nil
 			}
 			// Render mode.
 			if r.grid.RenderMode != "" {
