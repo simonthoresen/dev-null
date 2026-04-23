@@ -10,20 +10,20 @@
 // ── Constants ────────────────────────────────────────────────────────────────
 
 var MAP_W = 64, MAP_D = 64;
-var MAP_H = 1;                  // wall height in world units
+var WALL_H = 2.0;               // wall height in world units (eye stays at 0.5)
 var PLAYER_HP = 3;
 var KILL_LIMIT = 10;
 var RESPAWN_SEC = 5.0;
 var MOVE_INTERVAL = 0.12;       // seconds between grid steps while keys held / repeated
 var FIRE_COOLDOWN = 0.35;
-var LASER_TTL = 0.10;           // 100ms
+var LASER_TTL = 0.28;           // must outlive one server tick + network jitter so clients see the beam
 var MAX_RAY_DIST = 40;
 var PLANE_LEN = 0.66;           // ~66° FOV
 var FOCAL_Y = 1.0;
 var SCOREBOARD_TIMEOUT = 0.85;  // keep scoreboard visible after a tab press
 
 var PLAYER_BOX_HALF = 0.25;     // cube half-size horizontally (0.5 total)
-var PLAYER_BOX_HEIGHT = 0.8;    // 0.8 of map height
+var PLAYER_BOX_HEIGHT = 0.8;    // world units (same as before — walls now tower over players)
 
 var FOOTSTEP_INTERVAL = 0.35;
 
@@ -544,9 +544,11 @@ function renderScene(ctx, playerID, w, h) {
         zBuffer[sx] = perpDist;
         if (perpDist >= MAX_RAY_DIST) continue;
 
-        var lineH = Math.floor(h * FOCAL_Y / perpDist);
-        var drawStart = Math.floor(h / 2 - lineH / 2);
-        var drawEnd = drawStart + lineH;
+        // Eye at 0.5, walls span 0..WALL_H: (WALL_H - 0.5) above the horizon,
+        // 0.5 below.
+        var lineScale = h * FOCAL_Y / perpDist;
+        var drawStart = Math.floor(h / 2 - (WALL_H - 0.5) * lineScale);
+        var drawEnd = Math.floor(h / 2 + 0.5 * lineScale);
         if (drawStart < 0) drawStart = 0;
         if (drawEnd > h) drawEnd = h;
 
@@ -585,20 +587,93 @@ function renderScene(ctx, playerID, w, h) {
     // HUD.
     renderHUD(ctx, p, w, h);
 
+    // Minimap in top-right.
+    renderMinimap(ctx, p, w, h);
+
     // Scoreboard (if tab recently pressed).
     if (p.scoreboardUntil > gameTime()) {
         renderScoreboard(ctx, w, h);
     }
 }
 
+// Minimap: full top-down view of the map in the top-right corner.
+// Walls are gray tiles; each player is a team-colored tile with a white "nose"
+// pixel one square ahead so facing direction is legible at a glance.
+var MINIMAP_FACING_OFFSET = [
+    [ 1,  0],   // 0 E
+    [ 1,  1],   // 1 SE
+    [ 0,  1],   // 2 S
+    [-1,  1],   // 3 SW
+    [-1,  0],   // 4 W
+    [-1, -1],   // 5 NW
+    [ 0, -1],   // 6 N
+    [ 1, -1]    // 7 NE
+];
+
+function renderMinimap(ctx, me, w, h) {
+    var s = Game.state;
+    if (!s || !s.mapData) return;
+
+    var cellPx = 2;
+    var mmW = MAP_W * cellPx;
+    var mmH = MAP_D * cellPx;
+    var pad = 8;
+    var ox = w - mmW - pad;
+    var oy = pad;
+
+    // Background panel.
+    ctx.setFillStyle("#0A0810CC");
+    ctx.fillRect(ox - 2, oy - 2, mmW + 4, mmH + 4);
+    ctx.setStrokeStyle("#FFFFFF66");
+    ctx.setLineWidth(1);
+    ctx.strokeRect(ox - 2, oy - 2, mmW + 4, mmH + 4);
+
+    // Walls.
+    ctx.setFillStyle("#6B553A");
+    for (var z = 0; z < MAP_D; z++) {
+        for (var x = 0; x < MAP_W; x++) {
+            if (isSolid(x, z)) {
+                ctx.fillRect(ox + x * cellPx, oy + z * cellPx, cellPx, cellPx);
+            }
+        }
+    }
+
+    // Players.
+    var players = s.players;
+    for (var id in players) {
+        var p = players[id];
+        if (!p.alive) continue;
+        var px = ox + p.gx * cellPx;
+        var py = oy + p.gz * cellPx;
+        ctx.setFillStyle(teamColor(p.teamIdx));
+        ctx.fillRect(px, py, cellPx, cellPx);
+
+        // Nose pixel one cell ahead in the facing direction.
+        var off = MINIMAP_FACING_OFFSET[p.facing];
+        if (off) {
+            ctx.setFillStyle(id === me.id ? "#FFFFFF" : "#FFEEAA");
+            ctx.fillRect(px + off[0] * cellPx, py + off[1] * cellPx, cellPx, cellPx);
+        }
+
+        // Bright outline on self.
+        if (id === me.id) {
+            ctx.setStrokeStyle("#FFFFFF");
+            ctx.setLineWidth(1);
+            ctx.strokeRect(px - 1, py - 1, cellPx + 2, cellPx + 2);
+        }
+    }
+}
+
 function worldToCamera(wx, wz, eyeX, eyeZ, dirX, dirZ, planeX, planeZ) {
+    // World point offset in (dir, plane) basis: [sx; sz] = [[dirX, planeX]; [dirZ, planeZ]] * [camZ; camX].
+    // Inverting that matrix gives camZ (forward) and camX (right-offset).
     var sx = wx - eyeX, sz = wz - eyeZ;
     var det = dirX * planeZ - planeX * dirZ;
     if (Math.abs(det) < 1e-6) return null;
     var inv = 1 / det;
     return {
-        camX: inv * (planeZ * sx - planeX * sz),   // right
-        camZ: inv * (-dirZ * sx + dirX * sz)        // forward
+        camX: inv * (-dirZ * sx + dirX * sz),       // right
+        camZ: inv * (planeZ * sx - planeX * sz)     // forward
     };
 }
 
