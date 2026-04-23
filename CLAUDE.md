@@ -230,6 +230,8 @@ SSH clients are always remote. GUI clients default to local. The "Render locally
 
 **Local rendering and `Game.state`**: Local modes re-execute game JS on the client. The client never calls `update()` — only `renderCanvas()`. The engine auto-injects `Game.state._gameTime` (elapsed seconds since `begin()`) after each `Update()`, so canvas games always have the current time. Games that need additional render state must populate `Game.state` in `update()` — module-level variables are only updated on the server.
 
+**`_gameTime` is the contract clock.** Server-side `Game.state._gameTime` is set every tick from cumulative elapsed seconds. The diff transport in `internal/chrome/state_diff.go` suppresses patches whose only changed key is `_gameTime` — clients extrapolate it locally. On the client side, `LocalRenderer` (in `internal/client/localrender.go`) tracks `(serverGameTime, snapAt)` and re-publishes `state._gameTime = serverGameTime + wallElapsed` immediately before every `renderCanvas`/`renderAscii` call. When a non-clock patch arrives carrying a fresh `_gameTime`, the local clock snaps to the server value; if the snap moves the clock by more than 0.2 s, `LocalRenderer` invokes `driftLogger`. **Games that derive render state from time should read it from `state._gameTime` only** — never from `now()` or wall-clock — so motion stays smooth at the client's render fps regardless of the server's tick rate.
+
 **No charmap/spritesheet system** — removed. Games that want custom graphics use canvas rendering.
 
 Preferences are persisted to `~/.dev-null/client.txt` as `/render-ascii`, `/render-pixels` (Blocks is default, omitted), and `/render-remote` or `/render-local` (only if non-default for the client type).
