@@ -29,7 +29,19 @@ type JSCanvas struct {
 	gradients   map[string]gg.Pattern
 	gradCounter int
 	raster      *Rasterizer // lazily initialized on first 3D call
+
+	// colorCache memoizes parseCanvasHexColor for the hot paths
+	// (fillTriangle3D*, gradient stops). Game palettes are typically
+	// small and reused every frame, so a single lookup replaces a
+	// strings.Builder + ParseUint per vertex.
+	colorCache map[string]color.RGBA
 }
+
+// maxColorCacheEntries caps the per-canvas color cache so games that
+// generate procedural hex strings (e.g. HSL → hex per frame) can't grow
+// it without bound. Past the cap, parseColor falls through to a direct
+// parse without insertion — the existing entries stay warm.
+const maxColorCacheEntries = 256
 
 // NewJSCanvas creates a new headless canvas with the given pixel dimensions.
 // scaleY scales the drawing context vertically. Pass 1.0 for no scaling.
@@ -44,7 +56,13 @@ func NewJSCanvas(width, height int, scaleY float64) *JSCanvas {
 	if scaleY != 1.0 {
 		dc.Scale(1.0, scaleY)
 	}
-	return &JSCanvas{dc: dc, width: width, height: logicalH, gradients: map[string]gg.Pattern{}}
+	return &JSCanvas{
+		dc:         dc,
+		width:      width,
+		height:     logicalH,
+		gradients:  map[string]gg.Pattern{},
+		colorCache: map[string]color.RGBA{},
+	}
 }
 
 // Renew resets the canvas for a new frame without reallocating the pixel or
@@ -67,6 +85,20 @@ func (c *JSCanvas) Renew() {
 		delete(c.gradients, k)
 	}
 	c.gradCounter = 0
+}
+
+// parseColor returns parseCanvasHexColor(s) via the per-canvas cache.
+// Callers on the triangle hot path use this; parseCanvasHexColor stays
+// available for paths without a canvas in scope.
+func (c *JSCanvas) parseColor(s string) color.RGBA {
+	if col, ok := c.colorCache[s]; ok {
+		return col
+	}
+	col := parseCanvasHexColor(s)
+	if len(c.colorCache) < maxColorCacheEntries {
+		c.colorCache[s] = col
+	}
+	return col
 }
 
 // parseCanvasHexColor parses a "#rgb", "#rgba", "#rrggbb", or "#rrggbbaa"
@@ -262,16 +294,16 @@ func (c *JSCanvas) ToJSObject(vm *goja.Runtime) map[string]any {
 				v0[0], v0[1], v0[2],
 				v1[0], v1[1], v1[2],
 				v2[0], v2[1], v2[2],
-				parseCanvasHexColor(colors[0]),
-				parseCanvasHexColor(colors[1]),
-				parseCanvasHexColor(colors[2]),
+				c.parseColor(colors[0]),
+				c.parseColor(colors[1]),
+				c.parseColor(colors[2]),
 			)
 		},
 		"fillTriangle3DFlat": func(v0, v1, v2 []float64, colorHex string) {
 			if len(v0) < 3 || len(v1) < 3 || len(v2) < 3 {
 				return
 			}
-			col := parseCanvasHexColor(colorHex)
+			col := c.parseColor(colorHex)
 			c.ensureRaster().FillTriangle(
 				v0[0], v0[1], v0[2],
 				v1[0], v1[1], v1[2],
@@ -292,7 +324,7 @@ func (c *JSCanvas) ToJSObject(vm *goja.Runtime) map[string]any {
 			if len(n0) < 3 || len(n1) < 3 || len(n2) < 3 || len(lightDir) < 3 {
 				return
 			}
-			base := parseCanvasHexColor(colorHex)
+			base := c.parseColor(colorHex)
 			lx, ly, lz := lightDir[0], lightDir[1], lightDir[2]
 			c0 := Lambert(n0[0], n0[1], n0[2], lx, ly, lz, base, ambient)
 			c1 := Lambert(n1[0], n1[1], n1[2], lx, ly, lz, base, ambient)
@@ -337,7 +369,7 @@ func (c *JSCanvas) registerGradient(grad gg.Pattern) map[string]any {
 		return map[string]any{
 			"_id": id,
 			"addColorStop": func(offset float64, colorHex string) {
-				g.AddColorStop(offset, parseCanvasHexColor(colorHex))
+				g.AddColorStop(offset, c.parseColor(colorHex))
 			},
 		}
 	}
