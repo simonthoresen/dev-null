@@ -19,17 +19,42 @@ import (
 
 // --- Broadcast and messaging ---
 
-// safeSend sends msg to s in a goroutine, recovering from any panic (e.g.
-// if the program has already shut down).
-func safeSend(s msgSender, msg tea.Msg) {
+// playerSend wraps a tea.Program with a buffered channel and a single drain
+// goroutine. This eliminates the per-broadcast goroutine spawned by the old
+// safeSend pattern (160+ goroutines/sec at 16 players × 10 ticks/sec).
+type playerSend struct {
+	ch chan tea.Msg
+}
+
+func newPlayerSend(prog *tea.Program) *playerSend {
+	ps := &playerSend{ch: make(chan tea.Msg, 16)}
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				slog.Error("Send panic", "panic", r)
+				slog.Error("playerSend drain panic", "panic", r)
 			}
 		}()
-		s.Send(msg)
+		for msg := range ps.ch {
+			prog.Send(msg)
+		}
 	}()
+	return ps
+}
+
+func (ps *playerSend) Send(msg tea.Msg) {
+	select {
+	case ps.ch <- msg:
+	default:
+		// Channel full: drop TickMsg silently (next one arrives in ~100ms).
+		// Log a warning for other message types so operator can detect a slow client.
+		if _, isTick := msg.(domain.TickMsg); !isTick {
+			slog.Warn("player send queue full, dropping message", "type", fmt.Sprintf("%T", msg))
+		}
+	}
+}
+
+func (ps *playerSend) close() {
+	close(ps.ch)
 }
 
 // broadcastRepaint sends a full-screen repaint to all player programs.
@@ -37,33 +62,41 @@ func safeSend(s msgSender, msg tea.Msg) {
 // a complete frame — recovering from any accumulated display artifacts.
 func (a *Server) broadcastRepaint() {
 	a.programsMu.Lock()
-	progs := make([]msgSender, 0, len(a.programs))
+	progs := make([]msgSender, len(a.programs))
+	i := 0
 	for _, p := range a.programs {
-		progs = append(progs, p)
+		progs[i] = p
+		i++
 	}
 	a.programsMu.Unlock()
+	msg := tea.ClearScreen()
 	for _, p := range progs {
-		safeSend(p, tea.ClearScreen())
+		p.Send(msg)
 	}
 }
 
 func (a *Server) broadcastMsg(msg tea.Msg) {
 	a.programsMu.Lock()
-	progs := make([]msgSender, 0, len(a.programs))
+	progs := make([]msgSender, len(a.programs))
+	i := 0
 	for _, p := range a.programs {
-		progs = append(progs, p)
+		progs[i] = p
+		i++
 	}
 	a.programsMu.Unlock()
 
 	for _, p := range progs {
-		safeSend(p, msg)
+		p.Send(msg)
 	}
 
 	a.consoleProgramMu.Lock()
 	cs := a.consoleSender
 	a.consoleProgramMu.Unlock()
 	if cs != nil {
-		safeSend(cs, msg)
+		go func() {
+			defer func() { recover() }()
+			cs.Send(msg)
+		}()
 	}
 }
 
@@ -144,7 +177,7 @@ func (a *Server) sendToPlayer(playerID string, msg tea.Msg) {
 	p := a.programs[playerID]
 	a.programsMu.Unlock()
 	if p != nil {
-		safeSend(p, msg)
+		p.Send(msg)
 	}
 }
 
@@ -154,7 +187,7 @@ func (a *Server) ShowDialog(playerID string, d domain.DialogRequest) {
 	prog := a.programs[playerID]
 	a.programsMu.Unlock()
 	if prog != nil {
-		safeSend(prog, widget.ShowDialogMsg{Dialog: d})
+		prog.Send(widget.ShowDialogMsg{Dialog: d})
 	}
 }
 

@@ -162,6 +162,7 @@ func (m *Model) dispatchInput(text string) {
 			m.chatSize = n
 			m.persistClientConfig()
 			m.invalidateMenuCache()
+			m.reportGameViewport()
 			return
 		}
 

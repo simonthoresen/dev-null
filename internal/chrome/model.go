@@ -46,6 +46,13 @@ type ServerAPI interface {
 
 	// Invite
 	InviteLinks() (win, mac string)
+
+	// Pre-render cache — updated by the tick goroutine before TickMsg is broadcast.
+	// UpdatePlayerGameViewport reports this player's game viewport dimensions so the
+	// tick goroutine knows what size to pre-render at. GetPreRenderedFrame returns
+	// the cached frame (caller must call the returned release func when done blitting).
+	UpdatePlayerGameViewport(playerID string, gameW, gameH int)
+	GetPreRenderedFrame(playerID string, expectW, expectH int) (buf *render.ImageBuffer, ncTree *domain.WidgetNode, status string, release func())
 }
 
 // lobbyTeamPanelW is the fixed width of the team panel in the lobby.

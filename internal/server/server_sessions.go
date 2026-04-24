@@ -71,8 +71,9 @@ func (a *Server) programHandler(sess ssh.Session) *tea.Program {
 	model.ColorProfile = cp
 
 	program := tea.NewProgram(model, opts...)
+	ps := newPlayerSend(program)
 	a.programsMu.Lock()
-	a.programs[playerID] = program
+	a.programs[playerID] = ps
 	a.programsMu.Unlock()
 
 	// Bootstrap the new player with the current game state. The broadcasts from
@@ -262,8 +263,19 @@ func (a *Server) unregisterSession(playerID string) {
 	a.state.RemovePlayer(playerID)
 
 	a.programsMu.Lock()
+	if ps, ok := a.programs[playerID].(*playerSend); ok {
+		ps.close()
+	}
 	delete(a.programs, playerID)
 	a.programsMu.Unlock()
+
+	a.viewportMu.Lock()
+	delete(a.viewports, playerID)
+	a.viewportMu.Unlock()
+
+	a.renderCachesMu.Lock()
+	delete(a.renderCaches, playerID)
+	a.renderCachesMu.Unlock()
 
 	a.sessionsMu.Lock()
 	delete(a.sessions, playerID)

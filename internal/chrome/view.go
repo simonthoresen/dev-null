@@ -28,11 +28,19 @@ func (m *Model) View() tea.View {
 		return view
 	}
 
-	m.api.State().RLock()
-	game := m.api.State().ActiveGame
-	gameName := m.api.State().GameName
-	phase := m.api.State().GamePhase
-	m.api.State().RUnlock()
+	// Single state snapshot — one RLock for all fields used by View() and its
+	// sub-renderers. This replaces 7+ individual RLock calls per frame.
+	st := m.api.State()
+	st.RLock()
+	game := st.ActiveGame
+	gameName := st.GameName
+	phase := st.GamePhase
+	shaderElapsed := st.ElapsedSec
+	var startReady bool
+	if st.StartingReady != nil {
+		startReady = st.StartingReady[m.playerID]
+	}
+	st.RUnlock()
 
 	// Build menus once per frame — passed to sub-views and overlay rendering.
 	menus := m.cachedMenus()
@@ -47,7 +55,7 @@ func (m *Model) View() tea.View {
 	if !m.inActiveGame || phase == domain.PhaseNone {
 		m.renderLobby(buf, menus)
 	} else {
-		m.renderPlaying(buf, menus, game, gameName, phase)
+		m.renderPlaying(buf, menus, game, gameName, phase, startReady)
 	}
 
 	// Overlay layers: render to sub-buffers, blit, then shadow via RecolorRect.
@@ -76,9 +84,6 @@ func (m *Model) View() tea.View {
 	}
 
 	// Post-processing shaders: run after all layers are composited.
-	m.api.State().RLock()
-	shaderElapsed := m.api.State().ElapsedSec
-	m.api.State().RUnlock()
 	engine.ApplyShaders(m.shaders, buf, shaderElapsed)
 
 	// Enhanced client OSC protocol: send game source, state, and viewport bounds.
@@ -222,7 +227,7 @@ func (m *Model) renderLobby(buf *render.ImageBuffer, menus []domain.MenuDef) {
 }
 
 
-func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, game domain.Game, gameName string, phase domain.GamePhase) {
+func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, game domain.Game, gameName string, phase domain.GamePhase, startReady bool) {
 	// Chat takes m.chatSize rows (5..10, configurable via View > Chat size).
 	// Window interior = total - menuBar(1) - statusBar(1) - topBorder(1) - bottomBorder(1) = height - 4
 	// Interior rows: gameView + divider(1) + chat(chatSize) + divider(1) + cmdInput(1) = gameH + chatSize + 3
@@ -240,6 +245,15 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 		displayName = gn
 	}
 
+	// Look up any pre-rendered frame from the tick goroutine. The tick goroutine
+	// renders at (m.width-2, gameH) — the game viewport interior (window minus borders).
+	// This must be done before the phase switch so cachedStatus is in scope for the status bar.
+	preW := m.width - 2
+	cachedBuf, cachedTree, cachedStatus, releaseCache := m.api.GetPreRenderedFrame(m.playerID, preW, gameH)
+	if releaseCache != nil {
+		defer releaseCache()
+	}
+
 	// Wire gameview rendering based on phase.
 	switch phase {
 	case domain.PhaseStarting:
@@ -248,32 +262,55 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 		}
 		m.playingGameView.OnKey = nil // starting screen ignores game keys
 	default: // PhasePlaying
-		if ncTree := game.Layout(m.playerID, m.width, gameH); ncTree != nil {
-			// NC-tree game: reconcile into a GameWindow. The reconciled
-			// window becomes GameView.Inner so keys delegate to its
-			// focused child naturally; focus wraps pop out to the
-			// chrome's command input.
-			m.gameWindow = widget.ReconcileGameWindow(m.gameWindow, ncTree,
+		if cachedTree != nil {
+			// NC-tree game with a pre-cached Layout result: reconcile using the
+			// cached tree and render normally. RenderAscii calls happen inside
+			// RenderToBuf (pure Go widget + renderFn closures), which still use
+			// Runtime.mu — but the Layout() JS call was already done in the tick goroutine.
+			m.gameWindow = widget.ReconcileGameWindow(m.gameWindow, cachedTree,
 				func(gbuf *render.ImageBuffer, bx, by, bw, bh int) { game.RenderAscii(gbuf, m.playerID, bx, by, bw, bh) },
 				func(action string) { game.OnInput(m.playerID, action) })
 			m.playingGameView.Inner = m.gameWindow.Window
 			m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
 				m.gameWindow.Window.RenderToBuf(gbuf, x, y, w, h, m.theme.LayerAt(0))
 			}
-			// Fallback OnKey for events outside the focus hierarchy (unused
-			// when Inner has focusable children, but kept for mouse-only
-			// layouts).
+			m.playingGameView.OnKey = func(key string) {
+				game.OnInput(m.playerID, key)
+			}
+		} else if cachedBuf != nil {
+			// Plain renderAscii game with a pre-rendered buffer: just blit it.
+			// No JS call needed — this is the primary hot path at 16+ players.
+			m.gameWindow = nil
+			m.playingGameView.Inner = nil
+			m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
+				gbuf.Blit(x, y, cachedBuf)
+			}
 			m.playingGameView.OnKey = func(key string) {
 				game.OnInput(m.playerID, key)
 			}
 		} else {
-			m.gameWindow = nil
-			m.playingGameView.Inner = nil
-			m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
-				game.RenderAscii(gbuf, m.playerID, x, y, w, h)
-			}
-			m.playingGameView.OnKey = func(key string) {
-				game.OnInput(m.playerID, key)
+			// Fallback: no pre-rendered cache yet (first frame or dimension mismatch).
+			ncTree := game.Layout(m.playerID, m.width, gameH)
+			if ncTree != nil {
+				m.gameWindow = widget.ReconcileGameWindow(m.gameWindow, ncTree,
+					func(gbuf *render.ImageBuffer, bx, by, bw, bh int) { game.RenderAscii(gbuf, m.playerID, bx, by, bw, bh) },
+					func(action string) { game.OnInput(m.playerID, action) })
+				m.playingGameView.Inner = m.gameWindow.Window
+				m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
+					m.gameWindow.Window.RenderToBuf(gbuf, x, y, w, h, m.theme.LayerAt(0))
+				}
+				m.playingGameView.OnKey = func(key string) {
+					game.OnInput(m.playerID, key)
+				}
+			} else {
+				m.gameWindow = nil
+				m.playingGameView.Inner = nil
+				m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
+					game.RenderAscii(gbuf, m.playerID, x, y, w, h)
+				}
+				m.playingGameView.OnKey = func(key string) {
+					game.OnInput(m.playerID, key)
+				}
 			}
 		}
 	}
@@ -301,17 +338,18 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 	m.playingMenuBar.Menus = menus
 	switch phase {
 	case domain.PhaseStarting:
-		st := m.api.State()
-		st.RLock()
-		isReady := st.StartingReady != nil && st.StartingReady[m.playerID]
-		st.RUnlock()
-		if isReady {
+		if startReady {
 			m.playingStatusBar.LeftText = " Ready! Waiting for others..."
 		} else {
 			m.playingStatusBar.LeftText = " [Enter] Ready up"
 		}
 	default:
-		m.playingStatusBar.LeftText = " " + game.StatusBar(m.playerID)
+		if releaseCache != nil {
+			// Use the status string pre-fetched by the tick goroutine.
+			m.playingStatusBar.LeftText = " " + cachedStatus
+		} else {
+			m.playingStatusBar.LeftText = " " + game.StatusBar(m.playerID)
+		}
 	}
 	m.playingStatusBar.RightText = ""
 

@@ -59,7 +59,19 @@ func (m *Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.height = max(8, msg.Height)
 	m.resizeViewports()
 	m.syncChat()
+	m.reportGameViewport()
 	return m, nil
+}
+
+// reportGameViewport tells the server the current game-viewport dimensions so
+// the tick goroutine can pre-render at the right size.
+func (m *Model) reportGameViewport() {
+	interiorH := m.height - 4
+	gameH := interiorH - m.chatSize - 3
+	if gameH < 1 {
+		gameH = 1
+	}
+	m.api.UpdatePlayerGameViewport(m.playerID, m.width-2, gameH)
 }
 
 func (m *Model) handleTick(_ domain.TickMsg) (tea.Model, tea.Cmd) {

@@ -35,6 +35,7 @@ func traceCall(_ *goja.Runtime, method string) func() {
 
 // Watchdog starts a goroutine that interrupts the VM after timeout.
 // Call the returned cancel func when the JS call completes.
+// Used by plugin.go for per-player VMs. For the shared game VM use vmWatchdog.
 func Watchdog(vm *goja.Runtime, method string) func() {
 	done := make(chan struct{})
 	go func() {
@@ -47,6 +48,42 @@ func Watchdog(vm *goja.Runtime, method string) func() {
 		}
 	}()
 	return func() { close(done) }
+}
+
+// vmWatchdog is a reusable watchdog for a single JS VM. Unlike Watchdog(), it
+// does not spawn a new goroutine per call — it reuses a single time.AfterFunc
+// timer that is reset before each JS call and stopped after. This eliminates
+// the 160+ goroutine/sec churn created when rendering for 16+ players.
+type vmWatchdog struct {
+	timer *time.Timer
+	mu    sync.Mutex
+	cur   string
+}
+
+func newVMWatchdog(vm *goja.Runtime) *vmWatchdog {
+	w := &vmWatchdog{}
+	// AfterFunc with a large initial duration so it never fires before the first arm().
+	w.timer = time.AfterFunc(time.Duration(1<<62), func() {
+		w.mu.Lock()
+		m := w.cur
+		w.mu.Unlock()
+		slog.Error("JS call timed out, interrupting VM", "method", m, "timeout", JSCallTimeout)
+		vm.Interrupt("timeout: " + m)
+	})
+	w.timer.Stop()
+	return w
+}
+
+func (w *vmWatchdog) arm(method string) {
+	w.mu.Lock()
+	w.cur = method
+	w.mu.Unlock()
+	w.timer.Stop()
+	w.timer.Reset(JSCallTimeout)
+}
+
+func (w *vmWatchdog) disarm() {
+	w.timer.Stop()
 }
 
 // LOCK ORDERING INVARIANT
@@ -67,8 +104,9 @@ func Watchdog(vm *goja.Runtime, method string) func() {
 
 // Runtime wraps a goja JS runtime and implements domain.Game.
 type Runtime struct {
-	mu      sync.Mutex
-	vm      *goja.Runtime
+	mu       sync.Mutex
+	vm       *goja.Runtime
+	watchdog *vmWatchdog
 	baseDir string       // directory containing the game file (for include() resolution)
 	dataDir string       // root data directory (for resolving charmaps, etc.)
 	clock   domain.Clock // server clock exposed to JS as now()
@@ -135,8 +173,10 @@ func LoadGame(path string, logFn func(string), chatCh chan domain.Message, clock
 		return nil, fmt.Errorf("read game file: %w", err)
 	}
 
+	vm := goja.New()
 	rt := &Runtime{
-		vm:           goja.New(),
+		vm:           vm,
+		watchdog:     newVMWatchdog(vm),
 		baseDir:      filepath.Dir(path),
 		logFn:        logFn,
 		chatCh:       chatCh,
@@ -175,8 +215,8 @@ func (r *Runtime) Load(savedState any) {
 	defer r.mu.Unlock()
 	defer r.recoverJS("Load")
 	defer traceCall(r.vm, "Load")()
-	cancel := Watchdog(r.vm, "Load")
-	defer cancel()
+	r.watchdog.arm("Load")
+	defer r.watchdog.disarm()
 
 	res, err := r.initFn(goja.Undefined(), r.ctxObj)
 	if err == nil && res != nil && !goja.IsUndefined(res) && !goja.IsNull(res) {
@@ -196,8 +236,8 @@ func (r *Runtime) Begin() {
 	r.injectStateTeams()
 	defer r.recoverJS("Begin")
 	defer traceCall(r.vm, "Begin")()
-	cancel := Watchdog(r.vm, "Begin")
-	defer cancel()
+	r.watchdog.arm("Begin")
+	defer r.watchdog.disarm()
 	_, _ = r.beginFn(goja.Undefined(), r.currentState(), r.ctxObj)
 }
 
@@ -209,8 +249,8 @@ func (r *Runtime) End() {
 	defer r.mu.Unlock()
 	defer r.recoverJS("End")
 	defer traceCall(r.vm, "End")()
-	cancel := Watchdog(r.vm, "End")
-	defer cancel()
+	r.watchdog.arm("End")
+	defer r.watchdog.disarm()
 	r.injectStateTeams()
 	_, _ = r.endFn(goja.Undefined(), r.currentState(), r.ctxObj)
 }
@@ -332,8 +372,8 @@ func (r *Runtime) Update(dt float64) {
 	r.elapsedTime += dt
 	defer r.recoverJS("Update")
 	defer traceCall(r.vm, "Update")()
-	cancel := Watchdog(r.vm, "Update")
-	defer cancel()
+	r.watchdog.arm("Update")
+	defer r.watchdog.disarm()
 
 	if r.updateFn != nil {
 		// Refresh live state.teams and drain pending events.
@@ -418,8 +458,8 @@ func (r *Runtime) RenderAscii(buf *render.ImageBuffer, playerID string, x, y, wi
 	defer r.mu.Unlock()
 	defer r.recoverJS("RenderAscii")
 	defer traceCall(r.vm, "RenderAscii")()
-	cancel := Watchdog(r.vm, "RenderAscii")
-	defer cancel()
+	r.watchdog.arm("RenderAscii")
+	defer r.watchdog.disarm()
 
 	// renderAscii(state, me, cells). Framework resolves me; if the game's
 	// resolveMe returns null we skip render so chrome/client can draw the
@@ -500,8 +540,8 @@ func (r *Runtime) Layout(playerID string, width, height int) *domain.WidgetNode 
 	defer r.mu.Unlock()
 	defer r.recoverJS("Layout")
 	defer traceCall(r.vm, "Layout")()
-	cancel := Watchdog(r.vm, "Layout")
-	defer cancel()
+	r.watchdog.arm("Layout")
+	defer r.watchdog.disarm()
 	val, err := r.layoutFn(goja.Undefined(), r.vm.ToValue(playerID), r.vm.ToValue(width), r.vm.ToValue(height))
 	if err != nil {
 		slog.Error("JS Layout error", "error", err)
@@ -521,8 +561,8 @@ func (r *Runtime) StatusBar(playerID string) string {
 	defer r.mu.Unlock()
 	defer r.recoverJS("StatusBar")
 	defer traceCall(r.vm, "StatusBar")()
-	cancel := Watchdog(r.vm, "StatusBar")
-	defer cancel()
+	r.watchdog.arm("StatusBar")
+	defer r.watchdog.disarm()
 	val, err := r.statusBarFn(goja.Undefined(), r.currentState(), r.resolveMe(playerID))
 	if err != nil {
 		slog.Error("JS StatusBar error", "error", err)
@@ -539,8 +579,8 @@ func (r *Runtime) CommandBar(playerID string) string {
 	defer r.mu.Unlock()
 	defer r.recoverJS("CommandBar")
 	defer traceCall(r.vm, "CommandBar")()
-	cancel := Watchdog(r.vm, "CommandBar")
-	defer cancel()
+	r.watchdog.arm("CommandBar")
+	defer r.watchdog.disarm()
 	val, err := r.commandBarFn(goja.Undefined(), r.currentState(), r.resolveMe(playerID))
 	if err != nil {
 		slog.Error("JS CommandBar error", "error", err)
@@ -569,8 +609,8 @@ func (r *Runtime) Unload() any {
 		func() {
 			defer r.recoverJS("Unload")
 			defer traceCall(r.vm, "Unload")()
-			cancel := Watchdog(r.vm, "Unload")
-			defer cancel()
+			r.watchdog.arm("Unload")
+			defer r.watchdog.disarm()
 			val, err := r.unloadFn(goja.Undefined())
 			if err == nil && val != nil && !goja.IsUndefined(val) && !goja.IsNull(val) {
 				result = val.Export()
@@ -598,8 +638,8 @@ func (r *Runtime) Suspend() any {
 	func() {
 		defer r.recoverJS("Suspend")
 		defer traceCall(r.vm, "Suspend")()
-		cancel := Watchdog(r.vm, "Suspend")
-		defer cancel()
+		r.watchdog.arm("Suspend")
+		defer r.watchdog.disarm()
 		val, err := r.suspendFn(goja.Undefined())
 		if err == nil && val != nil && !goja.IsUndefined(val) && !goja.IsNull(val) {
 			result = val.Export()
@@ -618,8 +658,8 @@ func (r *Runtime) Resume(sessionState any) {
 		r.elapsedTime = 0
 		defer r.recoverJS("Resume")
 		defer traceCall(r.vm, "Resume")()
-		cancel := Watchdog(r.vm, "Resume")
-		defer cancel()
+		r.watchdog.arm("Resume")
+		defer r.watchdog.disarm()
 		_, _ = r.resumeFn(goja.Undefined(), r.vm.ToValue(sessionState))
 		return
 	}
@@ -663,8 +703,8 @@ func (r *Runtime) RenderCanvas(playerID string, width, height int) []byte {
 	defer r.mu.Unlock()
 	defer r.recoverJS("RenderCanvas")
 	defer traceCall(r.vm, "RenderCanvas")()
-	cancel := Watchdog(r.vm, "RenderCanvas")
-	defer cancel()
+	r.watchdog.arm("RenderCanvas")
+	defer r.watchdog.disarm()
 
 	canvas := r.getCanvas(playerID, width, height)
 	canvasObj := canvas.ToJSObject(r.vm)
@@ -689,8 +729,8 @@ func (r *Runtime) RenderCanvasImage(playerID string, width, height int) *image.R
 	defer r.mu.Unlock()
 	defer r.recoverJS("RenderCanvasImage")
 	defer traceCall(r.vm, "RenderCanvasImage")()
-	cancel := Watchdog(r.vm, "RenderCanvasImage")
-	defer cancel()
+	r.watchdog.arm("RenderCanvasImage")
+	defer r.watchdog.disarm()
 
 	canvas := r.getCanvas(playerID, width, height)
 	canvasObj := canvas.ToJSObject(r.vm)

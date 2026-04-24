@@ -140,6 +140,10 @@ func (a *mockChromeAPI) ResumeGame(string, string) error                    { re
 func (a *mockChromeAPI) ListSuspends() []state.SuspendInfo                  { return nil }
 func (a *mockChromeAPI) KickPlayer(string) error                            { return nil }
 func (a *mockChromeAPI) InviteLinks() (string, string)                      { return "", "" }
+func (a *mockChromeAPI) UpdatePlayerGameViewport(string, int, int)          {}
+func (a *mockChromeAPI) GetPreRenderedFrame(string, int, int) (*render.ImageBuffer, *domain.WidgetNode, string, func()) {
+	return nil, nil, "", nil
+}
 
 // ─── Mock game ───────────────────────────────────────────────────────────────
 

@@ -25,6 +25,7 @@ import (
 	"dev-null/internal/domain"
 	"dev-null/internal/engine"
 	"dev-null/internal/network"
+	"dev-null/internal/render"
 	"dev-null/internal/state"
 )
 
@@ -68,6 +69,26 @@ type Server struct {
 	lastUpdate   time.Time     // last time Update() was called on the active game
 	startingDone chan struct{} // closed to end starting phase early
 
+	// Per-player game viewport dimensions, reported by chrome models on resize.
+	// Used by preRenderAllPlayers to know what dimensions to render at.
+	viewports   map[string][2]int // playerID → [gameW, gameH]
+	viewportMu  sync.RWMutex
+
+	// Per-player pre-rendered frame cache. The tick goroutine renders into these
+	// before broadcasting TickMsg, so player View() calls just blit the result.
+	renderCaches   map[string]*playerRenderCache
+	renderCachesMu sync.RWMutex
+}
+
+// playerRenderCache holds the most recently pre-rendered game frame for one player.
+// The per-player mutex ensures the tick goroutine (writer) and player goroutine
+// (reader/blit) don't overlap on the same buffer.
+type playerRenderCache struct {
+	mu     sync.Mutex
+	buf    *render.ImageBuffer
+	status string
+	ncTree *domain.WidgetNode
+	w, h   int
 }
 
 func New(address, password, dataDir string, tickInterval time.Duration) (*Server, error) {
@@ -85,6 +106,8 @@ func New(address, password, dataDir string, tickInterval time.Duration) (*Server
 		sessions:     make(map[string]ssh.Session),
 		chatCh:       make(chan domain.Message, 256),
 		slogCh:       make(chan console.SlogLine, 256),
+		viewports:    make(map[string][2]int),
+		renderCaches: make(map[string]*playerRenderCache),
 	}
 
 	app.registerBuiltins()
@@ -423,11 +446,103 @@ func (a *Server) runTicker(ctx context.Context) {
 				game.Update(dt)
 			}
 
+			// Pre-render game frames for all playing players sequentially.
+			// This moves JS render calls out of 16 concurrent player goroutines
+			// (where they serialize on Runtime.mu) into a single ordered pass here.
+			// By completing before broadcastMsg, View() only needs a fast buffer blit.
+			a.preRenderAllPlayers(game, phase)
+
 			a.broadcastMsg(domain.TickMsg{N: n})
 
 			// Check if JS called gameOver().
 			a.checkGameOver()
 		}
+	}
+}
+
+// UpdatePlayerGameViewport records the game viewport dimensions for a player.
+// Called by the chrome model on every terminal resize so the tick goroutine
+// knows what size to pre-render at.
+func (a *Server) UpdatePlayerGameViewport(playerID string, w, h int) {
+	a.viewportMu.Lock()
+	a.viewports[playerID] = [2]int{w, h}
+	a.viewportMu.Unlock()
+}
+
+// GetPreRenderedFrame returns the most recent pre-rendered game frame for a
+// player. The caller must call release() when done blitting to allow the tick
+// goroutine to write the next frame. Returns (nil, "", false) if no frame is
+// cached yet or if dimensions don't match the expected size.
+func (a *Server) GetPreRenderedFrame(playerID string, expectW, expectH int) (*render.ImageBuffer, *domain.WidgetNode, string, func()) {
+	a.renderCachesMu.RLock()
+	c := a.renderCaches[playerID]
+	a.renderCachesMu.RUnlock()
+	if c == nil {
+		return nil, nil, "", nil
+	}
+	c.mu.Lock()
+	if c.buf == nil || c.w != expectW || c.h != expectH {
+		c.mu.Unlock()
+		return nil, nil, "", nil
+	}
+	// Return the locked cache; caller must call release to unlock.
+	return c.buf, c.ncTree, c.status, func() { c.mu.Unlock() }
+}
+
+// preRenderAllPlayers runs RenderAscii (and optionally Layout + StatusBar)
+// for every playing player sequentially from the tick goroutine. By doing this
+// before broadcastMsg, players' View() calls only need to blit the cached result
+// instead of calling into the JS VM — eliminating Runtime.mu contention from
+// the 16 concurrent player goroutines.
+func (a *Server) preRenderAllPlayers(game domain.Game, phase domain.GamePhase) {
+	if game == nil || phase != domain.PhasePlaying {
+		return
+	}
+
+	// Snapshot viewport sizes while holding only the read lock.
+	a.viewportMu.RLock()
+	type vpEntry struct {
+		id   string
+		w, h int
+	}
+	vps := make([]vpEntry, 0, len(a.viewports))
+	for id, dims := range a.viewports {
+		if dims[0] > 0 && dims[1] > 0 {
+			vps = append(vps, vpEntry{id, dims[0], dims[1]})
+		}
+	}
+	a.viewportMu.RUnlock()
+
+	for _, v := range vps {
+		// Get or create the per-player cache entry.
+		a.renderCachesMu.RLock()
+		c := a.renderCaches[v.id]
+		a.renderCachesMu.RUnlock()
+		if c == nil {
+			c = &playerRenderCache{}
+			a.renderCachesMu.Lock()
+			// Double-check after acquiring write lock.
+			if existing := a.renderCaches[v.id]; existing != nil {
+				c = existing
+			} else {
+				a.renderCaches[v.id] = c
+			}
+			a.renderCachesMu.Unlock()
+		}
+
+		c.mu.Lock()
+		if c.buf == nil || c.w != v.w || c.h != v.h {
+			c.buf = render.NewImageBuffer(v.w, v.h)
+			c.w, c.h = v.w, v.h
+		}
+		// Pre-render Layout tree (if the game uses NC widgets) and RenderAscii.
+		c.ncTree = game.Layout(v.id, v.w, v.h)
+		if c.ncTree == nil {
+			// Plain renderAscii game: render into our scratch buffer.
+			game.RenderAscii(c.buf, v.id, 0, 0, v.w, v.h)
+		}
+		c.status = game.StatusBar(v.id)
+		c.mu.Unlock()
 	}
 }
 
@@ -533,7 +648,7 @@ func (a *Server) registerBuiltins() {
 		p := a.programs[ctx.PlayerID]
 		a.programsMu.Unlock()
 		if p != nil {
-			safeSend(p, tea.QuitMsg{}) // async: called from inside the Bubble Tea update loop
+			go func() { p.Send(tea.QuitMsg{}) }() // async: called from inside the Bubble Tea update loop
 		}
 	}
 
