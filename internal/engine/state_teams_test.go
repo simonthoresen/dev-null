@@ -13,7 +13,7 @@ func TestState_OverlaysTeamsCache(t *testing.T) {
 			gameName: "tf",
 			teamRange: { min: 1, max: 4 },
 			state: { score: 7 },
-			contract: 2,
+
 			init: function(ctx) { return Game.state; }
 		};
 	`)
@@ -48,7 +48,7 @@ func TestState_NoTeamsCache_LeavesStateAlone(t *testing.T) {
 			gameName: "tf",
 			teamRange: { min: 1, max: 2 },
 			state: { score: 1 },
-			contract: 2,
+
 			init: function(ctx) { return Game.state; }
 		};
 	`)
@@ -61,16 +61,15 @@ func TestState_NoTeamsCache_LeavesStateAlone(t *testing.T) {
 
 // Overlay must not mutate the live JS Game.state. If the game's update
 // reads state.teams during a server tick, it should see whatever the JS
-// holds there (undefined for v1 games), not the injected cache — because
-// v1 games are expected to use the teams() global, and we don't want to
-// clash with a key the game might author.
+// holds there (undefined if the game never writes it), not the injected
+// cache — we don't want to clash with a key the game might author.
 func TestState_OverlayDoesNotTouchLiveJSState(t *testing.T) {
 	rt := loadHookRuntime(t, `
 		Game = {
 			gameName: "tf",
 			teamRange: { min: 1, max: 4 },
 			state: { score: 1, marker: "untouched" },
-			contract: 2,
+
 			init: function(ctx) { return Game.state; }
 		};
 	`)

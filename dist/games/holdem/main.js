@@ -490,7 +490,6 @@ function tick(dt) {
 
 var Game = {
     gameName: "Texas Hold'em",
-    contract: 2,
 
     _ctx: null,  // shared ctx pointer for helpers that need chat/log/midi
 

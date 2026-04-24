@@ -1,9 +1,5 @@
 // cube.js — spinning 3D cube with shaded ASCII block graphics
 // Load with: /game load cube
-//
-// Game contract v2: state is returned from init(ctx) and passed into every
-// hook; update receives a batched events array; render takes (state, me,
-// cells) with no access to ctx.
 
 // ── Static data ────────────────────────────────────────────────────────────
 
@@ -227,11 +223,8 @@ function renderCube(state, cells) {
     }
 }
 
-// ── Game contract v2 ───────────────────────────────────────────────────────
-
 var Game = {
     gameName: "Spinning Cube",
-    contract: 2,
     teamRange: { min: 1, max: 8 },
 
     splashScreen: "╔═══════════════════════════╗\n"

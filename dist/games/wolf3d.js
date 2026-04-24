@@ -923,7 +923,6 @@ function renderAsciiMap(buf, playerID, ox, oy, width, height) {
 
 var Game = {
     gameName: "wolf3d",
-    contract: 2,
     teamRange: { min: 1, max: 6 },
 
     // Private module-level ctx pointer — helpers that need to call framework

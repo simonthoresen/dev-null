@@ -358,7 +358,7 @@ function makeProjector(pos, look, w, h) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PLANET / MOON / SUN RENDERING (unchanged from v1)
+// PLANET / MOON / SUN RENDERING
 // ═══════════════════════════════════════════════════════════════════════════
 
 function renderStars(ctx, proj, w, h) {
@@ -651,7 +651,6 @@ function findEntityIdxForPlayer(state, pid) {
 
 var Game = {
     gameName: "Voyage",
-    contract: 2,
 
     init: function(ctx) {
         // Entities are seeded in begin() once teams are known; init just

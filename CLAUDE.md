@@ -274,7 +274,7 @@ Read these as needed when working on specific areas:
 
 - [`docs/claude/game-lifecycle.md`](docs/claude/game-lifecycle.md) — lifecycle phases, suspend/resume, teams, Game.state, game over
 - [`docs/claude/game-api.md`](docs/claude/game-api.md) — Game interface (Go), JS game hooks & globals, Command struct, Message type
-- [`docs/claude/game-contract-v2.md`](docs/claude/game-contract-v2.md) — **planned** v2 contract: ctx/events/render separation, state diff transport, migration steps
+- [`docs/claude/game-contract.md`](docs/claude/game-contract.md) — game contract: ctx/events/me/render separation, state diff transport, design rationale
 - [`docs/claude/ui-layout.md`](docs/claude/ui-layout.md) — Screen layout (lobby/playing/console), themes, widget reconciler
 - [`docs/claude/extensions.md`](docs/claude/extensions.md) — plugins, shaders, canvas rendering, OSC protocol
 - [`docs/claude/server-console.md`](docs/claude/server-console.md) — boot sequence, console UI, admin auth

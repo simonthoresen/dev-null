@@ -10,7 +10,7 @@ import (
 )
 
 // TestVoyageEntitiesAndPhaseTransitions covers what the older
-// TestVoyageRendersCanvas (in runtime_test.go) doesn't: voyage v2's entity
+// TestVoyageRendersCanvas (in runtime_test.go) doesn't: voyage's entity
 // model. It seeds two real teams, asserts that bots fill the slate up to
 // MIN_TEAMS=5, that everyone starts in orbit, and that running the
 // simulation long enough produces at least one orbit→travel transition.

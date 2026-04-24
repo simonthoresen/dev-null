@@ -656,7 +656,6 @@ function addPlayer(id, name, team){
 // ============================================================
 var Game = {
     gameName:  "Boulder Dash",
-    contract:  2,
     teamRange: { min:1, max:4 },
 
     splashScreen:

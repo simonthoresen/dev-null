@@ -87,7 +87,6 @@ function playerTotalDef(p) {
 
 var Game = {
     gameName: "Crawler",
-    contract: 2,
 
     init: function(ctx) {
         _s = initialState();

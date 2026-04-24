@@ -1,4 +1,4 @@
-// pacman.js — Multiplayer Pac-Man for dev-null (v2 contract)
+// pacman.js — Multiplayer Pac-Man for dev-null
 // Load with: /game load pacman
 //
 // Module-level constants only; all mutable game data lives in state and
@@ -520,10 +520,8 @@ function drawEyes(canvas, cx, cy, r) {
     canvas.fillCircle(cx + r * 0.35, cy - r * 0.15, r * 0.16);
 }
 
-// ── Game contract v2 ──────────────────────────────────────────────────────
 var Game = {
     gameName: "Pac-Man",
-    contract: 2,
     teamRange: { min: 1, max: 6 },
 
     init: function(ctx) {

@@ -14,11 +14,10 @@ import (
 )
 
 func (r *Runtime) registerGlobals() {
-	// Only pure utilities stay as globals under v2. Everything side-effecty
-	// (log, chat, midi*, teams, gameOver, registerCommand, …) is exposed on
-	// the ctx object handed to server-only hooks; render JS never sees ctx,
-	// so misusing those APIs from render becomes a type error instead of a
-	// silent divergence.
+	// Only pure utilities are globals. Everything side-effecty (log, chat,
+	// midi*, teams, gameOver, registerCommand, …) is exposed on the ctx object
+	// handed to server-only hooks; render JS never sees ctx, so misusing those
+	// APIs from render becomes a type error instead of a silent divergence.
 
 	r.vm.Set("figlet", func(text string, font string) string {
 		return Figlet(text, font)

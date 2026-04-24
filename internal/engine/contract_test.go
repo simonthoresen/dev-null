@@ -7,8 +7,8 @@ import (
 	"dev-null/internal/render"
 )
 
-// End-to-end exercise of the v2 contract on the server side. We load a
-// minimal v2 game, call the usual lifecycle methods, and verify that:
+// End-to-end exercise of the game contract on the server side. We load a
+// minimal game, call the usual lifecycle methods, and verify that:
 //   - init(ctx) produces the initial state and sets Game.state.
 //   - ctx is callable from init/begin/update/end (side effects land).
 //   - ctx is NOT callable from render (render never sees it).
@@ -20,12 +20,11 @@ import (
 //   - me resolution falls back to state.players[pid] when the game
 //     doesn't provide resolveMe.
 //   - statusBar receives (state, me).
-const v2GameJS = `
+const testGameJS = `
 var calls = [];
 Game = {
-    gameName: "v2test",
+    gameName: "contracttest",
     teamRange: { min: 1, max: 2 },
-    contract: 2,
 
     init: function(ctx) {
         calls.push("init");
@@ -77,8 +76,8 @@ Game = {
 };
 `
 
-func TestV2Contract_FullLifecycle(t *testing.T) {
-	rt := loadHookRuntime(t, v2GameJS)
+func TestContract_FullLifecycle(t *testing.T) {
+	rt := loadHookRuntime(t, testGameJS)
 	if rt.ctxObj == nil {
 		t.Fatal("ctxObj should be built during extractGameObject")
 	}
@@ -125,7 +124,7 @@ func TestV2Contract_FullLifecycle(t *testing.T) {
 		t.Error("leave event should have removed p2")
 	}
 
-	// statusBar: v2 signature (state, me). me falls back to state.players[pid].
+	// statusBar: (state, me). me falls back to state.players[pid].
 	status := rt.StatusBar("p1")
 	if !strings.Contains(status, "me=p1") {
 		t.Errorf("statusBar should resolve me from state.players, got %q", status)
@@ -134,12 +133,12 @@ func TestV2Contract_FullLifecycle(t *testing.T) {
 		t.Errorf("statusBar should read state.score, got %q", status)
 	}
 
-	// renderCanvas: v2 (state, me, canvas). Should not throw on ctx leak.
+	// renderCanvas: (state, me, canvas). Should not throw on ctx leak.
 	if data := rt.RenderCanvas("p1", 40, 30); data == nil {
 		t.Error("RenderCanvas returned nil — JS error? check log")
 	}
 
-	// renderAscii: v2 (state, me, cells). cells.ATTR_BOLD should be present.
+	// renderAscii: (state, me, cells). cells.ATTR_BOLD should be present.
 	buf := render.NewImageBuffer(10, 5)
 	rt.RenderAscii(buf, "p1", 0, 0, 10, 5)
 	// @ written at 0,0?
@@ -154,8 +153,8 @@ func TestV2Contract_FullLifecycle(t *testing.T) {
 // Default resolveMe always returns at least {id: pid} so render is called
 // even for players not explicitly registered. Games that want the "not
 // ready" splash override resolveMe to return null themselves.
-func TestV2Contract_UnregisteredPlayer_GetsMinimalMe(t *testing.T) {
-	rt := loadHookRuntime(t, v2GameJS)
+func TestContract_UnregisteredPlayer_GetsMinimalMe(t *testing.T) {
+	rt := loadHookRuntime(t, testGameJS)
 	rt.Load(nil)
 	rt.Begin()
 
@@ -167,12 +166,11 @@ func TestV2Contract_UnregisteredPlayer_GetsMinimalMe(t *testing.T) {
 
 // Games can provide their own resolveMe to support non-players[pid] layouts
 // (orbits-style with per-team cameras, etc.).
-func TestV2Contract_CustomResolveMe(t *testing.T) {
+func TestContract_CustomResolveMe(t *testing.T) {
 	rt := loadHookRuntime(t, `
 		Game = {
 			gameName: "t",
 			teamRange: { min: 1, max: 2 },
-			contract: 2,
 			init: function(ctx) {
 				return { cameras: { 0: { zoom: 1 }, 1: { zoom: 2 } }, playerTeams: { p1: 1 } };
 			},

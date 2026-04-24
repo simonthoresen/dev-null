@@ -163,7 +163,7 @@ func TestGameLifecycle(t *testing.T) {
 	s.state.RUnlock()
 	game.Update(0.1)
 
-	// Trigger game over via input — v2 queues events; the next Update()
+	// Trigger game over via input — events are queued; the next Update()
 	// drains them and runs the handler that calls ctx.gameOver.
 	game.OnInput("p1", "space")
 	game.Update(0.1)

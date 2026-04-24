@@ -1,11 +1,10 @@
-// example.js — demonstrates the dev-null game lifecycle (v2 contract).
+// example.js — demonstrates the dev-null game lifecycle.
 // Load with: /game load example
 
 var GAME_DURATION = 30;
 
 var Game = {
     gameName: "Example Arena",
-    contract: 2,
     teamRange: { min: 1, max: 4 },
 
     splashScreen: "=== EXAMPLE ARENA ===\n"

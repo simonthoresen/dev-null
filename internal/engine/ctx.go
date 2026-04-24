@@ -9,15 +9,11 @@ import (
 	"dev-null/internal/domain"
 )
 
-// buildCtxObject constructs the server-only ctx object passed to v2 lifecycle
+// buildCtxObject constructs the server-only ctx object passed to lifecycle
 // hooks (init, begin, update, end). All side-effecty framework capabilities
-// that v1 exposed as globals (chat, midi*, gameOver, showDialog, log,
-// registerCommand, …) live here. Render hooks never receive ctx, so render
-// calling any of these throws a TypeError — impurity becomes a type error
-// instead of a silent divergence.
-//
-// The logic mirrors v1's registerGlobals entries faithfully; when v1 is
-// retired (task 13) the duplication goes away along with the globals.
+// (chat, midi*, gameOver, showDialog, log, registerCommand, …) live here.
+// Render hooks never receive ctx, so render calling any of these throws a
+// TypeError — impurity becomes a type error instead of a silent divergence.
 func (r *Runtime) buildCtxObject() *goja.Object {
 	ctx := r.vm.NewObject()
 
@@ -36,7 +32,7 @@ func (r *Runtime) buildCtxObject() *goja.Object {
 		select {
 		case r.chatCh <- domain.Message{Text: msg}:
 		default:
-			slog.Warn("v2 ctx.chat channel full", "text", msg)
+			slog.Warn("ctx.chat channel full", "text", msg)
 		}
 	})
 	ctx.Set("chatPlayer", func(playerID, msg string) {
@@ -46,7 +42,7 @@ func (r *Runtime) buildCtxObject() *goja.Object {
 		select {
 		case r.chatCh <- domain.Message{Text: msg, IsPrivate: true, ToID: playerID}:
 		default:
-			slog.Warn("v2 ctx.chatPlayer channel full")
+			slog.Warn("ctx.chatPlayer channel full")
 		}
 	})
 
@@ -130,7 +126,7 @@ func (r *Runtime) buildCtxObject() *goja.Object {
 		return goja.Undefined()
 	})
 
-	// --- teams snapshot (read-only; v2 games typically read state.teams instead) ---
+	// --- teams snapshot (read-only; games read state.teams instead) ---
 	ctx.Set("teams", func() []map[string]any {
 		return cloneTeams(r.cachedTeams)
 	})
@@ -237,7 +233,7 @@ func (r *Runtime) buildCtxObject() *goja.Object {
 		}
 		handler, _ := goja.AssertFunction(specObj.Get("handler"))
 		if name == "" || handler == nil {
-			slog.Warn("v2 ctx.registerCommand: name and handler required")
+			slog.Warn("ctx.registerCommand: name and handler required")
 			return goja.Undefined()
 		}
 		cmd := domain.Command{
@@ -258,7 +254,7 @@ func (r *Runtime) buildCtxObject() *goja.Object {
 					r.vm.ToValue(jsArgs),
 				)
 				if err != nil {
-					slog.Error("v2 JS command handler error", "name", name, "error", err)
+					slog.Error("JS command handler error", "name", name, "error", err)
 					cctx.Reply(fmt.Sprintf("Command error: %v", err))
 				}
 			},
@@ -274,8 +270,7 @@ func (r *Runtime) buildCtxObject() *goja.Object {
 
 	// --- ephemeral events (stub; ns;event pipe lands in a follow-up) ---
 	ctx.Set("emit", func(call goja.FunctionCall) goja.Value {
-		// Queued for broadcast when the ns;event pipe lands. For now we drop
-		// silently; v2 games written against this API are forward-compatible.
+		// Queued for broadcast when the ns;event pipe lands. For now we drop silently.
 		_ = call
 		return goja.Undefined()
 	})
@@ -291,7 +286,7 @@ func (r *Runtime) sendMidiBroadcast(ev domain.MidiEvent) {
 	select {
 	case r.chatCh <- domain.Message{MidiEvents: []domain.MidiEvent{ev}}:
 	default:
-		slog.Warn("v2 ctx midi broadcast channel full")
+		slog.Warn("ctx midi broadcast channel full")
 	}
 }
 
@@ -303,7 +298,7 @@ func (r *Runtime) sendMidiPlayer(pid string, ev domain.MidiEvent) {
 	select {
 	case r.chatCh <- domain.Message{MidiEvents: []domain.MidiEvent{ev}, IsPrivate: true, ToID: pid}:
 	default:
-		slog.Warn("v2 ctx midi player channel full")
+		slog.Warn("ctx midi player channel full")
 	}
 }
 

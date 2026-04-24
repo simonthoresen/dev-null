@@ -1,8 +1,5 @@
 // invaders.js — Multiplayer Space Invaders for dev-null
 // Load with: /game load invaders
-//
-// Game contract v2. All mutable game data lives in state; helper functions
-// take state as their first parameter.
 
 // ── Constants ──────────────────────────────────────────────────────────────
 var CRED  = "#AA0000";
@@ -657,10 +654,8 @@ function render(state, me, cells) {
     }
 }
 
-// ── Contract v2 ───────────────────────────────────────────────────────────
 var Game = {
     gameName: "Space Invaders",
-    contract: 2,
     teamRange: { min: 1, max: 6 },
 
     init: function(ctx) {

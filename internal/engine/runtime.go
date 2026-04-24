@@ -92,7 +92,6 @@ type Runtime struct {
 	commandBarFn   goja.Callable // commandBar(state, me) -> string
 	resolveMeFn    goja.Callable // optional: resolveMe(state, playerID) -> me
 
-	// Runtime scaffolding for the v2 contract.
 	ctxObj        *goja.Object     // prebuilt ctx passed to server-side hooks
 	pendingEvents []map[string]any // queued inputs/joins/leaves drained each Update
 
@@ -205,8 +204,7 @@ func (r *Runtime) End() {
 	_, _ = r.endFn(goja.Undefined(), r.currentState(), r.ctxObj)
 }
 
-// currentState reads Game.state from the VM without locking. Callers must
-// hold r.mu. Used by v2 dispatch when invoking state-taking hooks.
+// currentState reads Game.state from the VM without locking. Callers must hold r.mu.
 func (r *Runtime) currentState() goja.Value {
 	gameVal := r.vm.Get("Game")
 	if gameVal == nil || goja.IsUndefined(gameVal) || goja.IsNull(gameVal) {
@@ -234,9 +232,6 @@ func (r *Runtime) extractGameObject() error {
 		return fmt.Errorf("'Game' is not an object")
 	}
 
-	// Core v2 hooks. All games use the v2 contract: init(ctx) builds state;
-	// update/render/status/commandBar take (state, me, …); input/join/leave
-	// arrive as events in update; side effects flow through ctx.
 	r.updateFn       = extractCallable(gameObj, "update")
 	r.renderAsciiFn  = extractCallable(gameObj, "renderAscii")
 	r.renderCanvasFn = extractCallable(gameObj, "renderCanvas")
@@ -376,10 +371,10 @@ func (r *Runtime) injectStateTime() {
 	}
 }
 
-// injectStateTeams writes the cached teams onto the live Game.state so v2
-// game code running on the server sees state.teams during begin/update
-// without having to call teams(). Export-time overlay in State() handles
-// the client-synced snapshot; this handles the server-live object.
+// injectStateTeams writes the cached teams onto the live Game.state so
+// game code on the server sees state.teams during begin/update without
+// having to call teams(). Export-time overlay in State() handles the
+// client-synced snapshot; this handles the server-live object.
 // Must be called with r.mu held. No-op when no teams are cached yet.
 func (r *Runtime) injectStateTeams() {
 	if r.cachedTeams == nil {
@@ -437,7 +432,7 @@ func (r *Runtime) RenderAscii(buf *render.ImageBuffer, playerID string, x, y, wi
 	}
 }
 
-// resolveMe produces the "me" value passed to v2 render hooks. Prefers the
+// resolveMe produces the "me" value passed to render hooks. Prefers the
 // game-defined resolveMe hook; otherwise falls back to state.players[pid].
 // Returns goja undefined when me can't be resolved, signalling the framework
 // to draw the not-ready splash instead of invoking render.
@@ -447,7 +442,7 @@ func (r *Runtime) resolveMe(playerID string) goja.Value {
 	if r.resolveMeFn != nil {
 		me, err := r.resolveMeFn(goja.Undefined(), state, r.vm.ToValue(playerID))
 		if err != nil {
-			slog.Error("v2 JS resolveMe error", "error", err)
+			slog.Error("JS resolveMe error", "error", err)
 			return goja.Undefined()
 		}
 		if me == nil || goja.IsNull(me) {
@@ -740,7 +735,7 @@ func (r *Runtime) GameOverResults() []domain.GameResult {
 // so the game's own reads of Game.state (during update/render on the
 // server) are unaffected. Games that author a key named "teams" in their
 // own state will lose it here — that's the contract for framework-reserved
-// keys and documented in game-contract-v2.md.
+// keys and documented in game-contract.md.
 func (r *Runtime) State() any {
 	r.mu.Lock()
 	defer r.mu.Unlock()
