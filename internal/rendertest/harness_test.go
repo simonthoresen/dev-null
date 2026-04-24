@@ -144,6 +144,7 @@ func (a *mockChromeAPI) UpdatePlayerGameViewport(string, int, int)          {}
 func (a *mockChromeAPI) GetPreRenderedFrame(string, int, int) (*render.ImageBuffer, *domain.WidgetNode, string, func()) {
 	return nil, nil, "", nil
 }
+func (a *mockChromeAPI) StateSnapshot() *domain.StateSnapshot { return nil }
 
 // ─── Mock game ───────────────────────────────────────────────────────────────
 

@@ -62,6 +62,17 @@ type GameAsset struct {
 	Data []byte // raw file bytes
 }
 
+// StateSnapshot is a per-tick marshaled view of Game.state that the server
+// produces once and every local-rendering player reads. Full is the baseline
+// JSON sent on a session's first broadcast; Keys holds one entry per
+// top-level state key so each player can independently diff against its own
+// last-sent set. Keys stay byte-stable once the tick moves on, so Models may
+// hold references across frames without copying.
+type StateSnapshot struct {
+	Full []byte
+	Keys map[string][]byte
+}
+
 // GamePhase represents the current phase of the game lifecycle.
 type GamePhase int
 

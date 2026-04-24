@@ -5,9 +5,40 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
+	"sort"
 	"strings"
 	"testing"
+
+	"dev-null/internal/domain"
 )
+
+// buildSnapshot mirrors the server's refreshStateSnapshot so tests can feed
+// raw state objects into the Model-side diff path. Keeping this shape close
+// to the real producer guards against drift between server and chrome.
+func buildSnapshot(stateObj any) *domain.StateSnapshot {
+	full, err := json.Marshal(stateObj)
+	if err != nil {
+		return nil
+	}
+	m, ok := stateObj.(map[string]any)
+	if !ok {
+		return &domain.StateSnapshot{Full: full, Keys: map[string][]byte{"_root": full}}
+	}
+	keys := make(map[string][]byte, len(m))
+	ordered := make([]string, 0, len(m))
+	for k := range m {
+		ordered = append(ordered, k)
+	}
+	sort.Strings(ordered)
+	for _, k := range ordered {
+		data, err := json.Marshal(m[k])
+		if err != nil {
+			continue
+		}
+		keys[k] = data
+	}
+	return &domain.StateSnapshot{Full: full, Keys: keys}
+}
 
 // decodeOSC unpacks one of our ns;state / ns;state-patch OSC strings back
 // into its JSON payload so tests can assert on what went on the wire.
@@ -64,7 +95,7 @@ func TestEncodeStateBroadcast_FirstSendIsBaseline(t *testing.T) {
 		"map":     []any{0.0, 1.0, 0.0},
 	}
 
-	osc := m.encodeStateBroadcast(state)
+	osc := m.encodeStateBroadcast(buildSnapshot(state))
 	if osc == "" {
 		t.Fatal("expected non-empty broadcast on first send")
 	}
@@ -84,8 +115,8 @@ func TestEncodeStateBroadcast_NoChangeEmitsNothing(t *testing.T) {
 	m := &Model{}
 	state := map[string]any{"k": 1.0}
 
-	_ = m.encodeStateBroadcast(state)          // baseline
-	osc := m.encodeStateBroadcast(state)       // identical
+	_ = m.encodeStateBroadcast(buildSnapshot(state))          // baseline
+	osc := m.encodeStateBroadcast(buildSnapshot(state))       // identical
 	if osc != "" {
 		t.Fatalf("unchanged state should not broadcast, got %q", osc)
 	}
@@ -98,13 +129,13 @@ func TestEncodeStateBroadcast_OnlyChangedKeysInPatch(t *testing.T) {
 		"map":     []any{0.0, 1.0, 0.0},
 		"time":    0.1,
 	}
-	_ = m.encodeStateBroadcast(state) // baseline
+	_ = m.encodeStateBroadcast(buildSnapshot(state)) // baseline
 
 	// Mutate only "players" and "time"; "map" stays identical.
 	state["players"] = map[string]any{"p1": map[string]any{"x": 2.0}}
 	state["time"] = 0.2
 
-	osc := m.encodeStateBroadcast(state)
+	osc := m.encodeStateBroadcast(buildSnapshot(state))
 	if osc == "" {
 		t.Fatal("expected patch broadcast for changed keys")
 	}
@@ -123,10 +154,10 @@ func TestEncodeStateBroadcast_OnlyChangedKeysInPatch(t *testing.T) {
 func TestEncodeStateBroadcast_RemovedKeyBecomesNull(t *testing.T) {
 	m := &Model{}
 	state := map[string]any{"a": 1.0, "b": 2.0}
-	_ = m.encodeStateBroadcast(state)
+	_ = m.encodeStateBroadcast(buildSnapshot(state))
 
 	state = map[string]any{"a": 1.0} // "b" removed
-	osc := m.encodeStateBroadcast(state)
+	osc := m.encodeStateBroadcast(buildSnapshot(state))
 	patch := decodeOSC(t, osc, "state-patch")
 	if v, ok := patch["b"]; !ok || v != nil {
 		t.Errorf("expected b:null in patch, got %v", patch)
@@ -142,15 +173,15 @@ func TestEncodeStateBroadcast_ClockOnlyPatchIsSuppressed(t *testing.T) {
 		"_gameTime":      0.0,
 		"players": map[string]any{"p1": map[string]any{"x": 1.0}},
 	}
-	_ = m.encodeStateBroadcast(state) // baseline
+	_ = m.encodeStateBroadcast(buildSnapshot(state)) // baseline
 
 	// Bump only the clock — should produce no broadcast.
 	state["_gameTime"] = 0.1
-	if osc := m.encodeStateBroadcast(state); osc != "" {
+	if osc := m.encodeStateBroadcast(buildSnapshot(state)); osc != "" {
 		t.Fatalf("clock-only change should be suppressed, got %q", osc)
 	}
 	state["_gameTime"] = 0.2
-	if osc := m.encodeStateBroadcast(state); osc != "" {
+	if osc := m.encodeStateBroadcast(buildSnapshot(state)); osc != "" {
 		t.Fatalf("repeated clock-only change should still be suppressed, got %q", osc)
 	}
 
@@ -158,7 +189,7 @@ func TestEncodeStateBroadcast_ClockOnlyPatchIsSuppressed(t *testing.T) {
 	// current _t (so the client can re-snap and detect drift).
 	state["_gameTime"] = 0.3
 	state["players"] = map[string]any{"p1": map[string]any{"x": 2.0}}
-	osc := m.encodeStateBroadcast(state)
+	osc := m.encodeStateBroadcast(buildSnapshot(state))
 	if osc == "" {
 		t.Fatal("expected patch when a non-clock key changes")
 	}
@@ -175,16 +206,16 @@ func TestEncodeStateBroadcast_NonMapStateRoundtrips(t *testing.T) {
 	m := &Model{}
 	// Some games might stash state as a scalar/array at the top level; the
 	// transport shouldn't panic.
-	osc := m.encodeStateBroadcast([]any{1.0, 2.0, 3.0})
+	osc := m.encodeStateBroadcast(buildSnapshot([]any{1.0, 2.0, 3.0}))
 	if osc == "" {
 		t.Fatal("scalar state should still send baseline")
 	}
 	// Unchanged on second send.
-	if again := m.encodeStateBroadcast([]any{1.0, 2.0, 3.0}); again != "" {
+	if again := m.encodeStateBroadcast(buildSnapshot([]any{1.0, 2.0, 3.0})); again != "" {
 		t.Errorf("unchanged scalar state should not rebroadcast, got %q", again)
 	}
 	// Changed scalar produces a patch.
-	osc = m.encodeStateBroadcast([]any{1.0, 2.0, 4.0})
+	osc = m.encodeStateBroadcast(buildSnapshot([]any{1.0, 2.0, 4.0}))
 	if osc == "" {
 		t.Fatal("changed scalar state should produce a patch")
 	}

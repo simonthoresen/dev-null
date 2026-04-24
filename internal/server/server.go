@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -78,6 +81,11 @@ type Server struct {
 	// before broadcasting TickMsg, so player View() calls just blit the result.
 	renderCaches   map[string]*playerRenderCache
 	renderCachesMu sync.RWMutex
+
+	// Per-tick marshaled Game.state snapshot. Refreshed once per tick by the
+	// tick goroutine and read by every local-rendering player during View(),
+	// so N players no longer each re-marshal the same state N times.
+	stateSnapshot atomic.Pointer[domain.StateSnapshot]
 }
 
 // playerRenderCache holds the most recently pre-rendered game frame for one player.
@@ -452,6 +460,10 @@ func (a *Server) runTicker(ctx context.Context) {
 			// By completing before broadcastMsg, View() only needs a fast buffer blit.
 			a.preRenderAllPlayers(game, phase)
 
+			// Marshal Game.state once per tick. Every local-rendering player
+			// consumes the same snapshot from View() instead of re-marshaling.
+			a.refreshStateSnapshot(game, phase)
+
 			a.broadcastMsg(domain.TickMsg{N: n})
 
 			// Check if JS called gameOver().
@@ -544,6 +556,76 @@ func (a *Server) preRenderAllPlayers(game domain.Game, phase domain.GamePhase) {
 		c.status = game.StatusBar(v.id)
 		c.mu.Unlock()
 	}
+}
+
+// refreshStateSnapshot marshals the active game's Game.state into a shared
+// per-tick snapshot. Only marshals keys whose JSON bytes changed since the
+// previous snapshot — unchanged keys reuse their backing slices, so Models
+// holding references through diff logic continue to compare by bytes.Equal
+// correctly across ticks.
+func (a *Server) refreshStateSnapshot(game domain.Game, phase domain.GamePhase) {
+	if game == nil || phase != domain.PhasePlaying {
+		a.stateSnapshot.Store(nil)
+		return
+	}
+	srt, ok := game.(engine.ScriptRuntime)
+	if !ok {
+		a.stateSnapshot.Store(nil)
+		return
+	}
+	stateObj := srt.State()
+	if stateObj == nil {
+		a.stateSnapshot.Store(nil)
+		return
+	}
+
+	full, err := json.Marshal(stateObj)
+	if err != nil {
+		a.stateSnapshot.Store(nil)
+		return
+	}
+
+	m, isMap := stateObj.(map[string]any)
+	if !isMap {
+		a.stateSnapshot.Store(&domain.StateSnapshot{
+			Full: full,
+			Keys: map[string][]byte{"_root": full},
+		})
+		return
+	}
+
+	// Reuse the previous snapshot's byte slices for keys whose marshaled
+	// form is unchanged. Keeps allocations proportional to the churning
+	// subset of the state.
+	prev := a.stateSnapshot.Load()
+	keys := make(map[string][]byte, len(m))
+	ordered := make([]string, 0, len(m))
+	for k := range m {
+		ordered = append(ordered, k)
+	}
+	sort.Strings(ordered)
+	for _, k := range ordered {
+		data, err := json.Marshal(m[k])
+		if err != nil {
+			continue
+		}
+		if prev != nil {
+			if old, ok := prev.Keys[k]; ok && bytes.Equal(old, data) {
+				keys[k] = old
+				continue
+			}
+		}
+		keys[k] = data
+	}
+
+	a.stateSnapshot.Store(&domain.StateSnapshot{Full: full, Keys: keys})
+}
+
+// StateSnapshot returns the most recently marshaled Game.state, or nil when
+// no game is playing. Returned pointers are immutable — the tick goroutine
+// publishes a new pointer rather than mutating in place.
+func (a *Server) StateSnapshot() *domain.StateSnapshot {
+	return a.stateSnapshot.Load()
 }
 
 func (a *Server) uptime() string {

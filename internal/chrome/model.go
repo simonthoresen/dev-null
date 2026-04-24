@@ -53,6 +53,11 @@ type ServerAPI interface {
 	// the cached frame (caller must call the returned release func when done blitting).
 	UpdatePlayerGameViewport(playerID string, gameW, gameH int)
 	GetPreRenderedFrame(playerID string, expectW, expectH int) (buf *render.ImageBuffer, ncTree *domain.WidgetNode, status string, release func())
+
+	// StateSnapshot returns the most recent per-tick marshaled Game.state, or
+	// nil when no game is playing. Each local-rendering player diffs this
+	// against its own last-sent set in encodeStateBroadcast.
+	StateSnapshot() *domain.StateSnapshot
 }
 
 // lobbyTeamPanelW is the fixed width of the team panel in the lobby.

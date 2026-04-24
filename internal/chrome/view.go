@@ -146,11 +146,7 @@ func (m *Model) View() tea.View {
 			// is the full baseline; subsequent ones are depth-1 merge patches
 			// containing only the top-level keys whose JSON bytes changed.
 			if isLocal && phase == domain.PhasePlaying {
-				var stateObj any
-				if srt, ok := game.(engine.ScriptRuntime); ok {
-					stateObj = srt.State()
-				}
-				if osc := m.encodeStateBroadcast(stateObj); osc != "" {
+				if osc := m.encodeStateBroadcast(m.api.StateSnapshot()); osc != "" {
 					oscData += osc
 				}
 			}
