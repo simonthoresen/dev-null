@@ -3,6 +3,7 @@ package chrome
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -16,6 +17,8 @@ import (
 func (m *Model) View() tea.View {
 	console.EnterRenderPath()
 	defer console.LeaveRenderPath()
+	viewStart := time.Now()
+	defer func() { m.api.CountView(time.Since(viewStart)) }()
 
 	// Set monochrome on all theme layers so widgets use text cursor glyphs
 	// (►/›) instead of relying on background-color highlighting alone.
@@ -319,7 +322,9 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 			if inner != nil {
 				inner(gbuf, x, y, w, h)
 			}
+			t0 := time.Now()
 			img := game.RenderCanvasImage(m.playerID, w*2, h*4)
+			m.api.CountCanvasRender(time.Since(t0))
 			if img != nil {
 				render.ImageToQuadrants(img, gbuf, x, y, w, h)
 			}

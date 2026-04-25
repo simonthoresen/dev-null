@@ -86,6 +86,8 @@ type Server struct {
 	// tick goroutine and read by every local-rendering player during View(),
 	// so N players no longer each re-marshal the same state N times.
 	stateSnapshot atomic.Pointer[domain.StateSnapshot]
+
+	metrics metrics
 }
 
 // playerRenderCache holds the most recently pre-rendered game frame for one player.
@@ -435,6 +437,7 @@ func (a *Server) runTicker(ctx context.Context) {
 		case <-repaintTicker.C:
 			a.broadcastRepaint()
 		case <-ticker.C:
+			tickStart := time.Now()
 			a.state.Lock()
 			a.state.TickN++
 			a.state.ElapsedSec = float64(a.state.TickN) * a.tickInterval.Seconds()
@@ -451,23 +454,34 @@ func (a *Server) runTicker(ctx context.Context) {
 				dt := now.Sub(a.lastUpdate).Seconds()
 				a.lastUpdate = now
 				a.lastUpdateMu.Unlock()
+				updateStart := time.Now()
 				game.Update(dt)
+				a.metrics.updateDurationNs.Add(uint64(time.Since(updateStart).Nanoseconds()))
 			}
 
 			// Pre-render game frames for all playing players sequentially.
 			// This moves JS render calls out of 16 concurrent player goroutines
 			// (where they serialize on Runtime.mu) into a single ordered pass here.
 			// By completing before broadcastMsg, View() only needs a fast buffer blit.
+			preRenderStart := time.Now()
 			a.preRenderAllPlayers(game, phase)
+			a.metrics.preRenderNs.Add(uint64(time.Since(preRenderStart).Nanoseconds()))
 
 			// Marshal Game.state once per tick. Every local-rendering player
 			// consumes the same snapshot from View() instead of re-marshaling.
+			snapStart := time.Now()
 			a.refreshStateSnapshot(game, phase)
+			a.metrics.snapshotNs.Add(uint64(time.Since(snapStart).Nanoseconds()))
 
+			bcStart := time.Now()
 			a.broadcastMsg(domain.TickMsg{N: n})
+			a.metrics.broadcastNs.Add(uint64(time.Since(bcStart).Nanoseconds()))
 
 			// Check if JS called gameOver().
 			a.checkGameOver()
+
+			a.metrics.tickCount.Add(1)
+			a.metrics.tickDurationNs.Add(uint64(time.Since(tickStart).Nanoseconds()))
 		}
 	}
 }

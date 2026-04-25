@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -23,6 +24,11 @@ type ServerAPI interface {
 	Clock() domain.Clock
 	DataDir() string
 	Uptime() string
+
+	// Profiling counters — fed from the per-player render path so the
+	// profile-load harness can attribute time without scraping pprof.
+	CountView(d time.Duration)
+	CountCanvasRender(d time.Duration)
 
 	// Communication
 	BroadcastChat(msg domain.Message)

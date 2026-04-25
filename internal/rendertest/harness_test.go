@@ -145,6 +145,8 @@ func (a *mockChromeAPI) GetPreRenderedFrame(string, int, int) (*render.ImageBuff
 	return nil, nil, "", nil
 }
 func (a *mockChromeAPI) StateSnapshot() *domain.StateSnapshot { return nil }
+func (a *mockChromeAPI) CountView(time.Duration)               {}
+func (a *mockChromeAPI) CountCanvasRender(time.Duration)        {}
 
 // ─── Mock game ───────────────────────────────────────────────────────────────
 
