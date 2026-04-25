@@ -121,7 +121,7 @@ type Runtime struct {
 	SourceFiles []domain.GameSourceFile
 
 	// game object methods (nil if not defined)
-	initFn         goja.Callable // init(ctx) -> initial state (mandatory)
+	initFn         goja.Callable // init(ctx, savedState) -> initial state (mandatory)
 	updateFn       goja.Callable // update(state, dt, events, ctx)
 	renderAsciiFn  goja.Callable // renderAscii(state, me, cells)
 	renderCanvasFn goja.Callable // renderCanvas(state, me, canvas)
@@ -206,11 +206,11 @@ func LoadGame(path string, logFn func(string), chatCh chan domain.Message, clock
 	return rt, nil
 }
 
-// Load runs the game's init(ctx) hook and installs its return value as
-// Game.state. savedState is ignored here — resume lives on suspend/resume
-// hooks that receive the snapshot separately.
+// Load runs the game's init(ctx, savedState) hook and installs its return
+// value as Game.state. savedState is the JSON-decoded value previously
+// returned by unload() (or nil for the first ever load of a game). Suspend
+// resume is a separate path — it goes through Resume(sessionState) below.
 func (r *Runtime) Load(savedState any) {
-	_ = savedState
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer r.recoverJS("Load")
@@ -218,7 +218,10 @@ func (r *Runtime) Load(savedState any) {
 	r.watchdog.arm("Load")
 	defer r.watchdog.disarm()
 
-	res, err := r.initFn(goja.Undefined(), r.ctxObj)
+	// goja.ToValue(nil) yields goja.Null(), so games see `savedState === null`
+	// on the first load and a real value once unload() has run at least once.
+	saved := r.vm.ToValue(savedState)
+	res, err := r.initFn(goja.Undefined(), r.ctxObj, saved)
 	if err == nil && res != nil && !goja.IsUndefined(res) && !goja.IsNull(res) {
 		if gameObj := r.vm.Get("Game").ToObject(r.vm); gameObj != nil {
 			gameObj.Set("state", res)

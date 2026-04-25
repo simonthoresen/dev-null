@@ -20,7 +20,10 @@ Game = {
     teamRange: { min: 1, max: N },
 
     // One-time setup on the server. Returns initial state.
-    init: function(ctx) { … return initialState; },
+    // savedState is the value previously returned by unload(), or null
+    // on the first ever load. This is the cross-session persistence
+    // hook — seed high scores, unlocks, etc. from it.
+    init: function(ctx, savedState) { … return initialState; },
 
     // Server-only. May mutate state, may side-effect via ctx.
     // events is a flat, ordered list this tick; input/join/leave/tick arrive here.

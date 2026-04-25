@@ -90,8 +90,17 @@ var Game = {
     // Called once on game load. Returns the initial state object; the framework
     // installs it as Game.state. Mandatory. Teams are NOT yet assembled here —
     // state.teams is first valid in begin().
-    init: function(ctx) {
-        return { players: {}, score: 0, elapsed: 0 };
+    //
+    // savedState is the value previously returned by unload(), or null on the
+    // very first load of this game. Seed persistent fields (high scores,
+    // unlocks) from it.
+    init: function(ctx, savedState) {
+        return {
+            players: {},
+            score:   0,
+            elapsed: 0,
+            highScore: (savedState && savedState.highScore) || 0
+        };
     },
 
     // Called after teams are assembled and the starting screen closes. Use this
@@ -457,7 +466,7 @@ PLAYING (game viewport + chat)
 LOBBY (chat history preserved, ranked results posted as a system message)
 ```
 
-- **Load**: Framework snapshots teams, calls `init(ctx)`, installs the return value as `Game.state`. On resume, `init` is still called (for initial state), then `resume(sessionState)` runs in place of `begin`.
+- **Load**: Framework snapshots teams, reads any persistent state from `dist/state/<gameName>.json`, calls `init(ctx, savedState)`, installs the return value as `Game.state`. On resume, `init` is still called (for initial state and persistent data), then `resume(sessionState)` runs in place of `begin`.
 - **Starting**: Framework renders the game name in figlet ASCII art centered in the viewport. The admin can press Enter to skip, or it auto-starts after 10s.
 - **Starting → Playing**: Framework injects `state.teams`, calls `begin(state, ctx)`.
 - **Playing**: `update(state, dt, events, ctx)` runs once per tick, followed by `renderAscii`/`renderCanvas`/`layout`/`statusBar`/`commandBar` per player.
@@ -496,21 +505,24 @@ The framework blocks loading if the lobby has too few or too many teams.
 
 Games use two separate hooks to persist different kinds of data:
 
-| Hook | Returns | Stored in | Called when |
-|------|---------|-----------|-------------|
-| `unload()` | **Persistent state** (high scores, unlocks) | `dist/state/<gameName>.json` | Game-over, `/game unload`, AND after `suspend()` during `/game suspend` |
-| `suspend()` | **Session state** (mid-game snapshot) | suspend save file | `/game suspend` only |
+| Hook | Returns | Stored in | Called when | Read back as |
+|------|---------|-----------|-------------|--------------|
+| `unload()` | **Persistent state** (high scores, unlocks) | `dist/state/<gameName>.json` | Game-over, `/game unload`, AND after `suspend()` during `/game suspend` | `init(ctx, savedState)` |
+| `suspend()` | **Session state** (mid-game snapshot) | suspend save file | `/game suspend` only | `resume(sessionState)` |
 
 Both hooks take no parameters; read from `Game.state` directly.
 
-> **Status note.** The current v2 contract writes `unload()`'s return value to disk but does not yet feed it back on the next load — the runtime's `Load` drops the saved-state parameter. Cross-session persistence is effectively a no-op in v2 until that plumbing is reconnected. Treat `unload()` as forward-looking: emit the right shape now so persistence works when the read path lands.
+**Persistent state** survives across all sessions. The framework writes `unload()`'s return value to disk on every game-over and feeds it back into `init(ctx, savedState)` on the next load. `savedState` is `null` on the very first load of a game.
 
-**Session state** is a mid-game snapshot stored in the suspend save file. It is received via `resume(sessionState)` when restoring from that save. This path works today.
+**Session state** is a mid-game snapshot stored in the suspend save file. It is received via `resume(sessionState)` when restoring from that save.
 
 ```js
 var Game = {
-    init: function(ctx) {
-        return { score: 0, highScore: 0 };
+    init: function(ctx, savedState) {
+        return {
+            score:     0,
+            highScore: (savedState && savedState.highScore) || 0
+        };
     },
 
     unload: function() {
@@ -546,9 +558,9 @@ Any playing game can be suspended — no opt-in flag is required.
 2. `unload()` runs, persistent state saved to `dist/state/<gameName>.json`.
 
 **On resume**:
-1. `init(ctx)` runs (same as a fresh load).
+1. `init(ctx, savedState)` runs with the persistent data the same as a fresh load.
 2. `resume(sessionState)` runs in place of `begin`, with the session snapshot.
-3. If `resume` is not defined, the framework falls back to `begin` (game starts fresh but module-level `var`s retain the persistent data you stashed there).
+3. If `resume` is not defined, the framework falls back to `begin` — persistent state is still seeded by `init`, but the mid-game session snapshot is lost.
 
 ---
 

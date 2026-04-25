@@ -164,6 +164,51 @@ func TestContract_UnregisteredPlayer_GetsMinimalMe(t *testing.T) {
 	}
 }
 
+// init(ctx, savedState) receives the previous unload() return value on
+// subsequent loads. First-ever load passes null. This is the cross-session
+// persistence contract — high scores, unlocks, and similar long-lived data.
+func TestContract_InitReceivesSavedState(t *testing.T) {
+	rt := loadHookRuntime(t, `
+		var sawSaved = null;
+		Game = {
+			gameName: "t",
+			teamRange: { min: 1, max: 1 },
+			init: function(ctx, savedState) {
+				sawSaved = savedState;
+				return { highScore: (savedState && savedState.highScore) || 0 };
+			},
+			statusBar: function(state, me) {
+				return "saved=" + JSON.stringify(sawSaved) + " hs=" + state.highScore;
+			}
+		};
+	`)
+	// First load: savedState is null.
+	rt.Load(nil)
+	if got := rt.StatusBar("p1"); got != "saved=null hs=0" {
+		t.Errorf("first load should see null savedState, got %q", got)
+	}
+
+	// Subsequent load: framework hands the previous unload() value back.
+	rt2 := loadHookRuntime(t, `
+		var sawSaved = null;
+		Game = {
+			gameName: "t",
+			teamRange: { min: 1, max: 1 },
+			init: function(ctx, savedState) {
+				sawSaved = savedState;
+				return { highScore: (savedState && savedState.highScore) || 0 };
+			},
+			statusBar: function(state, me) {
+				return "saved=" + JSON.stringify(sawSaved) + " hs=" + state.highScore;
+			}
+		};
+	`)
+	rt2.Load(map[string]any{"highScore": 9000})
+	if got := rt2.StatusBar("p1"); got != `saved={"highScore":9000} hs=9000` {
+		t.Errorf("second load should see prior unload result, got %q", got)
+	}
+}
+
 // Games can provide their own resolveMe to support non-players[pid] layouts
 // (orbits-style with per-team cameras, etc.).
 func TestContract_CustomResolveMe(t *testing.T) {
