@@ -16,7 +16,7 @@ This creates a `DevNull` folder in your current directory containing everything 
 
 ```powershell
 cd DevNull
-.\start.ps1 --password yourpassword
+.\start-server.ps1 --password yourpassword
 ```
 
 The server prints an invite command that others can paste into any terminal to join.
