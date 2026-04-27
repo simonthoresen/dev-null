@@ -59,4 +59,12 @@ These files live next to (not inside) the `play\` runtime install, so they survi
 
 ## Write your own game
 
-See [API-REFERENCE.md](API-REFERENCE.md) for the full JavaScript API.
+Click **dev-null Create Games** on your desktop. First run installs the
+GitHub CLI + Copilot CLI, forks a [starter template](https://github.com/simonthoresen/dev-null-starter)
+to your account, clones it to `~/dev-null/create/`, and opens Copilot
+CLI in that folder. Run `.\play.ps1` in the create folder to test
+locally; push to GitHub and hand the raw URL to any dev-null server
+admin who can paste it into Games > Add.
+
+Full workflow: [AUTHORING.md](AUTHORING.md).
+JavaScript API surface: [API-REFERENCE.md](API-REFERENCE.md).

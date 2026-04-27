@@ -2,6 +2,8 @@
 
 This document explains how to write games for dev-null. Games are plain JavaScript files (ES5-compatible, no modules). Drop your file in `dist/games/`, or share it via URL — no build step required.
 
+See also: **[AUTHORING.md](AUTHORING.md)** for the end-to-end workflow (set up authoring, local test loop, push & share, get loaded by an admin).
+
 The contract is summarized in one page at [`docs/claude/game-contract.md`](docs/claude/game-contract.md); this file is the longer tutorial.
 
 ---
