@@ -87,6 +87,23 @@ func ConfigDir() string {
 	return filepath.Join(devNullRoot(), "config")
 }
 
+// InitFilePath returns the canonical location of an init / preference
+// file (e.g. "server.txt", "client.txt"): <ConfigDir>/<name>.
+func InitFilePath(name string) string {
+	return filepath.Join(ConfigDir(), name)
+}
+
+// LegacyInitFilePath returns the pre-relocation init-file path:
+// ~/.dev-null/<name>. Used for one-time migration from the old layout.
+// Returns "" if the user home dir cannot be determined.
+func LegacyInitFilePath(name string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".dev-null", name)
+}
+
 // InstallDir returns the directory containing the running executable.
 // When running via "go run" it falls back to ".".
 func InstallDir() string {

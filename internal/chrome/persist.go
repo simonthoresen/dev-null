@@ -6,18 +6,15 @@ import (
 	"path/filepath"
 	"strings"
 
+	"dev-null/internal/datadir"
 	"dev-null/internal/domain"
 )
 
-// persistClientConfig rewrites ~/.dev-null/client.txt so that all managed
+// persistClientConfig rewrites <ConfigDir>/client.txt so that all managed
 // command lines are replaced by a leading block that restores the current
 // selections. Other lines are preserved.
 func (m *Model) persistClientConfig() {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-	path := filepath.Join(home, ".dev-null", "client.txt")
+	path := datadir.InitFilePath("client.txt")
 	// Serialize the graphics mode as a command. Blocks is default — omit it.
 	var renderPref string
 	switch m.graphicsPref {

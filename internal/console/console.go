@@ -174,14 +174,13 @@ func NewModel(api ServerAPI, cancel context.CancelFunc, profile colorprofile.Pro
 	inputCtrl.OnSubmit = m.submitInput
 	inputCtrl.OnTab = m.tabComplete
 
-	// Load init commands from ~/.dev-null/server.txt if it exists.
-	if home, err := os.UserHomeDir(); err == nil {
-		if data, err := os.ReadFile(filepath.Join(home, ".dev-null", "server.txt")); err == nil {
-			for _, line := range strings.Split(string(data), "\n") {
-				line = strings.TrimSpace(line)
-				if line != "" && !strings.HasPrefix(line, "#") {
-					m.initCommands = append(m.initCommands, line)
-				}
+	// Load init commands from <ConfigDir>/server.txt; fall back to the
+	// legacy ~/.dev-null/server.txt and migrate it on first read.
+	if data, ok := readInitFile("server.txt"); ok {
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" && !strings.HasPrefix(line, "#") {
+				m.initCommands = append(m.initCommands, line)
 			}
 		}
 	}

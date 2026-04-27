@@ -128,9 +128,14 @@ function Test-TcpEndpoint {
     finally { if ($tcp) { try { $tcp.Close() } catch {} } }
 }
 
-# Read init commands from ~/.dev-null/client.txt if it exists (SSH fallback only).
+# Read init commands from <UserProfile>\dev-null\config\client.txt (new
+# canonical location); fall back to legacy ~/.dev-null/client.txt for
+# unmigrated installs. SSH fallback only — used to forward DEV_NULL_INIT.
 $devNullInit = ""
-$initFile = Join-Path $HOME ".dev-null" "client.txt"
+$initFile = Join-Path $env:USERPROFILE "dev-null\config\client.txt"
+if (-not (Test-Path $initFile)) {
+    $initFile = Join-Path $HOME ".dev-null\client.txt"
+}
 if (Test-Path $initFile) {
     $initContent = Get-Content $initFile -Raw -ErrorAction SilentlyContinue
     if ($initContent) {

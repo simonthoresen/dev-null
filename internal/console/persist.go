@@ -1,21 +1,44 @@
 package console
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"dev-null/internal/datadir"
 )
 
-// persistServerConfig rewrites ~/.dev-null/server.txt so that all
+// persistServerConfig rewrites <ConfigDir>/server.txt so that all
 // /theme-load, /plugin-load, and /shader-load lines are replaced by a leading
 // block that restores the current selections. Other lines are preserved.
 func (m *Model) persistServerConfig() {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
+	persistConfigFile(datadir.InitFilePath("server.txt"), m.themeName, m.pluginNames, m.shaderNames)
+}
+
+// readInitFile reads an init file by name (e.g. "server.txt"). Tries the
+// new <ConfigDir>/<name> first; if absent, falls back to the legacy
+// ~/.dev-null/<name> and copies it forward (one-time migration) so subsequent
+// writes don't lose its non-managed lines. Returns (contents, true) on success.
+func readInitFile(name string) ([]byte, bool) {
+	newPath := datadir.InitFilePath(name)
+	if data, err := os.ReadFile(newPath); err == nil {
+		return data, true
 	}
-	path := filepath.Join(home, ".dev-null", "server.txt")
-	persistConfigFile(path, m.themeName, m.pluginNames, m.shaderNames)
+	legacy := datadir.LegacyInitFilePath(name)
+	if legacy == "" {
+		return nil, false
+	}
+	data, err := os.ReadFile(legacy)
+	if err != nil {
+		return nil, false
+	}
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err == nil {
+		if err := os.WriteFile(newPath, data, 0o644); err == nil {
+			slog.Info("console: migrated legacy init file", "from", legacy, "to", newPath)
+		}
+	}
+	return data, true
 }
 
 // managedPrefixes are command prefixes managed by persistConfigFile.
