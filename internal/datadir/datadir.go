@@ -5,7 +5,7 @@
 //
 //	play\    runtime + bundled assets (the "data dir") — DefaultDataDir
 //	shared\  items downloaded via "Games > Add" — SharedDir
-//	make\    author's git repo (if present) — MakeDir
+//	create\  author's git repo (if present) — CreateDir
 //	config\  init / preference files — ConfigDir
 //
 // On first run or version upgrade, Bootstrap copies bundled assets
@@ -14,7 +14,7 @@
 //
 // Under "go run" (exe in a temp directory), DefaultDataDir falls back
 // to "." for development; the other three roots still resolve to
-// the user-level dev-null tree so personal config/make stay consistent
+// the user-level dev-null tree so personal config/create stay consistent
 // across modes.
 package datadir
 
@@ -63,10 +63,10 @@ func DefaultDataDir() string {
 	return filepath.Join(devNullRoot(), "play")
 }
 
-// MakeDir returns the make subdir (the author's git repo) if it
+// CreateDir returns the create subdir (the author's git repo) if it
 // exists, else "". Pure read; never creates the directory.
-func MakeDir() string {
-	p := filepath.Join(devNullRoot(), "make")
+func CreateDir() string {
+	p := filepath.Join(devNullRoot(), "create")
 	if info, err := os.Stat(p); err == nil && info.IsDir() {
 		return p
 	}
