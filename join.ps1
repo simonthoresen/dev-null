@@ -1,3 +1,8 @@
+[CmdletBinding()]
+param(
+    [switch]$NoInstall
+)
+
 $ErrorActionPreference = 'Stop'
 
 # The NS environment variable contains a base64url-encoded binary token with
@@ -65,26 +70,34 @@ if ([string]::IsNullOrWhiteSpace($name)) {
     $name = $env:USERNAME
 }
 
-# Locate the dev-null install directory by checking known locations.
+# Locate the dev-null install directory by checking known locations,
+# preferring the new ~/dev-null/play/ layout and falling back to legacy paths.
 function Find-InstallDir {
     # 1. PATH
     $cmd = Get-Command "dev-null-client.exe" -ErrorAction SilentlyContinue
     if ($cmd) { return Split-Path $cmd.Source -Parent }
 
-    # 2. Desktop shortcut
-    $shortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "DevNull Client.lnk"
-    if (Test-Path $shortcut) {
-        $shell = New-Object -ComObject WScript.Shell
-        $lnk   = $shell.CreateShortcut($shortcut)
-        if ($lnk.Arguments -match '-File\s+"([^"]+)"') {
-            $dir = Split-Path $Matches[1] -Parent
-            if (Test-Path (Join-Path $dir "dev-null-client.exe")) { return $dir }
+    # 2. Desktop shortcut (new "dev-null Client" name first, then legacy "DevNull Client")
+    foreach ($lnkName in @("dev-null Client.lnk", "DevNull Client.lnk")) {
+        $shortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) $lnkName
+        if (Test-Path $shortcut) {
+            $shell = New-Object -ComObject WScript.Shell
+            $lnk   = $shell.CreateShortcut($shortcut)
+            if ($lnk.Arguments -match '-File\s+"([^"]+)"') {
+                $dir = Split-Path $Matches[1] -Parent
+                if (Test-Path (Join-Path $dir "dev-null-client.exe")) { return $dir }
+            }
         }
     }
 
-    # 3. %LocalAppData%\DevNull  (default install location)
-    $candidate = Join-Path $env:LocalAppData "DevNull"
-    if (Test-Path (Join-Path $candidate "dev-null-client.exe")) { return $candidate }
+    # 3. Default install locations: new path first, legacy paths after.
+    foreach ($candidate in @(
+        (Join-Path $env:USERPROFILE "dev-null\play"),
+        (Join-Path $env:LOCALAPPDATA "dev-null"),
+        (Join-Path $env:LOCALAPPDATA "DevNull")
+    )) {
+        if (Test-Path (Join-Path $candidate "dev-null-client.exe")) { return $candidate }
+    }
 
     return $null
 }
@@ -97,12 +110,15 @@ if ($installDir) {
     $clientExe = Join-Path $installDir "dev-null-client.exe"
     $s = Join-Path $installDir "start-client.ps1"
     if (Test-Path $s) { $startScript = $s }
+} elseif ($NoInstall) {
+    Write-Host ""
+    Write-Host "dev-null client is not installed; -NoInstall set, falling back to ssh." -ForegroundColor Yellow
 } else {
     Write-Host ""
     Write-Host "dev-null client is not installed." -ForegroundColor Yellow
     $answer = Read-Host "Install it now? [Y/n]"
     if ($answer -eq '' -or $answer -match '^[Yy]') {
-        $installDir = Join-Path $env:LocalAppData "DevNull"
+        $installDir = Join-Path $env:USERPROFILE "dev-null\play"
         Write-Host "Installing to $installDir ..." -ForegroundColor Cyan
         & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/simonthoresen/dev-null/main/install.ps1'))) -InstallDir $installDir
         # Re-check after install.

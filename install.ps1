@@ -3,7 +3,7 @@
 #    or: save this file and run it directly
 
 param(
-    [string]$InstallDir = (Join-Path $env:LocalAppData "DevNull")
+    [string]$InstallDir = (Join-Path $env:USERPROFILE "dev-null\play")
 )
 
 $repo = "simonthoresen/dev-null"
@@ -55,9 +55,10 @@ if ($version) { Set-Content -Path (Join-Path $InstallDir ".version") -Value $ver
 $desktop  = [Environment]::GetFolderPath("Desktop")
 $startServerPs1 = Join-Path $InstallDir "start-server.ps1"
 $startClientPs1 = Join-Path $InstallDir "start-client.ps1"
+$createGamePs1  = Join-Path $InstallDir "create-game.ps1"
 $shell    = New-Object -ComObject WScript.Shell
 
-$public = $shell.CreateShortcut((Join-Path $desktop "DevNull Server (public).lnk"))
+$public = $shell.CreateShortcut((Join-Path $desktop "dev-null Server (public).lnk"))
 $public.TargetPath       = "powershell.exe"
 $public.Arguments        = "-ExecutionPolicy Bypass -File `"$startServerPs1`""
 $public.WorkingDirectory = $InstallDir
@@ -65,7 +66,7 @@ $public.Description      = "Start the dev-null server (online multiplayer)"
 $public.IconLocation     = (Join-Path $InstallDir "dev-null-server.exe") + ",0"
 $public.Save()
 
-$private = $shell.CreateShortcut((Join-Path $desktop "DevNull Server (LAN).lnk"))
+$private = $shell.CreateShortcut((Join-Path $desktop "dev-null Server (LAN).lnk"))
 $private.TargetPath       = "powershell.exe"
 $private.Arguments        = "-ExecutionPolicy Bypass -File `"$startServerPs1`" --lan"
 $private.WorkingDirectory = $InstallDir
@@ -73,7 +74,7 @@ $private.Description      = "Start the dev-null server (LAN only, no Pinggy)"
 $private.IconLocation     = (Join-Path $InstallDir "dev-null-server.exe") + ",0"
 $private.Save()
 
-$client = $shell.CreateShortcut((Join-Path $desktop "DevNull Client.lnk"))
+$client = $shell.CreateShortcut((Join-Path $desktop "dev-null Client.lnk"))
 $client.TargetPath       = "powershell.exe"
 $client.Arguments        = "-ExecutionPolicy Bypass -File `"$startClientPs1`""
 $client.WorkingDirectory = $InstallDir
@@ -81,8 +82,38 @@ $client.Description      = "Start the dev-null graphical client"
 $client.IconLocation     = (Join-Path $InstallDir "dev-null-client.exe") + ",0"
 $client.Save()
 
+$solo = $shell.CreateShortcut((Join-Path $desktop "dev-null Solo Play.lnk"))
+$solo.TargetPath       = "powershell.exe"
+$solo.Arguments        = "-ExecutionPolicy Bypass -File `"$startClientPs1`" --local"
+$solo.WorkingDirectory = $InstallDir
+$solo.Description      = "Start a local server and connect the graphical client to it"
+$solo.IconLocation     = (Join-Path $InstallDir "dev-null-client.exe") + ",0"
+$solo.Save()
+
+$create = $shell.CreateShortcut((Join-Path $desktop "dev-null Create Games.lnk"))
+$create.TargetPath       = "powershell.exe"
+$create.Arguments        = "-ExecutionPolicy Bypass -File `"$createGamePs1`""
+$create.WorkingDirectory = $InstallDir
+$create.Description      = "Set up authoring: installs gh + Copilot CLI on first run, forks the starter template, opens Copilot CLI"
+$create.IconLocation     = (Join-Path $InstallDir "dev-null-server.exe") + ",0"
+$create.Save()
+
+# Print a one-line note if the legacy install dir still exists, so the user can clean it up.
+$legacyInstall = Join-Path $env:LOCALAPPDATA "DevNull"
+if (Test-Path $legacyInstall) {
+    Write-Host ""
+    Write-Host "  Legacy install found at $legacyInstall." -ForegroundColor Yellow
+    Write-Host "  Safe to delete; everything moved to $InstallDir."
+}
+
 Write-Host ""
 Write-Host "  Installed! Desktop shortcuts created." -ForegroundColor Green
+Write-Host ""
+Write-Host "  Quick start:"
+Write-Host "    Double-click 'dev-null Solo Play' to play locally."
+Write-Host "    Double-click 'dev-null Server (public)' to host online."
+Write-Host "    Double-click 'dev-null Create Games' to set up authoring"
+Write-Host "      (installs gh + GitHub Copilot CLI on first run)."
 Write-Host ""
 Write-Host "  To start manually:"
 Write-Host "    cd `"$InstallDir`""
