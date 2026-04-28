@@ -33,6 +33,13 @@ Each attempt uses a short `ConnectTimeout`; falls through on failure.
 
 `PinggyHelper.exe` stdout/stderr are redirected to the install-root `logs/pinggy-stdout.log` / `pinggy-stderr.log` by `DevNullServer.ps1` -- they must not pollute the boot sequence output.
 
+## LAN Discovery (mDNS)
+
+`DevNullServer` advertises `_devnull._tcp.local.` via mDNS so GUI clients can auto-list LAN servers in the startup menu.
+
+- Dedicated servers advertise automatically.
+- Client-owned local headless servers started from `DevNullClient --local` set `DEV_NULL_DISABLE_LAN_DISCOVERY=1` so they stay private unless explicitly shared.
+
 ## SSH Delta Rendering Bug on Windows (bubbletea patch)
 
 **Problem**: bubbletea v2 hardcodes `mapNl=false` on Windows (`tea.go`, line with `runtime.GOOS != "windows"`). With `mapNl=false` the delta renderer tracks `\n` as "cursor col stays." But `gossh.EmulatePty()` unconditionally converts `\n` → `\r\n` via `PtyWriter`. The terminal cursor resets to col 0 after `\r`, but the renderer tracker doesn't know — causing catastrophic cursor position divergence on every newline. All delta writes land at wrong columns: garbled staircase output over SSH, but clean in `--no-ssh` mode (no PTY writer involved).

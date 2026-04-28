@@ -21,6 +21,25 @@ cd $env:USERPROFILE\DevNull
 
 The server prints an invite command that others can paste into any terminal to join.
 
+## Start the client
+
+```powershell
+cd $env:USERPROFILE\DevNull
+.\DevNull.ps1
+```
+
+The GUI now starts in a disconnected main menu. It shows localhost, known servers from `~/DevNull/Config/servers.txt` (`name=host:port` or `host:port`), and LAN servers discovered automatically.  
+Use **Create server** to start a local headless server tied to the client lifecycle, and **Open tunnel** to start Pinggy on demand for that local server.
+
+Direct modes are still supported:
+
+```powershell
+.\DevNull.ps1 --host 192.168.1.40 --port 23234
+.\DevNull.ps1 --local
+.\DevNull.ps1 --no-gui --host 192.168.1.40 --port 23234
+.\DevNull.ps1 --no-gui --local
+```
+
 ## Load a game
 
 Once the server is running, type into the server console:
