@@ -92,7 +92,6 @@ type launcherRenderer struct {
 	lanCache     []launcherServer
 	lastProbe    time.Time
 	lastLAN      time.Time
-	firstRefreshAt time.Time
 	refreshing   bool
 	refreshDone  chan refreshResult
 	status       string
@@ -132,13 +131,12 @@ func newLauncherRenderer(cfg launcherRendererConfig) *launcherRenderer {
 	r.refreshDone = make(chan refreshResult, 1)
 	r.setupLauncherUI()
 	r.setupBackground()
-	// Defer the first scan: kicking off LAN discovery / TCP probes
-	// immediately on construction has been observed to stall the launcher
-	// animation for ~1s on Windows (likely GPU/window init colliding with
-	// firewall + multicast bind). Letting the UI settle first avoids the
-	// visible stutter; HandleInput will fire the first refresh on its
-	// next tick (lastProbe is zero, so the rate-limit check passes).
-	r.firstRefreshAt = time.Now().Add(1500 * time.Millisecond)
+	// Populate the list immediately with local + known servers (no LAN
+	// scan), so the launcher shows useful entries from the first frame
+	// without triggering the Windows firewall multicast prompt that
+	// would otherwise freeze the UI on a cold start. LAN discovery only
+	// runs when the user hits F5 / Refresh.
+	r.refreshServers(true, false)
 	return r
 }
 
@@ -166,7 +164,7 @@ func (r *launcherRenderer) setupLauncherUI() {
 	}
 	r.refreshBtn = &widget.Button{
 		Label:   "Refresh",
-		OnPress: func() { r.refreshServers(true) },
+		OnPress: func() { r.refreshServers(true, true) },
 	}
 	r.tunnelBtn = &widget.Button{
 		Label:   "Open tunnel",
@@ -216,7 +214,7 @@ func (r *launcherRenderer) setupLauncherUI() {
 			},
 			{
 				Control: &widget.Label{
-					Text:  "Enter: connect   F5: refresh   Esc: quit   Tunnel opens on demand",
+					Text:  "Enter: connect   F5: scan LAN   Esc: quit   Tunnel opens on demand",
 					Align: "left",
 				},
 				Constraint: widget.GridConstraint{
@@ -256,13 +254,13 @@ func (r *launcherRenderer) HandleInput(w *display.Window) {
 		if r.sessionRenderer.ShouldClose() {
 			r.closeSession()
 			r.status = "Disconnected. Back in launcher."
-			r.refreshServers(true)
+			r.refreshServers(true, false)
 		}
 		return
 	}
 
-	if time.Since(r.lastProbe) >= serverProbeEvery && (r.firstRefreshAt.IsZero() || !time.Now().Before(r.firstRefreshAt)) {
-		r.refreshServers(false)
+	if time.Since(r.lastProbe) >= serverProbeEvery {
+		r.refreshServers(false, false)
 	}
 	r.applyRefreshResult()
 
@@ -278,7 +276,7 @@ func (r *launcherRenderer) HandleInput(w *display.Window) {
 				r.closing = true
 				return
 			case "f5", "ctrl+r":
-				r.refreshServers(true)
+				r.refreshServers(true, true)
 				continue
 			case "enter":
 				if r.launcherWindow.FocusedControl() == r.serverList {
@@ -369,7 +367,7 @@ func (r *launcherRenderer) createLocalAndConnect() {
 		r.status = fmt.Sprintf("Connect failed: %v", err)
 		return
 	}
-	r.refreshServers(true)
+	r.refreshServers(true, false)
 	r.status = "Local server running and connected."
 }
 
@@ -567,9 +565,10 @@ type refreshResult struct {
 // refreshServers kicks off a background scan of known/LAN servers and TCP
 // probes. Discovery and probing block for hundreds of milliseconds, so they
 // must never run on the UI goroutine — that caused visible stutters in the
-// launcher animation every few seconds. force=true bypasses the rate limits;
-// the callback applies results from the channel each frame.
-func (r *launcherRenderer) refreshServers(force bool) {
+// launcher animation. force=true bypasses the rate limits. withLAN=true also
+// runs mDNS discovery (which on Windows can pop a firewall consent dialog
+// that freezes the UI), so that's reserved for explicit user actions.
+func (r *launcherRenderer) refreshServers(force, withLAN bool) {
 	if r.refreshing {
 		return
 	}
@@ -577,7 +576,7 @@ func (r *launcherRenderer) refreshServers(force bool) {
 		return
 	}
 
-	needLAN := force || time.Since(r.lastLAN) >= lanDiscoverEvery
+	needLAN := withLAN && (force || time.Since(r.lastLAN) >= lanDiscoverEvery)
 	localPort := r.localPort
 	lanSnapshot := append([]launcherServer(nil), r.lanCache...)
 
