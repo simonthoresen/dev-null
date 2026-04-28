@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"dev-null/internal/console"
 	"dev-null/internal/datadir"
 	"dev-null/internal/engine"
+	"dev-null/internal/network"
 	"dev-null/internal/runlog"
 	"dev-null/internal/server"
 )
@@ -102,9 +104,29 @@ func main() {
 	defer stop()
 	app.SetShutdownFunc(func() { stop() })
 
+	startLANAdvertiser := func() *network.LANAdvertiser {
+		if os.Getenv("DEV_NULL_DISABLE_LAN_DISCOVERY") == "1" {
+			return nil
+		}
+		lanPort, err := net.LookupPort("tcp", port)
+		if err != nil {
+			slog.Warn("lan discovery: invalid ssh port", "port", port, "error", err)
+			return nil
+		}
+		advertiser, err := network.StartLANAdvertiser(lanPort)
+		if err != nil {
+			slog.Warn("lan discovery: failed to advertise", "error", err)
+			return nil
+		}
+		return advertiser
+	}
+
 	// Headless mode: SSH server only, no console UI, no UPnP, no boot steps.
 	// Used by --local subprocess mode where the client owns the display.
 	if headless {
+		if advertiser := startLANAdvertiser(); advertiser != nil {
+			defer advertiser.Close()
+		}
 		if pinggyStatusFile := os.Getenv("DEV_NULL_PINGGY_STATUS_FILE"); pinggyStatusFile != "" {
 			app.EnablePinggyLogBridge(ctx, pinggyStatusFile)
 		}
@@ -141,6 +163,14 @@ func main() {
 		} else {
 			bootstep.Finish("SKIP")
 		}
+	}
+
+	bootstep.Start("LAN discovery")
+	if advertiser := startLANAdvertiser(); advertiser != nil {
+		defer advertiser.Close()
+		bootstep.Finish("DONE")
+	} else {
+		bootstep.Finish("SKIP")
 	}
 
 	bootstep.Start("Pinggy tunnel")

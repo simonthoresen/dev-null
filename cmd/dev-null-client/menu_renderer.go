@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -26,6 +27,8 @@ import (
 const (
 	defaultServerPort = 23234
 	serverProbeEvery  = 2 * time.Second
+	lanDiscoverEvery  = 6 * time.Second
+	lanDiscoverWait   = 900 * time.Millisecond
 )
 
 // menuSolarScript renders a lightweight animated solar system used as the
@@ -163,7 +166,9 @@ type menuRenderer struct {
 	pinggyStderr     *os.File
 
 	servers   []menuServer
+	lanCache  []menuServer
 	lastProbe time.Time
+	lastLAN   time.Time
 	status    string
 	closing   bool
 
@@ -615,16 +620,20 @@ func (r *menuRenderer) refreshServers(force bool) {
 		return
 	}
 	r.lastProbe = time.Now()
+	if force || time.Since(r.lastLAN) >= lanDiscoverEvery {
+		if lanServers, err := discoverLANServers(lanDiscoverWait); err == nil {
+			r.lanCache = lanServers
+		}
+		r.lastLAN = time.Now()
+	}
 
 	selectedKey := ""
 	if i := r.serverList.Cursor; i >= 0 && i < len(r.servers) {
 		selectedKey = r.servers[i].key()
 	}
 
-	servers := collectMenuServers(r.localPort)
-	for i := range servers {
-		servers[i].Available = probeServer(servers[i].Host, servers[i].Port, 350*time.Millisecond)
-	}
+	servers := collectMenuServers(r.localPort, r.lanCache)
+	probeMenuServers(servers, 350*time.Millisecond)
 	r.servers = servers
 
 	items := make([]string, 0, len(r.servers))
@@ -650,7 +659,7 @@ func (r *menuRenderer) refreshServers(force bool) {
 	r.serverList.SetCursor(cursor)
 }
 
-func collectMenuServers(localPort int) []menuServer {
+func collectMenuServers(localPort int, lan []menuServer) []menuServer {
 	if localPort <= 0 {
 		localPort = defaultServerPort
 	}
@@ -668,7 +677,47 @@ func collectMenuServers(localPort int) []menuServer {
 		seen[s.key()] = true
 		servers = append(servers, s)
 	}
+	for _, s := range lan {
+		if seen[s.key()] {
+			continue
+		}
+		seen[s.key()] = true
+		servers = append(servers, s)
+	}
 	return servers
+}
+
+func discoverLANServers(timeout time.Duration) ([]menuServer, error) {
+	discovered, err := network.DiscoverLANServers(timeout)
+	if err != nil {
+		return nil, err
+	}
+	servers := make([]menuServer, 0, len(discovered))
+	for _, s := range discovered {
+		name := strings.TrimSpace(s.Name)
+		if name == "" {
+			name = s.Host
+		}
+		servers = append(servers, menuServer{
+			Name:   name,
+			Host:   s.Host,
+			Port:   s.Port,
+			Source: "LAN",
+		})
+	}
+	return servers, nil
+}
+
+func probeMenuServers(servers []menuServer, timeout time.Duration) {
+	var wg sync.WaitGroup
+	for i := range servers {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			servers[idx].Available = probeServer(servers[idx].Host, servers[idx].Port, timeout)
+		}(i)
+	}
+	wg.Wait()
 }
 
 func readKnownServers(path string) []menuServer {

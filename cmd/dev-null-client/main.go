@@ -241,9 +241,12 @@ func startLocalServer(cfg localServerConfig) (*localServerSupervisor, error) {
 
 	cmd := exec.Command(serverExe, args...)
 	cmd.Dir = cfg.DataDir
+	env := append([]string{}, os.Environ()...)
+	env = append(env, "DEV_NULL_DISABLE_LAN_DISCOVERY=1")
 	if cfg.PinggyStatusFile != "" {
-		cmd.Env = append(os.Environ(), "DEV_NULL_PINGGY_STATUS_FILE="+cfg.PinggyStatusFile)
+		env = append(env, "DEV_NULL_PINGGY_STATUS_FILE="+cfg.PinggyStatusFile)
 	}
+	cmd.Env = env
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
