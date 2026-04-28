@@ -3,16 +3,11 @@ package main
 import (
 	"image/color"
 	"testing"
-
-	"dev-null/internal/client"
 )
 
 func TestLauncherSceneRendersVisiblePixels(t *testing.T) {
-	lr := client.NewLocalRenderer()
-	lr.LoadGame([]client.GameSrcFile{{Name: "launcher_scene.js", Content: launcherSceneScript}})
-	lr.SetState([]byte(`{"_gameTime":1.5}`))
-
-	img := lr.RenderCanvasImage("launcher", 320, 200)
+	scene := newLauncherScene()
+	img := scene.Render(320, 200, 1.5)
 	if img == nil {
 		t.Fatal("expected launcher scene image, got nil")
 	}
@@ -39,5 +34,18 @@ func TestLauncherSceneRendersVisiblePixels(t *testing.T) {
 	}
 	if brightPixels < 40 {
 		t.Fatalf("expected stars/highlights to render, bright pixel count=%d", brightPixels)
+	}
+}
+
+func TestLauncherSceneReusesBackingImage(t *testing.T) {
+	scene := newLauncherScene()
+	a := scene.Render(160, 100, 0)
+	b := scene.Render(160, 100, 1)
+	if a != b {
+		t.Fatal("expected same backing image when dimensions are unchanged")
+	}
+	c := scene.Render(200, 100, 1)
+	if c == b {
+		t.Fatal("expected new backing image after size change")
 	}
 }

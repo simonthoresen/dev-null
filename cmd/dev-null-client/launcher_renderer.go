@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	_ "embed"
 	"fmt"
 	"net"
 	"os"
@@ -31,12 +30,6 @@ const (
 	lanDiscoverEvery  = 6 * time.Second
 	lanDiscoverWait   = 900 * time.Millisecond
 )
-
-// launcherSceneScript renders a lightweight animated solar system used as the
-// launcher background while disconnected.
-//
-//go:embed launcher_scene.js
-var launcherSceneScript string
 
 type launcherRendererConfig struct {
 	Player       string
@@ -111,7 +104,7 @@ type launcherRenderer struct {
 	refreshBtn     *widget.Button
 	tunnelBtn      *widget.Button
 
-	background      *client.LocalRenderer
+	background      *launcherScene
 	backgroundStart time.Time
 }
 
@@ -140,10 +133,7 @@ func newLauncherRenderer(cfg launcherRendererConfig) *launcherRenderer {
 }
 
 func (r *launcherRenderer) setupBackground() {
-	lr := client.NewLocalRenderer()
-	lr.LoadGame([]client.GameSrcFile{{Name: "launcher_scene.js", Content: launcherSceneScript}})
-	lr.SetState([]byte(`{"_gameTime":0}`))
-	r.background = lr
+	r.background = newLauncherScene()
 	r.backgroundStart = time.Now()
 }
 
@@ -305,8 +295,7 @@ func (r *launcherRenderer) Draw(w *display.Window, screen *ebiten.Image) {
 	// and convert to quadrant block characters in the cell buffer.
 	if r.background != nil {
 		elapsed := time.Since(r.backgroundStart).Seconds()
-		r.background.SetState([]byte(fmt.Sprintf(`{"_gameTime":%.4f}`, elapsed)))
-		if img := r.background.RenderCanvasImage("launcher", r.cols*2, r.rows*4); img != nil {
+		if img := r.background.Render(r.cols*2, r.rows*4, elapsed); img != nil {
 			render.ImageToQuadrants(img, buf, 0, 0, r.cols, r.rows)
 		}
 	}
