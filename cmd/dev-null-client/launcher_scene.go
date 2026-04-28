@@ -37,7 +37,7 @@ func newLauncherScene() *launcherScene { return &launcherScene{} }
 
 const (
 	islandRadius  = 2.6
-	seaLevel      = 0.0
+	seaLevel      = -0.35
 	cubeHalf      = 0.45
 	cubeY         = 1.55
 	terrainSize   = 36
@@ -97,14 +97,14 @@ func (s *launcherScene) Render(w, h int, t float64) *image.RGBA {
 func terrainHeight(x, z float64) float64 {
 	r := math.Sqrt(x*x + z*z)
 	if r >= islandRadius {
-		return -0.08
+		return -0.55
 	}
 	f := 1 - r/islandRadius
 	f = f * f * (3 - 2*f) // smoothstep falloff to the shore
 	bump := 0.55 * math.Sin(x*1.4) * math.Cos(z*1.6)
 	bump += 0.30 * math.Sin(x*3.0+z*1.5)
 	bump += 0.15 * math.Cos(x*2.5 - z*3.0)
-	return f * (0.55 + 0.55*bump)
+	return -0.25 + f*(0.95+0.40*bump)
 }
 
 func (s *launcherScene) bakeTerrain() {
@@ -132,11 +132,11 @@ func (s *launcherScene) bakeTerrain() {
 
 func terrainColorAt(y float64) color.RGBA {
 	switch {
-	case y < 0.05:
+	case y < -0.10:
 		return color.RGBA{R: 215, G: 200, B: 145, A: 0xff} // beach
-	case y < 0.45:
+	case y < 0.30:
 		return color.RGBA{R: 70, G: 140, B: 70, A: 0xff} // grass
-	case y < 0.75:
+	case y < 0.65:
 		return color.RGBA{R: 95, G: 105, B: 60, A: 0xff} // dark grass
 	default:
 		return color.RGBA{R: 160, G: 155, B: 145, A: 0xff} // rock
