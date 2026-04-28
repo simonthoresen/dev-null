@@ -88,12 +88,14 @@ type launcherRenderer struct {
 	pinggyStdout     *os.File
 	pinggyStderr     *os.File
 
-	servers   []launcherServer
-	lanCache  []launcherServer
-	lastProbe time.Time
-	lastLAN   time.Time
-	status    string
-	closing   bool
+	servers      []launcherServer
+	lanCache     []launcherServer
+	lastProbe    time.Time
+	lastLAN      time.Time
+	refreshing   bool
+	refreshDone  chan refreshResult
+	status       string
+	closing      bool
 
 	launcherTheme  *theme.Theme
 	launcherWindow *widget.Window
@@ -126,6 +128,7 @@ func newLauncherRenderer(cfg launcherRendererConfig) *launcherRenderer {
 	if r.localPort <= 0 {
 		r.localPort = defaultServerPort
 	}
+	r.refreshDone = make(chan refreshResult, 1)
 	r.setupLauncherUI()
 	r.setupBackground()
 	r.refreshServers(true)
@@ -138,7 +141,10 @@ func (r *launcherRenderer) setupBackground() {
 }
 
 func (r *launcherRenderer) setupLauncherUI() {
-	r.serverList = &widget.ListBox{}
+	r.serverList = &widget.ListBox{
+		Items: []string{"Scanning for servers..."},
+		Tags:  []string{""},
+	}
 	r.connectBtn = &widget.Button{
 		Label: "Connect",
 		Disabled: func() bool {
@@ -251,6 +257,7 @@ func (r *launcherRenderer) HandleInput(w *display.Window) {
 	if time.Since(r.lastProbe) >= serverProbeEvery {
 		r.refreshServers(false)
 	}
+	r.applyRefreshResult()
 
 	msgs := append(display.PollKeyMessages(), display.PollMouseMessages()...)
 	for _, msg := range msgs {
@@ -542,26 +549,75 @@ func (r *launcherRenderer) localServerReady() bool {
 	return probeServer("127.0.0.1", r.localPort, 300*time.Millisecond)
 }
 
+// refreshResult carries the outcome of an off-thread server scan back to
+// the UI goroutine, where it gets applied via applyRefreshResult().
+type refreshResult struct {
+	servers  []launcherServer
+	lanCache []launcherServer
+	didLAN   bool
+}
+
+// refreshServers kicks off a background scan of known/LAN servers and TCP
+// probes. Discovery and probing block for hundreds of milliseconds, so they
+// must never run on the UI goroutine — that caused visible stutters in the
+// launcher animation every few seconds. force=true bypasses the rate limits;
+// the callback applies results from the channel each frame.
 func (r *launcherRenderer) refreshServers(force bool) {
+	if r.refreshing {
+		return
+	}
 	if !force && time.Since(r.lastProbe) < serverProbeEvery {
 		return
 	}
+
+	needLAN := force || time.Since(r.lastLAN) >= lanDiscoverEvery
+	localPort := r.localPort
+	lanSnapshot := append([]launcherServer(nil), r.lanCache...)
+
+	r.refreshing = true
 	r.lastProbe = time.Now()
-	if force || time.Since(r.lastLAN) >= lanDiscoverEvery {
-		if lanServers, err := discoverLANServers(lanDiscoverWait); err == nil {
-			r.lanCache = lanServers
-		}
+	if needLAN {
 		r.lastLAN = time.Now()
+	}
+
+	go func() {
+		lanCache := lanSnapshot
+		if needLAN {
+			if discovered, err := discoverLANServers(lanDiscoverWait); err == nil {
+				lanCache = discovered
+			}
+		}
+		servers := collectLauncherServers(localPort, lanCache)
+		probeLauncherServers(servers, 350*time.Millisecond)
+
+		// Drop any prior pending result; only the latest matters.
+		select {
+		case <-r.refreshDone:
+		default:
+		}
+		r.refreshDone <- refreshResult{servers: servers, lanCache: lanCache, didLAN: needLAN}
+	}()
+}
+
+// applyRefreshResult drains any pending background-scan result and updates
+// the UI state. Called from the UI goroutine each frame.
+func (r *launcherRenderer) applyRefreshResult() {
+	var res refreshResult
+	select {
+	case res = <-r.refreshDone:
+	default:
+		return
+	}
+	r.refreshing = false
+	if res.didLAN {
+		r.lanCache = res.lanCache
 	}
 
 	selectedKey := ""
 	if i := r.serverList.Cursor; i >= 0 && i < len(r.servers) {
 		selectedKey = r.servers[i].key()
 	}
-
-	servers := collectLauncherServers(r.localPort, r.lanCache)
-	probeLauncherServers(servers, 350*time.Millisecond)
-	r.servers = servers
+	r.servers = res.servers
 
 	items := make([]string, 0, len(r.servers))
 	tags := make([]string, 0, len(r.servers))

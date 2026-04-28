@@ -14,7 +14,6 @@ func TestLauncherSceneRendersVisiblePixels(t *testing.T) {
 
 	bg := color.RGBA{R: 0x03, G: 0x05, B: 0x0d, A: 0xff}
 	nonBackground := 0
-	brightPixels := 0
 
 	b := img.Bounds()
 	for y := b.Min.Y; y < b.Max.Y; y++ {
@@ -23,17 +22,13 @@ func TestLauncherSceneRendersVisiblePixels(t *testing.T) {
 			if c != bg {
 				nonBackground++
 			}
-			if c.R > 180 || c.G > 180 || c.B > 180 {
-				brightPixels++
-			}
 		}
 	}
 
-	if nonBackground < 500 {
-		t.Fatalf("expected scene details to draw, non-background pixel count=%d", nonBackground)
-	}
-	if brightPixels < 40 {
-		t.Fatalf("expected stars/highlights to render, bright pixel count=%d", brightPixels)
+	// Cube projects onto a sizable patch of the canvas; a few hundred
+	// non-background pixels means at least one face was rasterized.
+	if nonBackground < 1000 {
+		t.Fatalf("expected cube to draw, non-background pixel count=%d", nonBackground)
 	}
 }
 

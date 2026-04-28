@@ -8,11 +8,11 @@ import (
 	"dev-null/internal/engine"
 )
 
-// launcherScene draws an animated background for the launcher: a twinkling
-// starfield with a slowly rotating, lambert-lit cube on top. Rendering goes
-// straight into an *image.RGBA via engine.Rasterizer (the same triangle
-// rasterizer the in-game 3D path uses), so the launcher and games share the
-// pixel pipeline without going through a JS VM.
+// launcherScene draws an animated background for the launcher: a slowly
+// rotating, lambert-lit cube on a solid backdrop. Rendering goes straight
+// into an *image.RGBA via engine.Rasterizer (the same triangle rasterizer
+// the in-game 3D path uses), so the launcher and games share the pixel
+// pipeline without going through a JS VM.
 type launcherScene struct {
 	img    *image.RGBA
 	raster *engine.Rasterizer
@@ -42,28 +42,13 @@ func (s *launcherScene) Render(w, h int, elapsed float64) *image.RGBA {
 var launcherBgColor = color.RGBA{R: 0x03, G: 0x05, B: 0x0d, A: 0xff}
 
 func (s *launcherScene) drawBackground(t float64) {
-	// Fill background.
+	_ = t
 	pix := s.img.Pix
 	for i := 0; i < len(pix); i += 4 {
 		pix[i+0] = launcherBgColor.R
 		pix[i+1] = launcherBgColor.G
 		pix[i+2] = launcherBgColor.B
 		pix[i+3] = launcherBgColor.A
-	}
-
-	// Deterministic starfield with a time-modulated twinkle.
-	const stars = 220
-	stride := s.img.Stride
-	for i := 0; i < stars; i++ {
-		sx := (i*137 + 53) % s.w
-		sy := (i*89 + 17) % s.h
-		tw := 0.5 + 0.5*math.Sin(t*1.6+float64(i)*0.37)
-		v := uint8(clampInt(110+int(tw*130), 0, 255))
-		off := sy*stride + sx*4
-		pix[off+0] = v
-		pix[off+1] = v
-		pix[off+2] = uint8(clampInt(int(v)+20, 0, 255))
-		pix[off+3] = 0xff
 	}
 }
 
@@ -161,14 +146,4 @@ func (s *launcherScene) drawCube(t float64) {
 			lit, lit, lit,
 		)
 	}
-}
-
-func clampInt(v, lo, hi int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
 }
