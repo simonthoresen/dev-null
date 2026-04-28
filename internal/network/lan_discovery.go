@@ -79,7 +79,10 @@ func DiscoverLANServers(timeout time.Duration) ([]LANServer, error) {
 		timeout = 800 * time.Millisecond
 	}
 
+	t0 := time.Now()
+	slog.Info("DiscoverLANServers: NewResolver begin")
 	resolver, err := zeroconf.NewResolver(nil)
+	slog.Info("DiscoverLANServers: NewResolver end", "took", time.Since(t0), "err", err)
 	if err != nil {
 		return nil, err
 	}
@@ -121,11 +124,15 @@ func DiscoverLANServers(timeout time.Duration) ([]LANServer, error) {
 		}
 	}()
 
+	tBrowse := time.Now()
+	slog.Info("DiscoverLANServers: Browse begin")
 	if err := resolver.Browse(ctx, lanDiscoveryService, lanDiscoveryDomain, entries); err != nil {
+		slog.Info("DiscoverLANServers: Browse error", "err", err, "took", time.Since(tBrowse))
 		cancel()
 		<-done
 		return nil, err
 	}
+	slog.Info("DiscoverLANServers: Browse returned (waiting for ctx)", "took", time.Since(tBrowse))
 
 	<-ctx.Done()
 	<-done

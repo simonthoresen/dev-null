@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -40,6 +41,8 @@ var buildRemote = ""
 func main() {
 	engine.SetBuildInfo(buildDate, buildRemote)
 	rawArgs := append([]string(nil), os.Args[1:]...)
+	setupClientLogging()
+	slog.Info("client: main entered", "args", rawArgs)
 	host := flag.String("host", "localhost", "server hostname")
 	port := flag.Int("port", 23234, "server SSH port")
 	local := flag.Bool("local", false, "start a local headless server and connect to it")
@@ -96,6 +99,8 @@ func main() {
 		hasCLIFlag(rawArgs, "host") ||
 		hasCLIFlag(rawArgs, "port")
 	if !explicitConnect {
+		slog.Info("client: creating launcher")
+		t0 := time.Now()
 		launcher := newLauncherRenderer(launcherRendererConfig{
 			Player:       *player,
 			Term:         *termFlag,
@@ -107,7 +112,9 @@ func main() {
 			WindowHeight: winH,
 			InitCommands: initCommands,
 		})
+		slog.Info("client: launcher created", "took", time.Since(t0))
 		defer launcher.Stop()
+		slog.Info("client: entering RunWindow")
 		if err := display.RunWindow(launcher, "DevNull", winW, winH, appIcon); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -169,6 +176,31 @@ func defaultPlayer() string {
 		return u.Username
 	}
 	return "player"
+}
+
+// setupClientLogging routes slog output to a launcher-debug.log file under
+// the data dir's logs/ folder. Always overwrites on start. Adds time with
+// millisecond precision so we can spot UI freezes in the timeline.
+func setupClientLogging() {
+	logsDir := filepath.Join(datadir.CommonDir(), "logs")
+	if err := os.MkdirAll(logsDir, 0o755); err != nil {
+		return
+	}
+	path := filepath.Join(logsDir, "launcher-debug.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return
+	}
+	h := slog.NewTextHandler(f, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.String("t", a.Value.Time().Format("15:04:05.000"))
+			}
+			return a
+		},
+	})
+	slog.SetDefault(slog.New(h))
 }
 
 // pickReachable returns the first endpoint that accepts a TCP connection
