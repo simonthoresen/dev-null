@@ -187,11 +187,12 @@ func pickReachable(endpoints []invite.Endpoint, timeout time.Duration) *invite.E
 }
 
 type localServerConfig struct {
-	InstallDir string
-	DataDir    string
-	Term       string
-	Port       int
-	Password   string
+	InstallDir       string
+	DataDir          string
+	Term             string
+	Port             int
+	Password         string
+	PinggyStatusFile string
 }
 
 type localServerSupervisor struct {
@@ -240,6 +241,9 @@ func startLocalServer(cfg localServerConfig) (*localServerSupervisor, error) {
 
 	cmd := exec.Command(serverExe, args...)
 	cmd.Dir = cfg.DataDir
+	if cfg.PinggyStatusFile != "" {
+		cmd.Env = append(os.Environ(), "DEV_NULL_PINGGY_STATUS_FILE="+cfg.PinggyStatusFile)
+	}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
@@ -307,6 +311,19 @@ func findServerBinary(installDir string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("local server binary not found in %s", installDir)
+}
+
+func findPinggyHelperBinary(installDir string) (string, error) {
+	candidates := []string{
+		filepath.Join(installDir, "PinggyHelper.exe"),
+		filepath.Join(installDir, "PinggyHelper"),
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("Pinggy helper binary not found in %s", installDir)
 }
 
 func waitForServerReady(addr string, timeout time.Duration, done <-chan error) error {

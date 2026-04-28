@@ -105,6 +105,9 @@ func main() {
 	// Headless mode: SSH server only, no console UI, no UPnP, no boot steps.
 	// Used by --local subprocess mode where the client owns the display.
 	if headless {
+		if pinggyStatusFile := os.Getenv("DEV_NULL_PINGGY_STATUS_FILE"); pinggyStatusFile != "" {
+			app.EnablePinggyLogBridge(ctx, pinggyStatusFile)
+		}
 		if err := app.Start(ctx); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
 			slog.Error("server error", "err", err)
 		}
@@ -196,4 +199,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-

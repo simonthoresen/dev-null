@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"dev-null/internal/client"
 	"dev-null/internal/datadir"
 	"dev-null/internal/display"
+	"dev-null/internal/network"
 	"dev-null/internal/render"
 	"dev-null/internal/theme"
 	"dev-null/internal/widget"
@@ -151,8 +154,13 @@ type menuRenderer struct {
 	sessionConn     *client.SSHConn
 	sessionRenderer *client.ClientRenderer
 
-	localServer   *localServerSupervisor
-	localPassword string
+	localServer      *localServerSupervisor
+	localPassword    string
+	pinggyStatusFile string
+	pinggyHelper     *exec.Cmd
+	pinggyDone       chan error
+	pinggyStdout     *os.File
+	pinggyStderr     *os.File
 
 	servers   []menuServer
 	lastProbe time.Time
@@ -166,23 +174,25 @@ type menuRenderer struct {
 	connectBtn  *widget.Button
 	createBtn   *widget.Button
 	refreshBtn  *widget.Button
+	tunnelBtn   *widget.Button
 
 	background *client.LocalRenderer
 }
 
 func newMenuRenderer(cfg menuRendererConfig) *menuRenderer {
 	r := &menuRenderer{
-		player:       cfg.Player,
-		term:         cfg.Term,
-		password:     cfg.Password,
-		installDir:   cfg.InstallDir,
-		dataDir:      cfg.DataDir,
-		localPort:    cfg.LocalPort,
-		windowWidth:  cfg.WindowWidth,
-		windowHeight: cfg.WindowHeight,
-		initCommands: append([]string(nil), cfg.InitCommands...),
-		menuTheme:    theme.Default(),
-		status:       "Select a server or create a local one.",
+		player:           cfg.Player,
+		term:             cfg.Term,
+		password:         cfg.Password,
+		installDir:       cfg.InstallDir,
+		dataDir:          cfg.DataDir,
+		localPort:        cfg.LocalPort,
+		windowWidth:      cfg.WindowWidth,
+		windowHeight:     cfg.WindowHeight,
+		initCommands:     append([]string(nil), cfg.InitCommands...),
+		menuTheme:        theme.Default(),
+		status:           "Select a server or create a local one.",
+		pinggyStatusFile: filepath.Join(os.TempDir(), fmt.Sprintf("DevNull-pinggy-%d.status.log", os.Getpid())),
 	}
 	if r.localPort <= 0 {
 		r.localPort = defaultServerPort
@@ -218,6 +228,10 @@ func (r *menuRenderer) setupMenuUI() {
 		Label:   "Refresh",
 		OnPress: func() { r.refreshServers(true) },
 	}
+	r.tunnelBtn = &widget.Button{
+		Label:   "Open tunnel",
+		OnPress: r.openTunnelOnDemand,
+	}
 
 	buttonRow := &widget.Container{
 		Horizontal: true,
@@ -225,6 +239,8 @@ func (r *menuRenderer) setupMenuUI() {
 			{Control: r.connectBtn, Fixed: len(r.connectBtn.Label) + 6},
 			{Control: &widget.Label{Text: " "}, Fixed: 1},
 			{Control: r.createBtn, Fixed: len(r.createBtn.Label) + 6},
+			{Control: &widget.Label{Text: " "}, Fixed: 1},
+			{Control: r.tunnelBtn, Fixed: len(r.tunnelBtn.Label) + 6},
 			{Control: &widget.Label{Text: " "}, Fixed: 1},
 			{Control: r.refreshBtn, Fixed: len(r.refreshBtn.Label) + 6},
 		},
@@ -260,7 +276,7 @@ func (r *menuRenderer) setupMenuUI() {
 			},
 			{
 				Control: &widget.Label{
-					Text:  "Enter: connect   F5: refresh   Esc: quit",
+					Text:  "Enter: connect   F5: refresh   Esc: quit   Tunnel opens on demand",
 					Align: "left",
 				},
 				Constraint: widget.GridConstraint{
@@ -279,6 +295,7 @@ func (r *menuRenderer) setupMenuUI() {
 }
 
 func (r *menuRenderer) Stop() {
+	r.stopPinggyHelper()
 	if r.sessionConn != nil {
 		_ = r.sessionConn.Close()
 		r.sessionConn = nil
@@ -287,6 +304,9 @@ func (r *menuRenderer) Stop() {
 	if r.localServer != nil {
 		r.localServer.Stop()
 		r.localServer = nil
+	}
+	if r.pinggyStatusFile != "" {
+		_ = os.Remove(r.pinggyStatusFile)
 	}
 }
 
@@ -394,28 +414,9 @@ func (r *menuRenderer) connectSelected() {
 }
 
 func (r *menuRenderer) createLocalAndConnect() {
-	if !r.localServerReady() {
-		password, err := randomHexSecret(16)
-		if err != nil {
-			r.status = fmt.Sprintf("Local server password failed: %v", err)
-			return
-		}
-		srv, err := startLocalServer(localServerConfig{
-			InstallDir: r.installDir,
-			DataDir:    r.dataDir,
-			Term:       r.term,
-			Port:       r.localPort,
-			Password:   password,
-		})
-		if err != nil {
-			r.status = fmt.Sprintf("Local server start failed: %v", err)
-			return
-		}
-		if r.localServer != nil {
-			r.localServer.Stop()
-		}
-		r.localServer = srv
-		r.localPassword = password
+	if err := r.ensureLocalServer(); err != nil {
+		r.status = fmt.Sprintf("Local server start failed: %v", err)
+		return
 	}
 
 	if err := r.connectTo("127.0.0.1", r.localPort, r.localPassword); err != nil {
@@ -424,6 +425,156 @@ func (r *menuRenderer) createLocalAndConnect() {
 	}
 	r.refreshServers(true)
 	r.status = "Local server running and connected."
+}
+
+func (r *menuRenderer) openTunnelOnDemand() {
+	if err := r.ensureLocalServer(); err != nil {
+		r.status = fmt.Sprintf("Local server start failed: %v", err)
+		return
+	}
+	if err := r.startPinggyHelper(); err != nil {
+		r.status = fmt.Sprintf("Tunnel start failed: %v", err)
+		return
+	}
+	status, err := network.ReadPinggyStatus(r.pinggyStatusFile)
+	if err != nil || status == nil || status.TcpAddress == "" {
+		r.status = "Tunnel started."
+		return
+	}
+	r.status = fmt.Sprintf("Tunnel ready: %s", status.TcpAddress)
+}
+
+func (r *menuRenderer) ensureLocalServer() error {
+	if r.localServerReady() {
+		return nil
+	}
+	password, err := randomHexSecret(16)
+	if err != nil {
+		return err
+	}
+	srv, err := startLocalServer(localServerConfig{
+		InstallDir:       r.installDir,
+		DataDir:          r.dataDir,
+		Term:             r.term,
+		Port:             r.localPort,
+		Password:         password,
+		PinggyStatusFile: r.pinggyStatusFile,
+	})
+	if err != nil {
+		return err
+	}
+	if r.localServer != nil {
+		r.localServer.Stop()
+	}
+	r.stopPinggyHelper()
+	r.localServer = srv
+	r.localPassword = password
+	return nil
+}
+
+func (r *menuRenderer) startPinggyHelper() error {
+	if r.pinggyStatusFile == "" {
+		return fmt.Errorf("missing pinggy status file")
+	}
+
+	// Tunnel already up.
+	if status, err := network.ReadPinggyStatus(r.pinggyStatusFile); err == nil && status != nil && status.TcpAddress != "" {
+		return nil
+	}
+
+	if r.pinggyHelper != nil {
+		r.stopPinggyHelper()
+	}
+	_ = os.Remove(r.pinggyStatusFile)
+
+	helperPath, err := findPinggyHelperBinary(r.installDir)
+	if err != nil {
+		return err
+	}
+	logsDir := filepath.Join(r.dataDir, "logs")
+	if err := os.MkdirAll(logsDir, 0o755); err != nil {
+		return fmt.Errorf("create logs dir: %w", err)
+	}
+
+	stdoutPath := filepath.Join(logsDir, "local-pinggy-stdout.log")
+	stderrPath := filepath.Join(logsDir, "local-pinggy-stderr.log")
+	stdout, err := os.OpenFile(stdoutPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return fmt.Errorf("open pinggy stdout log: %w", err)
+	}
+	stderr, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		_ = stdout.Close()
+		return fmt.Errorf("open pinggy stderr log: %w", err)
+	}
+
+	cmd := exec.Command(
+		helperPath,
+		"--listen", fmt.Sprintf("127.0.0.1:%d", r.localPort),
+		"--status-file", r.pinggyStatusFile,
+	)
+	cmd.Dir = r.dataDir
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
+		_ = stderr.Close()
+		return fmt.Errorf("start pinggy helper: %w", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	r.pinggyHelper = cmd
+	r.pinggyDone = done
+	r.pinggyStdout = stdout
+	r.pinggyStderr = stderr
+
+	deadline := time.Now().Add(45 * time.Second)
+	for time.Now().Before(deadline) {
+		if status, err := network.ReadPinggyStatus(r.pinggyStatusFile); err == nil && status != nil && status.TcpAddress != "" {
+			return nil
+		}
+
+		select {
+		case waitErr := <-done:
+			r.stopPinggyHelper()
+			if waitErr != nil {
+				return fmt.Errorf("pinggy helper exited: %w", waitErr)
+			}
+			return fmt.Errorf("pinggy helper exited before tunnel became ready")
+		default:
+		}
+
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	r.stopPinggyHelper()
+	return fmt.Errorf("timed out waiting for pinggy tunnel")
+}
+
+func (r *menuRenderer) stopPinggyHelper() {
+	if r.pinggyHelper != nil && r.pinggyHelper.Process != nil {
+		select {
+		case <-r.pinggyDone:
+		default:
+			_ = r.pinggyHelper.Process.Kill()
+			select {
+			case <-r.pinggyDone:
+			case <-time.After(2 * time.Second):
+			}
+		}
+	}
+	r.pinggyHelper = nil
+	r.pinggyDone = nil
+	if r.pinggyStdout != nil {
+		_ = r.pinggyStdout.Close()
+		r.pinggyStdout = nil
+	}
+	if r.pinggyStderr != nil {
+		_ = r.pinggyStderr.Close()
+		r.pinggyStderr = nil
+	}
 }
 
 func (r *menuRenderer) connectTo(host string, port int, password string) error {
