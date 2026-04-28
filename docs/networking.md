@@ -17,7 +17,7 @@
 
 Startup order: UPnP -> Pinggy -> generate invite script.
 
-The invite command is a raw PowerShell one-liner (paste into a PowerShell window): `$env:NS='<token>';irm <Join.ps1 URL>|iex`. The `NS` environment variable is a base64url-encoded binary token:
+The invite command is a raw PowerShell one-liner (paste into a PowerShell window): `$env:NS='<token>';irm <join.ps1 URL>|iex`. The `NS` environment variable is a base64url-encoded binary token:
 
 | Bytes | Field | Notes |
 |-------|-------|-------|
@@ -27,7 +27,7 @@ The invite command is a raw PowerShell one-liner (paste into a PowerShell window
 | 10-11 | Pinggy port (uint16 BE) | `0` = no Pinggy |
 | 12+ | Pinggy hostname (UTF-8) | Remaining bytes |
 
-Variable-length: trailing absent fields are omitted. `Join.ps1` always tries `localhost` first (not encoded). Field presence is determined by token length: >=6 -> LAN, >=10 -> public IP, >=12 -> Pinggy.
+Variable-length: trailing absent fields are omitted. `join.ps1` always tries `localhost` first (not encoded). Field presence is determined by token length: >=6 -> LAN, >=10 -> public IP, >=12 -> Pinggy.
 
 Each attempt uses a short `ConnectTimeout`; falls through on failure.
 
@@ -71,7 +71,7 @@ Both files: one command per line; lines starting with `#` are comments. Dispatch
 
 **`~/DevNull/Config/server.txt`** -- commands run automatically when the server console starts. Useful for loading a default game, setting a theme, or loading server-side plugins.
 
-**`~/DevNull/Config/client.txt`** -- commands run automatically when a player joins a server (or starts in `--local` mode). `Join.ps1` reads this file, base64-encodes it, and sends it via the `DEV_NULL_INIT` SSH environment variable.
+**`~/DevNull/Config/client.txt`** -- commands run automatically when a player joins a server (or starts in `--local` mode). `join.ps1` reads this file, base64-encodes it, and sends it via the `DEV_NULL_INIT` SSH environment variable.
 
 Example `~/DevNull/Config/server.txt`:
 ```

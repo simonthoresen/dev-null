@@ -96,7 +96,7 @@ func main() {
 		hasCLIFlag(rawArgs, "host") ||
 		hasCLIFlag(rawArgs, "port")
 	if !explicitConnect {
-		menu := newMenuRenderer(menuRendererConfig{
+		launcher := newLauncherRenderer(launcherRendererConfig{
 			Player:       *player,
 			Term:         *termFlag,
 			Password:     *password,
@@ -107,8 +107,8 @@ func main() {
 			WindowHeight: winH,
 			InitCommands: initCommands,
 		})
-		defer menu.Stop()
-		if err := display.RunWindow(menu, "DevNull", winW, winH, appIcon); err != nil {
+		defer launcher.Stop()
+		if err := display.RunWindow(launcher, "DevNull", winW, winH, appIcon); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}

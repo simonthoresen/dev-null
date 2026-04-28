@@ -41,11 +41,11 @@ type msgSender interface {
 type Server struct {
 	state    *state.CentralState
 	registry *commandRegistry
-	dataDir  string // root of games/, logs/
-	port     string // SSH listen port, e.g. "23234"
+	dataDir  string       // root of games/, logs/
+	port     string       // SSH listen port, e.g. "23234"
 	clock    domain.Clock // central server clock (mockable in tests)
 
-	maxPlayers int // max concurrent SSH sessions (0 = unlimited)
+	maxPlayers int                  // max concurrent SSH sessions (0 = unlimited)
 	programs   map[string]msgSender // key = playerID
 	programsMu sync.Mutex
 
@@ -62,8 +62,8 @@ type Server struct {
 	sshServer  *ssh.Server
 
 	consoleProgramMu sync.Mutex
-	consoleProgram   *tea.Program  // TUI mode: the tea.Program for the console
-	consoleSender    msgSender     // GUI or TUI: anything that can receive tea.Msg
+	consoleProgram   *tea.Program // TUI mode: the tea.Program for the console
+	consoleSender    msgSender    // GUI or TUI: anything that can receive tea.Msg
 	consoleWidth     int
 
 	upnpMapping *network.UPnPMapping
@@ -80,9 +80,9 @@ type Server struct {
 	// canvasNeeds: SSH players in Blocks mode post their desired canvas size here
 	// so the tick goroutine can run the JS raycaster once and cache the RGBA;
 	// View() then blits + quadrant-encodes without holding Runtime.mu.
-	viewports      map[string][2]int  // playerID → [gameW, gameH]
-	localRenderers map[string]bool    // playerID → true if rendering locally
-	canvasNeeds    map[string][2]int  // playerID → [canvasW, canvasH]
+	viewports      map[string][2]int // playerID → [gameW, gameH]
+	localRenderers map[string]bool   // playerID → true if rendering locally
+	canvasNeeds    map[string][2]int // playerID → [canvasW, canvasH]
 	viewportMu     sync.RWMutex
 
 	// Per-player pre-rendered frame cache. The tick goroutine renders into these
@@ -174,15 +174,15 @@ func (a *Server) ChatCh() <-chan domain.Message {
 // --- Interface methods for chrome.ServerAPI and console.ServerAPI ---
 
 func (a *Server) State() *state.CentralState { return a.state }
-func (a *Server) Clock() domain.Clock         { return a.clock }
-func (a *Server) DataDir() string             { return a.dataDir }
-func (a *Server) Uptime() string              { return a.uptime() }
+func (a *Server) Clock() domain.Clock        { return a.clock }
+func (a *Server) DataDir() string            { return a.dataDir }
+func (a *Server) Uptime() string             { return a.uptime() }
 
-func (a *Server) BroadcastChat(msg domain.Message) { a.broadcastChat(msg) }
-func (a *Server) BroadcastMsg(msg tea.Msg)          { a.broadcastMsg(msg) }
+func (a *Server) BroadcastChat(msg domain.Message)          { a.broadcastChat(msg) }
+func (a *Server) BroadcastMsg(msg tea.Msg)                  { a.broadcastMsg(msg) }
 func (a *Server) SendToPlayer(playerID string, msg tea.Msg) { a.sendToPlayer(playerID, msg) }
-func (a *Server) ServerLog(text string)              { a.serverLog(text) }
-func (a *Server) KickPlayer(playerID string) error   { return a.kickPlayer(playerID) }
+func (a *Server) ServerLog(text string)                     { a.serverLog(text) }
+func (a *Server) KickPlayer(playerID string) error          { return a.kickPlayer(playerID) }
 
 func (a *Server) TabCandidates(input string, playerNames []string) (string, []string) {
 	return a.registry.TabCandidates(input, playerNames)
@@ -283,7 +283,6 @@ func (a *Server) SetupPublicIP() string {
 // SetPort stores the SSH listen port so invite scripts can reference it.
 func (a *Server) SetPort(port string) { a.port = port }
 
-
 // InviteToken returns a base64url-encoded binary token containing the server's
 // connection endpoints. The token is variable-length — trailing absent fields
 // are omitted to keep it short.
@@ -368,7 +367,7 @@ func (a *Server) inviteToken() string {
 	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
-const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/DevNull/main/Join.ps1"
+const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/DevNull/main/join.ps1"
 
 // inviteWinCommand returns the Windows invite command.
 // The command is wrapped in "powershell -Command ..." so it runs directly from
@@ -774,7 +773,6 @@ func (a *Server) uptime() string {
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
 }
 
-
 func (a *Server) SetConsoleProgram(p *tea.Program) {
 	a.consoleProgramMu.Lock()
 	a.consoleProgram = p
@@ -959,7 +957,6 @@ func (a *Server) registerBuiltins() {
 			ctx.Broadcast(fmt.Sprintf("%s was kicked.", target.Name))
 		},
 	})
-
 
 	// --- Game commands ---
 

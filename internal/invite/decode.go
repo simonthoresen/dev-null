@@ -1,6 +1,6 @@
 // Package invite decodes DevNull's base64url invite token into a
 // prioritised list of SSH endpoints. The token format is documented
-// in internal/server/server.go (inviteToken) and matches Join.ps1's
+// in internal/server/server.go (inviteToken) and matches join.ps1's
 // PowerShell decoder.
 package invite
 

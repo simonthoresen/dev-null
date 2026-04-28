@@ -31,9 +31,9 @@ const (
 	lanDiscoverWait   = 900 * time.Millisecond
 )
 
-// menuSolarScript renders a lightweight animated solar system used as the
-// menu background while disconnected.
-const menuSolarScript = `
+// launcherSceneScript renders a lightweight animated solar system used as the
+// launcher background while disconnected.
+const launcherSceneScript = `
 var Game = {
   resolveMe: function(state, pid) { return { id: pid }; },
   renderCanvas: function(state, me, canvas) {
@@ -108,7 +108,7 @@ var Game = {
 };
 `
 
-type menuRendererConfig struct {
+type launcherRendererConfig struct {
 	Player       string
 	Term         string
 	Password     string
@@ -120,7 +120,7 @@ type menuRendererConfig struct {
 	InitCommands []string
 }
 
-type menuServer struct {
+type launcherServer struct {
 	Name      string
 	Host      string
 	Port      int
@@ -128,19 +128,19 @@ type menuServer struct {
 	Available bool
 }
 
-func (s menuServer) endpoint() string {
+func (s launcherServer) endpoint() string {
 	return net.JoinHostPort(s.Host, strconv.Itoa(s.Port))
 }
 
-func (s menuServer) key() string {
+func (s launcherServer) key() string {
 	return strings.ToLower(s.endpoint())
 }
 
-func (s menuServer) itemLabel() string {
+func (s launcherServer) itemLabel() string {
 	return fmt.Sprintf("[%s] %s (%s)", s.Source, s.Name, s.endpoint())
 }
 
-type menuRenderer struct {
+type launcherRenderer struct {
 	player       string
 	term         string
 	password     string
@@ -165,27 +165,27 @@ type menuRenderer struct {
 	pinggyStdout     *os.File
 	pinggyStderr     *os.File
 
-	servers   []menuServer
-	lanCache  []menuServer
+	servers   []launcherServer
+	lanCache  []launcherServer
 	lastProbe time.Time
 	lastLAN   time.Time
 	status    string
 	closing   bool
 
-	menuTheme   *theme.Theme
-	menuWindow  *widget.Window
-	serverList  *widget.ListBox
-	statusLabel *widget.Label
-	connectBtn  *widget.Button
-	createBtn   *widget.Button
-	refreshBtn  *widget.Button
-	tunnelBtn   *widget.Button
+	launcherTheme  *theme.Theme
+	launcherWindow *widget.Window
+	serverList     *widget.ListBox
+	statusLabel    *widget.Label
+	connectBtn     *widget.Button
+	createBtn      *widget.Button
+	refreshBtn     *widget.Button
+	tunnelBtn      *widget.Button
 
 	background *client.LocalRenderer
 }
 
-func newMenuRenderer(cfg menuRendererConfig) *menuRenderer {
-	r := &menuRenderer{
+func newLauncherRenderer(cfg launcherRendererConfig) *launcherRenderer {
+	r := &launcherRenderer{
 		player:           cfg.Player,
 		term:             cfg.Term,
 		password:         cfg.Password,
@@ -195,27 +195,27 @@ func newMenuRenderer(cfg menuRendererConfig) *menuRenderer {
 		windowWidth:      cfg.WindowWidth,
 		windowHeight:     cfg.WindowHeight,
 		initCommands:     append([]string(nil), cfg.InitCommands...),
-		menuTheme:        theme.Default(),
+		launcherTheme:    theme.Default(),
 		status:           "Select a server or create a local one.",
 		pinggyStatusFile: filepath.Join(os.TempDir(), fmt.Sprintf("DevNull-pinggy-%d.status.log", os.Getpid())),
 	}
 	if r.localPort <= 0 {
 		r.localPort = defaultServerPort
 	}
-	r.setupMenuUI()
+	r.setupLauncherUI()
 	r.setupBackground()
 	r.refreshServers(true)
 	return r
 }
 
-func (r *menuRenderer) setupBackground() {
+func (r *launcherRenderer) setupBackground() {
 	lr := client.NewLocalRenderer()
-	lr.LoadGame([]client.GameSrcFile{{Name: "menu_solar.js", Content: menuSolarScript}})
+	lr.LoadGame([]client.GameSrcFile{{Name: "launcher_scene.js", Content: launcherSceneScript}})
 	lr.SetState([]byte(`{"_gameTime":0}`))
 	r.background = lr
 }
 
-func (r *menuRenderer) setupMenuUI() {
+func (r *launcherRenderer) setupLauncherUI() {
 	r.serverList = &widget.ListBox{}
 	r.connectBtn = &widget.Button{
 		Label: "Connect",
@@ -252,11 +252,11 @@ func (r *menuRenderer) setupMenuUI() {
 	}
 
 	r.statusLabel = &widget.Label{Align: "left"}
-	r.menuWindow = &widget.Window{
+	r.launcherWindow = &widget.Window{
 		Title: "DevNull",
 		Children: []widget.GridChild{
 			{
-				Control: &widget.Label{Text: "Main Menu", Align: "left"},
+				Control: &widget.Label{Text: "Launcher", Align: "left"},
 				Constraint: widget.GridConstraint{
 					Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal, MinH: 1,
 				},
@@ -296,10 +296,10 @@ func (r *menuRenderer) setupMenuUI() {
 			},
 		},
 	}
-	r.menuWindow.FocusFirst()
+	r.launcherWindow.FocusFirst()
 }
 
-func (r *menuRenderer) Stop() {
+func (r *launcherRenderer) Stop() {
 	r.stopPinggyHelper()
 	if r.sessionConn != nil {
 		_ = r.sessionConn.Close()
@@ -315,12 +315,12 @@ func (r *menuRenderer) Stop() {
 	}
 }
 
-func (r *menuRenderer) HandleInput(w *display.Window) {
+func (r *launcherRenderer) HandleInput(w *display.Window) {
 	if r.sessionRenderer != nil {
 		r.sessionRenderer.HandleInput(w)
 		if r.sessionRenderer.ShouldClose() {
 			r.closeSession()
-			r.status = "Disconnected. Back in main menu."
+			r.status = "Disconnected. Back in launcher."
 			r.refreshServers(true)
 		}
 		return
@@ -334,7 +334,7 @@ func (r *menuRenderer) HandleInput(w *display.Window) {
 	for _, msg := range msgs {
 		switch m := msg.(type) {
 		case tea.MouseClickMsg:
-			r.menuWindow.HandleClick(m.X, m.Y)
+			r.launcherWindow.HandleClick(m.X, m.Y)
 			continue
 		case tea.KeyPressMsg:
 			switch m.String() {
@@ -345,25 +345,25 @@ func (r *menuRenderer) HandleInput(w *display.Window) {
 				r.refreshServers(true)
 				continue
 			case "enter":
-				if r.menuWindow.FocusedControl() == r.serverList {
+				if r.launcherWindow.FocusedControl() == r.serverList {
 					r.connectSelected()
 					continue
 				}
 			}
 		}
 
-		r.menuWindow.HandleUpdate(msg)
+		r.launcherWindow.HandleUpdate(msg)
 	}
 }
 
-func (r *menuRenderer) Draw(w *display.Window, screen *ebiten.Image) {
+func (r *launcherRenderer) Draw(w *display.Window, screen *ebiten.Image) {
 	if r.sessionRenderer != nil {
 		r.sessionRenderer.Draw(w, screen)
 		return
 	}
 
 	if r.background != nil {
-		if bg := r.background.RenderCanvas("menu", screen.Bounds().Dx(), screen.Bounds().Dy()); bg != nil {
+		if bg := r.background.RenderCanvas("launcher", screen.Bounds().Dx(), screen.Bounds().Dy()); bg != nil {
 			screen.DrawImage(bg, &ebiten.DrawImageOptions{})
 		}
 	}
@@ -379,11 +379,11 @@ func (r *menuRenderer) Draw(w *display.Window, screen *ebiten.Image) {
 	dialogY := max(0, (r.rows-dialogH)/2)
 
 	r.statusLabel.Text = r.clipStatus(r.status)
-	r.menuWindow.RenderToBuf(buf, dialogX, dialogY, dialogW, dialogH, r.menuTheme.LayerAt(0))
+	r.launcherWindow.RenderToBuf(buf, dialogX, dialogY, dialogW, dialogH, r.launcherTheme.LayerAt(0))
 	display.DrawImageBuffer(screen, buf, w.FontFace, nil)
 }
 
-func (r *menuRenderer) Resize(cols, rows int) {
+func (r *launcherRenderer) Resize(cols, rows int) {
 	r.cols = cols
 	r.rows = rows
 	if r.sessionRenderer != nil {
@@ -391,11 +391,11 @@ func (r *menuRenderer) Resize(cols, rows int) {
 	}
 }
 
-func (r *menuRenderer) ShouldClose() bool {
+func (r *launcherRenderer) ShouldClose() bool {
 	return r.closing
 }
 
-func (r *menuRenderer) connectSelected() {
+func (r *launcherRenderer) connectSelected() {
 	i := r.serverList.Cursor
 	if i < 0 || i >= len(r.servers) {
 		r.status = "No server selected."
@@ -418,7 +418,7 @@ func (r *menuRenderer) connectSelected() {
 	r.status = fmt.Sprintf("Connected to %s", target.endpoint())
 }
 
-func (r *menuRenderer) createLocalAndConnect() {
+func (r *launcherRenderer) createLocalAndConnect() {
 	if err := r.ensureLocalServer(); err != nil {
 		r.status = fmt.Sprintf("Local server start failed: %v", err)
 		return
@@ -432,7 +432,7 @@ func (r *menuRenderer) createLocalAndConnect() {
 	r.status = "Local server running and connected."
 }
 
-func (r *menuRenderer) openTunnelOnDemand() {
+func (r *launcherRenderer) openTunnelOnDemand() {
 	if err := r.ensureLocalServer(); err != nil {
 		r.status = fmt.Sprintf("Local server start failed: %v", err)
 		return
@@ -449,7 +449,7 @@ func (r *menuRenderer) openTunnelOnDemand() {
 	r.status = fmt.Sprintf("Tunnel ready: %s", status.TcpAddress)
 }
 
-func (r *menuRenderer) ensureLocalServer() error {
+func (r *launcherRenderer) ensureLocalServer() error {
 	if r.localServerReady() {
 		return nil
 	}
@@ -477,7 +477,7 @@ func (r *menuRenderer) ensureLocalServer() error {
 	return nil
 }
 
-func (r *menuRenderer) startPinggyHelper() error {
+func (r *launcherRenderer) startPinggyHelper() error {
 	if r.pinggyStatusFile == "" {
 		return fmt.Errorf("missing pinggy status file")
 	}
@@ -558,7 +558,7 @@ func (r *menuRenderer) startPinggyHelper() error {
 	return fmt.Errorf("timed out waiting for pinggy tunnel")
 }
 
-func (r *menuRenderer) stopPinggyHelper() {
+func (r *launcherRenderer) stopPinggyHelper() {
 	if r.pinggyHelper != nil && r.pinggyHelper.Process != nil {
 		select {
 		case <-r.pinggyDone:
@@ -582,7 +582,7 @@ func (r *menuRenderer) stopPinggyHelper() {
 	}
 }
 
-func (r *menuRenderer) connectTo(host string, port int, password string) error {
+func (r *launcherRenderer) connectTo(host string, port int, password string) error {
 	ptyW, ptyH := r.cols, r.rows
 	if ptyW <= 0 {
 		ptyW = display.WindowCols(r.windowWidth)
@@ -603,7 +603,7 @@ func (r *menuRenderer) connectTo(host string, port int, password string) error {
 	return nil
 }
 
-func (r *menuRenderer) closeSession() {
+func (r *launcherRenderer) closeSession() {
 	if r.sessionConn != nil {
 		_ = r.sessionConn.Close()
 	}
@@ -611,11 +611,11 @@ func (r *menuRenderer) closeSession() {
 	r.sessionRenderer = nil
 }
 
-func (r *menuRenderer) localServerReady() bool {
+func (r *launcherRenderer) localServerReady() bool {
 	return probeServer("127.0.0.1", r.localPort, 300*time.Millisecond)
 }
 
-func (r *menuRenderer) refreshServers(force bool) {
+func (r *launcherRenderer) refreshServers(force bool) {
 	if !force && time.Since(r.lastProbe) < serverProbeEvery {
 		return
 	}
@@ -632,8 +632,8 @@ func (r *menuRenderer) refreshServers(force bool) {
 		selectedKey = r.servers[i].key()
 	}
 
-	servers := collectMenuServers(r.localPort, r.lanCache)
-	probeMenuServers(servers, 350*time.Millisecond)
+	servers := collectLauncherServers(r.localPort, r.lanCache)
+	probeLauncherServers(servers, 350*time.Millisecond)
 	r.servers = servers
 
 	items := make([]string, 0, len(r.servers))
@@ -659,11 +659,11 @@ func (r *menuRenderer) refreshServers(force bool) {
 	r.serverList.SetCursor(cursor)
 }
 
-func collectMenuServers(localPort int, lan []menuServer) []menuServer {
+func collectLauncherServers(localPort int, lan []launcherServer) []launcherServer {
 	if localPort <= 0 {
 		localPort = defaultServerPort
 	}
-	servers := []menuServer{
+	servers := []launcherServer{
 		{Name: "This machine", Host: "127.0.0.1", Port: localPort, Source: "Local"},
 	}
 	known := readKnownServers(datadir.InitFilePath("servers.txt"))
@@ -687,18 +687,18 @@ func collectMenuServers(localPort int, lan []menuServer) []menuServer {
 	return servers
 }
 
-func discoverLANServers(timeout time.Duration) ([]menuServer, error) {
+func discoverLANServers(timeout time.Duration) ([]launcherServer, error) {
 	discovered, err := network.DiscoverLANServers(timeout)
 	if err != nil {
 		return nil, err
 	}
-	servers := make([]menuServer, 0, len(discovered))
+	servers := make([]launcherServer, 0, len(discovered))
 	for _, s := range discovered {
 		name := strings.TrimSpace(s.Name)
 		if name == "" {
 			name = s.Host
 		}
-		servers = append(servers, menuServer{
+		servers = append(servers, launcherServer{
 			Name:   name,
 			Host:   s.Host,
 			Port:   s.Port,
@@ -708,7 +708,7 @@ func discoverLANServers(timeout time.Duration) ([]menuServer, error) {
 	return servers, nil
 }
 
-func probeMenuServers(servers []menuServer, timeout time.Duration) {
+func probeLauncherServers(servers []launcherServer, timeout time.Duration) {
 	var wg sync.WaitGroup
 	for i := range servers {
 		wg.Add(1)
@@ -720,14 +720,14 @@ func probeMenuServers(servers []menuServer, timeout time.Duration) {
 	wg.Wait()
 }
 
-func readKnownServers(path string) []menuServer {
+func readKnownServers(path string) []launcherServer {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil
 	}
 	defer file.Close()
 
-	var out []menuServer
+	var out []launcherServer
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -748,7 +748,7 @@ func readKnownServers(path string) []menuServer {
 		if name == "" {
 			name = host
 		}
-		out = append(out, menuServer{
+		out = append(out, launcherServer{
 			Name:   name,
 			Host:   host,
 			Port:   port,
@@ -800,7 +800,7 @@ func probeServer(host string, port int, timeout time.Duration) bool {
 	return true
 }
 
-func (r *menuRenderer) clipStatus(s string) string {
+func (r *launcherRenderer) clipStatus(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return ""
