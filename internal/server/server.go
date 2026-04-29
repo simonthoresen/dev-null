@@ -373,7 +373,7 @@ func (a *Server) inviteToken() string {
 	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
-const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/DevNull/main/join.ps1"
+const joinScriptURL = "https://raw.githubusercontent.com/simonthoresen/DevNullCore/main/join.ps1"
 
 // inviteWinCommand returns the Windows invite command.
 // The command is wrapped in "powershell -Command ..." so it runs directly from

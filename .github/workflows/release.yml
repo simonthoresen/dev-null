@@ -66,7 +66,7 @@ jobs:
             --title "Latest Build (${{ steps.sha.outputs.short }})" \
             --notes "Auto-built from main at ${{ github.sha }}.
 
-          **Fresh install:** save and run [install.ps1](https://github.com/simonthoresen/DevNull/raw/main/install.ps1).
+          **Fresh install:** save and run [install.ps1](https://github.com/simonthoresen/DevNullCore/raw/main/install.ps1).
           **Existing install:** \`DevNullServer.ps1\` / \`DevNull.ps1\` auto-update binaries on each launch." \
             --latest
 

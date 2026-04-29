@@ -1,12 +1,12 @@
 # DevNull installer
-# Usage: irm https://github.com/simonthoresen/DevNull/raw/main/install.ps1 | iex
+# Usage: irm https://github.com/simonthoresen/DevNullCore/raw/main/install.ps1 | iex
 #    or: save this file and run it directly
 
 param(
     [string]$InstallDir = (Join-Path $env:USERPROFILE "DevNull")
 )
 
-$repo = "simonthoresen/DevNull"
+$repo = "simonthoresen/DevNullCore"
 $ErrorActionPreference = "Stop"
 
 Write-Host ""

@@ -7,7 +7,7 @@ DevNull is a Windows server for hosting real-time multiplayer terminal games ove
 Paste this into a PowerShell window:
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/simonthoresen/DevNull/main/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/simonthoresen/DevNullCore/main/install.ps1 | iex
 ```
 
 This creates a `DevNull` folder in `%USERPROFILE%` containing everything you need. No other dependencies required.
@@ -79,7 +79,7 @@ These files live next to (not inside) the `Core\` runtime install, so they survi
 ## Write your own game
 
 Click **DevNull Create Games** on your desktop. First run installs the
-GitHub CLI + Copilot CLI, forks a [starter template](https://github.com/simonthoresen/DevNullCreateTemplate)
+GitHub CLI + Copilot CLI, forks a [starter template](https://github.com/simonthoresen/DevNullCoreCreateTemplate)
 to your account as `<you>/DevNullCreate`, clones it to
 `~/DevNull/Create/`, and opens Copilot CLI in that folder. Run
 `.\DevNullTest.ps1` in the create folder to test locally; push to

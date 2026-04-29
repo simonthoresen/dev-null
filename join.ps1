@@ -116,7 +116,7 @@ if ($installDir) {
     if ($answer -eq '' -or $answer -match '^[Yy]') {
         $installDir = Join-Path $env:USERPROFILE "DevNull"
         Write-Host "Installing to $installDir ..." -ForegroundColor Cyan
-        & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/simonthoresen/DevNull/main/install.ps1'))) -InstallDir $installDir
+        & ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/simonthoresen/DevNullCore/main/install.ps1'))) -InstallDir $installDir
         # Re-check after install.
         $installDir = Find-InstallDir
         if ($installDir) {

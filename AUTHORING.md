@@ -9,7 +9,7 @@ with anyone running a DevNull server. The full JS surface is in
 1. Make sure DevNull is installed on your machine. If not, run the
    installer one-liner:
    ```powershell
-   irm https://github.com/simonthoresen/DevNull/raw/main/install.ps1 | iex
+   irm https://github.com/simonthoresen/DevNullCore/raw/main/install.ps1 | iex
    ```
 2. Click **DevNull Create Games** on your desktop.
 
@@ -17,7 +17,7 @@ with anyone running a DevNull server. The full JS surface is in
    - installs the GitHub CLI (`gh`) if it's missing,
    - installs the GitHub Copilot CLI extension,
    - asks you to sign in to GitHub,
-   - forks the [DevNullCreateTemplate](https://github.com/simonthoresen/DevNullCreateTemplate)
+   - forks the [DevNullCreateTemplate](https://github.com/simonthoresen/DevNullCoreCreateTemplate)
      template to your account as `<you>/DevNullCreate` and clones it
      to `%USERPROFILE%\DevNull\Create\`,
    - opens Copilot CLI in that folder.

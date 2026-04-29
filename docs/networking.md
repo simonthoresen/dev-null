@@ -8,7 +8,7 @@
   - **`push to main`**: rolling `latest` release (dev channel).
   - **`v*` tags**: versioned release (e.g. `v0.1.0`) for stable distribution and winget.
 - **Winget packaging** (`winget/`): manifest templates for Windows Package Manager. `InstallerType: zip` with `NestedInstallerType: portable` — winget extracts the zip, creates PATH symlinks for `DevNullServer` and `DevNullClient`. Submit to `microsoft/winget-pkgs` by updating the version, URL, and SHA256, then opening a PR.
-- **`install.ps1`** (repo root): one-liner installer for operators -- downloads and extracts the latest release zip verbatim into `%USERPROFILE%\DevNull\`, creates desktop shortcuts. Usage: `irm https://github.com/simonthoresen/DevNull/raw/main/install.ps1 | iex`
+- **`install.ps1`** (repo root): one-liner installer for operators -- downloads and extracts the latest release zip verbatim into `%USERPROFILE%\DevNull\`, creates desktop shortcuts. Usage: `irm https://github.com/simonthoresen/DevNullCore/raw/main/install.ps1 | iex`
 - **`DevNullServer.ps1` / `DevNull.ps1`** (in `dist/` → install root): auto-updates on each launch -- checks the GitHub release for a newer version and downloads the full zip before starting.
 - **Version tracking**: `dist/Core/.version` (i.e. `~/DevNull/Core/.version`) stores the commit SHA of the installed release. Not tracked in git.
 - **Data directory bootstrap** (`internal/datadir`): on first run or version upgrade, bundled assets are copied from the install dir (the exe's dir, `~/DevNull/Core\`) to the data dir (same path in production); `.bundle-manifest.json` is used for diffing. Merge/update behavior is implemented in `internal/datadir/datadir.go` (`Bootstrap`).

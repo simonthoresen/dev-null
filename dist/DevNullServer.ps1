@@ -39,7 +39,7 @@ if ($positionals.Count -ge 1 -and $positionals[0]) {
 $root = $PSScriptRoot
 $coreDir = Join-Path $root "Core"
 $logsDir = Join-Path $env:USERPROFILE "DevNull\Logs"
-$repo = "simonthoresen/DevNull"
+$repo = "simonthoresen/DevNullCore"
 $script:tunnelShell = $null
 $script:tunnelWatcher = $null
 $script:tunnelStatus = $null
