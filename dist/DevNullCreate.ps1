@@ -56,19 +56,28 @@ if (Get-Command gh -ErrorAction SilentlyContinue) {
 }
 
 # ── 2. Copilot CLI extension ───────────────────────────────────────────────────
-Write-Step "Copilot CLI extension"
-$extensions = & gh extension list 2>$null
-if ($extensions -match "gh-copilot") {
-    Write-Skip "already installed"
+# Newer `gh` versions ship `gh copilot` as a built-in command (not an extension).
+# In that case `gh extension install github/gh-copilot` fails with
+# "matches the name of a built-in command or alias", so probe for the command
+# directly before falling back to the extension install.
+Write-Step "Copilot CLI"
+& gh copilot --help 2>&1 | Out-Null
+if ($LASTEXITCODE -eq 0) {
+    Write-Skip "already available"
 } else {
-    & gh extension install github/gh-copilot 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Fail "install failed"
-        Write-Host ""
-        Write-Host "  Run 'gh extension install github/gh-copilot' manually." -ForegroundColor Yellow
-        exit 1
+    $extensions = & gh extension list 2>$null
+    if ($extensions -match "gh-copilot") {
+        Write-Skip "already installed"
+    } else {
+        & gh extension install github/gh-copilot 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail "install failed"
+            Write-Host ""
+            Write-Host "  Run 'gh extension install github/gh-copilot' manually." -ForegroundColor Yellow
+            exit 1
+        }
+        Write-Ok "installed"
     }
-    Write-Ok "installed"
 }
 
 # ── 3. gh auth ────────────────────────────────────────────────────────────────
@@ -128,17 +137,22 @@ if (Test-Path $CreateDir) {
     Write-Ok "cloned"
 }
 
-# ── 5. Open Copilot CLI in the create folder ──────────────────────────────────
+# Open Copilot CLI in the create folder.
+# Run inline in the current console -- works for both launch paths:
+#   - From a desktop shortcut, this is the powershell.exe window the shortcut
+#     spawned, which stays open until gh copilot exits (no extra window pops).
+#   - From an existing terminal, gh copilot just takes over that shell.
 Write-Host ""
 Write-Host "  Opening Copilot CLI in $CreateDir ..." -ForegroundColor Green
-$wt = Get-Command wt.exe -ErrorAction SilentlyContinue
-if ($wt) {
-    Start-Process wt.exe -ArgumentList @("-d", $CreateDir, "pwsh", "-NoExit", "-Command", "gh copilot")
-} else {
-    Start-Process pwsh -WorkingDirectory $CreateDir -ArgumentList @("-NoExit", "-Command", "gh copilot")
+Write-Host ""
+Push-Location $CreateDir
+try {
+    & gh copilot
+} finally {
+    Pop-Location
 }
 
 Write-Host ""
-Write-Host "  All set. Edit Games/, Plugins/, or Shaders/ in the new window." -ForegroundColor Cyan
+Write-Host "  Done. Edit Games/, Plugins/, or Shaders/ in $CreateDir." -ForegroundColor Cyan
 Write-Host "  Run .\DevNullTest.ps1 in that folder to test locally."
 Write-Host ""

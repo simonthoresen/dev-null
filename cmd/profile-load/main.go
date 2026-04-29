@@ -16,7 +16,7 @@
 //
 // Usage:
 //
-//	go run ./cmd/profile-load --ssh 8 --gui 8 --game wolf3d --duration 15s
+//	go run ./cmd/profile-load --ssh 8 --gui 8 --game pacman --duration 15s
 package main
 
 import (
@@ -47,7 +47,7 @@ func main() {
 	var (
 		nSSH       = flag.Int("ssh", 8, "number of plain SSH clients to spawn")
 		nGUI       = flag.Int("gui", 8, "number of enhanced (DEV_NULL_CLIENT=enhanced) SSH clients to spawn")
-		gameName   = flag.String("game", "wolf3d", "game to load (must be in dist/Games/)")
+		gameName   = flag.String("game", "", "game to load (must be in dist/Games/) — required")
 		duration   = flag.Duration("duration", 15*time.Second, "measurement window")
 		warmup     = flag.Duration("warmup", 12*time.Second, "wait this long after game-load before starting measurement (covers 10s starting countdown)")
 		dataDir    = flag.String("data-dir", "dist", "data directory containing Games/")
@@ -59,6 +59,12 @@ func main() {
 		quiet      = flag.Bool("quiet", true, "suppress server slog output")
 	)
 	flag.Parse()
+
+	if *gameName == "" {
+		fmt.Fprintln(os.Stderr, "error: --game is required")
+		flag.Usage()
+		os.Exit(2)
+	}
 
 	if *quiet {
 		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})))

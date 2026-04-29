@@ -1,8 +1,9 @@
-.PHONY: build build-server build-client build-testbed run-server run-server-lan run-client run-client-local run-testbed run-testbed-onlcr test clean generate-manifest winres
+.PHONY: build build-server build-client build-testbed run-server run-server-lan run-client run-client-local run-testbed run-testbed-onlcr test clean generate-manifest winres install start-server start-server-lan start-client start-solo
 
 GIT_COMMIT  := $(shell git rev-parse --short HEAD)
 BUILD_DATE  := $(shell git log -1 --format=%cI)
 GIT_REMOTE  := $(shell git remote get-url origin)
+INSTALL_DIR := $(USERPROFILE)/DevNull
 
 # Build all binaries into dist/Core/ (strip debug info for smaller binaries)
 build: winres build-server build-client
@@ -59,3 +60,24 @@ generate-manifest:
 # Remove build outputs from dist/ (keeps Games/, Fonts/, etc.)
 clean:
 	rm -f dist/Core/DevNullServer.exe dist/Core/DevNullClient.exe dist/Core/PinggyHelper.exe dist/testbed.exe
+
+# Install: build, generate manifest, then mirror dist/ into %USERPROFILE%/DevNull/
+# so dev runs hit the same layout as a real installer. Strict-mirrors Core\
+# (also deletes stale files); never touches Create\, Shared\, Config\, Logs\.
+install: build generate-manifest
+	powershell -ExecutionPolicy Bypass -File install-local.ps1
+
+# Start targets: build + install + run from the user-profile install location
+# with --no-update so locally-built binaries aren't overwritten by the latest
+# GitHub release on each launch.
+start-server: install
+	powershell -ExecutionPolicy Bypass -File "$(INSTALL_DIR)/DevNullServer.ps1" --no-update
+
+start-server-lan: install
+	powershell -ExecutionPolicy Bypass -File "$(INSTALL_DIR)/DevNullServer.ps1" --no-update --lan
+
+start-client: install
+	powershell -ExecutionPolicy Bypass -File "$(INSTALL_DIR)/DevNull.ps1" --no-update
+
+start-solo: install
+	powershell -ExecutionPolicy Bypass -File "$(INSTALL_DIR)/DevNull.ps1" --no-update --local

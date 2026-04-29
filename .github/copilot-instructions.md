@@ -13,6 +13,12 @@
   - `make run-server-lan`
   - `make run-client`
   - `make run-client-local`
+- Develop against the installed layout (mirror `dist\` into `%USERPROFILE%\DevNull\` and run from there with `--no-update`):
+  - `make install`
+  - `make start-server`
+  - `make start-server-lan`
+  - `make start-client`
+  - `make start-solo`
 
 - Full test suite:
   - `make test` (runs `go test -v ./...`)
@@ -47,4 +53,4 @@
 - **Respect source precedence:** Create/Shared/Core order must stay consistent for listing and resolving games/plugins/shaders.
 - **Time-based render contract:** for local rendering, game code should rely on `Game.state._gameTime` instead of local wall clock.
 - **Render-path logging rule:** avoid `slog` in `View()`/`Render()` paths (console log routing can create render feedback loops).
-- **Data-dir behavior in dev:** when running from source, use `--data-dir dist/Core` for server/client commands to match packaged runtime layout.
+- **Dev runs from the installed layout:** prefer `make install` + `make start-server` / `start-client` / `start-solo` so source-tree dev mirrors `%USERPROFILE%\DevNull\` (same `Core\`, `Shared\`, `Create\`, `Config\`, `Logs\` paths a packaged install uses). The legacy `run-*` targets still work for in-place runs from `dist\`.

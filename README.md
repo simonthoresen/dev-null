@@ -45,7 +45,7 @@ Direct modes are still supported:
 Once the server is running, type into the server console:
 
 ```
-/game load example
+/game load pacman
 /game load https://github.com/someone/repo/blob/main/mygame.js
 ```
 
@@ -61,7 +61,7 @@ Runs when the server console starts. Useful for loading a default game, setting 
 # My server setup
 /theme dark
 /plugin load greeter
-/game load invaders
+/game load pacman
 ```
 
 ### `~/DevNull/Config/client.txt`
@@ -88,3 +88,21 @@ it into Games > Add.
 
 Full workflow: [AUTHORING.md](AUTHORING.md).
 JavaScript API surface: [API-REFERENCE.md](API-REFERENCE.md).
+
+## Develop
+
+To hack on DevNull itself, build from source and mirror the result into the same
+`%USERPROFILE%\DevNull\` layout an end-user gets:
+
+```powershell
+make install        # build + generate manifest + mirror dist\ into %USERPROFILE%\DevNull\
+make start-server   # run the installed server (--no-update)
+make start-client   # run the installed client (--no-update)
+make start-solo     # run the installed client in --local mode (--no-update)
+```
+
+`make install` strictly mirrors `Core\` (overwrites changed files and deletes
+stale ones) and never touches your `Create\`, `Shared\`, `Config\`, or `Logs\`.
+For JS authoring, clone your `<you>/DevNullCreate` fork into
+`%USERPROFILE%\DevNull\Create\` so the runtime resolves your games via the
+normal Create > Shared > Core source precedence.
