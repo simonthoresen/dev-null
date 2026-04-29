@@ -8,7 +8,6 @@ import (
 	"dev-null/internal/domain"
 	"dev-null/internal/engine"
 	"dev-null/internal/state"
-	"dev-null/internal/theme"
 )
 
 // ─── Game sub-menu ───────────────────────────────────────────────────────────
@@ -113,9 +112,9 @@ type ThemeSubMenuOptions struct {
 
 // BuildThemeSubItems returns the menu items for the Themes sub-menu. The
 // "default" entry represents the built-in theme (active when CurrentTheme is
-// empty); file-based themes follow it.
+// empty); file-based themes follow it and are grouped by source (Create/Shared/Core).
 func BuildThemeSubItems(opts ThemeSubMenuOptions) []domain.MenuItemDef {
-	available := theme.ListThemes(opts.DataDir)
+	available := engine.ListAllThemes(opts.DataDir)
 	var items []domain.MenuItemDef
 	if opts.OnAdd != nil {
 		items = append(items,
@@ -132,8 +131,13 @@ func BuildThemeSubItems(opts ThemeSubMenuOptions) []domain.MenuItemDef {
 	if len(available) > 0 {
 		items = append(items, domain.MenuItemDef{Label: "---"})
 	}
-	for _, name := range available {
-		n := name
+	lastSource := engine.Source(-1)
+	for _, item := range available {
+		if item.Source != lastSource {
+			items = append(items, sectionHeader(item.Source))
+			lastSource = item.Source
+		}
+		n := item.Name
 		items = append(items, domain.MenuItemDef{
 			Label:   n,
 			Toggle:  true,

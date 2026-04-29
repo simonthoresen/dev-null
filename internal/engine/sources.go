@@ -81,6 +81,33 @@ func ListAllScripts(kind, dataDir string) []Item {
 	return listAll(dataDir, kind, ListScripts)
 }
 
+// ListAllThemes returns theme names (.json) from every configured source in
+// priority order, with deduplication. Uses the same Create > Shared > Core
+// resolution as other assets so authors can place themes in Create/Shared.
+func ListAllThemes(dataDir string) []Item {
+	// Use a small wrapper to adapt ListDir(dir, ext) to the expected lister
+	// signature used by listAll.
+	lister := func(dir string) []string { return ListDir(dir, ".json") }
+	return listAll(dataDir, datadir.DirThemes, lister)
+}
+
+// ResolveThemePathAll walks Create > Shared > Core and returns the first
+// matching theme JSON path. Falls back to the Core-source path for error
+// messages even if no file exists there.
+func ResolveThemePathAll(dataDir, name string) string {
+	for _, src := range SourceOrder {
+		dir := SourceDir(src, datadir.DirThemes, dataDir)
+		if dir == "" {
+			continue
+		}
+		path := filepath.Join(dir, name+".json")
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return filepath.Join(dataDir, datadir.DirThemes, name+".json")
+}
+
 // listAll is the shared multi-source listing helper.
 func listAll(dataDir, kind string, lister func(string) []string) []Item {
 	seen := map[string]bool{}

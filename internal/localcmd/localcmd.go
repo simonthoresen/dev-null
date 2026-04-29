@@ -5,7 +5,6 @@ package localcmd
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"dev-null/internal/domain"
@@ -15,17 +14,17 @@ import (
 
 // --- Theme commands ---
 
-// HandleThemeList lists available themes.
+// HandleThemeList lists available themes across Create/Shared/Core sources.
 func HandleThemeList(dataDir, currentThemeName string, output func(string)) {
-	available := theme.ListThemes(dataDir)
+	available := engine.ListAllThemes(dataDir)
 	if len(available) == 0 {
 		output("No themes found in Themes/")
 		return
 	}
 	var lines []string
-	for _, name := range available {
-		line := "  " + name
-		if strings.EqualFold(name, currentThemeName) {
+	for _, item := range available {
+		line := "  " + item.Name + "  (" + item.Source.Label() + ")"
+		if strings.EqualFold(item.Name, currentThemeName) {
 			line += "  [active]"
 		}
 		lines = append(lines, line)
@@ -42,7 +41,7 @@ func HandleThemeLoad(name, dataDir string, output func(string)) (*theme.Theme, s
 		output(fmt.Sprintf("Theme changed to: %s", t.Name))
 		return t, ""
 	}
-	path := filepath.Join(dataDir, "Themes", name+".json")
+	path := engine.ResolveThemePathAll(dataDir, name)
 	t, err := theme.Load(path)
 	if err != nil {
 		output(fmt.Sprintf("Failed to load theme: %v", err))
