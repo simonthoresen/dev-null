@@ -10,7 +10,7 @@
 
 param(
     [string]$CreateDir   = (Join-Path $env:USERPROFILE "DevNull\Create"),
-    [string]$Template    = "simonthoresen/DevNullCoreCreateTemplate",
+    [string]$Template    = "simonthoresen/DevNullTemplate",
     [string]$RepoName    = "DevNullCreate"
 )
 
