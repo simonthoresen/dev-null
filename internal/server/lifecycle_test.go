@@ -110,8 +110,8 @@ func TestLoadAndUnloadGame(t *testing.T) {
 	name := s.state.GameName
 	game := s.state.ActiveGame
 	s.state.RUnlock()
-	if name != "test-game" {
-		t.Fatalf("expected 'test-game', got %q", name)
+	if name != "core:test-game" {
+		t.Fatalf("expected 'core:test-game', got %q", name)
 	}
 	if game == nil {
 		t.Fatal("expected active game")
@@ -230,7 +230,7 @@ func TestSuspendResume(t *testing.T) {
 	if saves[0].SaveName != "save1" {
 		t.Fatalf("expected 'save1', got %q", saves[0].SaveName)
 	}
-	suspendSave, err := state.LoadSuspend(s.dataDir, "test-game", "save1")
+	suspendSave, err := state.LoadSuspend(s.dataDir, "core:test-game", "save1")
 	if err != nil {
 		t.Fatalf("LoadSuspend: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestSuspendResume(t *testing.T) {
 	}
 
 	// Resume — load() gets persistent state, resume() gets session state (score=2).
-	if err := s.resumeGame("test-game", "save1"); err != nil {
+	if err := s.resumeGame("core:test-game", "save1"); err != nil {
 		t.Fatalf("resumeGame: %v", err)
 	}
 	if s.state.GetGamePhase() != domain.PhasePlaying {

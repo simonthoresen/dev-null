@@ -28,6 +28,19 @@ import (
 
 var update = flag.Bool("update", false, "regenerate golden files instead of comparing")
 
+// TestMain isolates HOME / USERPROFILE so the developer's real
+// ~/DevNull/Create and ~/DevNull/Shared trees don't leak into the
+// source-aware game/theme/plugin/shader listings rendered by these tests.
+func TestMain(m *testing.M) {
+	tmp, err := os.MkdirTemp("", "rendertest-home-")
+	if err == nil {
+		os.Setenv("HOME", tmp)
+		os.Setenv("USERPROFILE", tmp)
+		defer os.RemoveAll(tmp)
+	}
+	os.Exit(m.Run())
+}
+
 // fixedTime is the deterministic wall-clock value used across all render tests.
 var fixedTime = time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC)
 

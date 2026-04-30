@@ -1,21 +1,25 @@
 package engine
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"dev-null/internal/datadir"
 )
 
 // Source identifies which asset root a game/plugin/shader was found in.
 //
-// Resolution order is Create > Shared > Core: an in-progress create item
-// shadows a name from Shared, which shadows the same name in Core.
+// Resolution order is Create > Shared > Core: sources are checked in
+// that order to detect collisions, but no source implicitly shadows
+// another any more — duplicate names must be qualified by the user
+// as "create/<name>", "shared/<name>", or "core/<name>".
 type Source int
 
 const (
 	// SourceCreate is %USERPROFILE%/DevNull/Create — the author's git repo.
-	// Highest priority so in-progress work shadows installed names.
 	SourceCreate Source = iota
 
 	// SourceShared is %USERPROFILE%/DevNull/Shared — items downloaded
@@ -40,7 +44,16 @@ func (s Source) Label() string {
 	return ""
 }
 
-// SourceOrder lists sources in resolution priority (highest first).
+// Prefix returns the lowercase prefix used for qualified names, e.g.
+// "create:" for SourceCreate. Empty when the source is unknown.
+func (s Source) Prefix() string {
+	if l := s.Label(); l != "" {
+		return strings.ToLower(l) + ":"
+	}
+	return ""
+}
+
+// SourceOrder lists sources in canonical order (Create, Shared, Core).
 var SourceOrder = []Source{SourceCreate, SourceShared, SourceCore}
 
 // SourceDir returns the directory containing items of the given asset kind
@@ -68,49 +81,73 @@ type Item struct {
 	Source Source
 }
 
-// ListAllGames returns games from every configured source in priority
-// order. Names are deduplicated: a name appearing in a higher-priority
-// source shadows the same name in a lower-priority one.
+// ParseQualifiedName checks whether a name is prefixed with "create/",
+// "shared/", or "core/" (case-insensitive). When matched it returns the
+// source and the unqualified base name. ok is false for plain names.
+func ParseQualifiedName(name string) (Source, string, bool) {
+	lower := strings.ToLower(name)
+	for _, src := range SourceOrder {
+		p := src.Prefix()
+		if p != "" && strings.HasPrefix(lower, p) {
+			return src, name[len(p):], true
+		}
+	}
+	return 0, name, false
+}
+
+// QualifiedName returns "<src>/<name>" using the source's lowercase prefix.
+func QualifiedName(src Source, name string) string {
+	return src.Prefix() + name
+}
+
+// AmbiguousAssetError signals that an unqualified name exists in more
+// than one source. The caller should ask the user to qualify the name
+// using one of the listed candidates.
+type AmbiguousAssetError struct {
+	Kind       string // "game", "plugin", "shader", "theme"
+	Name       string
+	Candidates []Source
+}
+
+func (e *AmbiguousAssetError) Error() string {
+	parts := make([]string, 0, len(e.Candidates))
+	for _, s := range e.Candidates {
+		parts = append(parts, QualifiedName(s, e.Name))
+	}
+	return fmt.Sprintf("ambiguous %s name %q (try %s)",
+		e.Kind, e.Name, strings.Join(parts, " or "))
+}
+
+// IsAmbiguous reports whether err is an AmbiguousAssetError.
+func IsAmbiguous(err error) bool {
+	var amb *AmbiguousAssetError
+	return errors.As(err, &amb)
+}
+
+// ListAllGames returns games from every configured source. Names are NOT
+// deduplicated — a name appearing in multiple sources will appear once
+// per source and must be qualified to load.
 func ListAllGames(dataDir string) []Item {
 	return listAll(dataDir, datadir.DirGames, ListGames)
 }
 
 // ListAllScripts returns plugins or shaders (kind == "Plugins"/"Shaders")
-// from every configured source in priority order, with deduplication.
+// from every configured source. Duplicates are kept; callers must
+// disambiguate with qualified names.
 func ListAllScripts(kind, dataDir string) []Item {
 	return listAll(dataDir, kind, ListScripts)
 }
 
-// ListAllThemes returns theme names (.json) from every configured source in
-// priority order, with deduplication. Uses the same Create > Shared > Core
-// resolution as other assets so authors can place themes in Create/Shared.
+// ListAllThemes returns theme names (.json) from every configured source.
+// Duplicates are kept; qualify by source to disambiguate.
 func ListAllThemes(dataDir string) []Item {
-	// Use a small wrapper to adapt ListDir(dir, ext) to the expected lister
-	// signature used by listAll.
 	lister := func(dir string) []string { return ListDir(dir, ".json") }
 	return listAll(dataDir, datadir.DirThemes, lister)
 }
 
-// ResolveThemePathAll walks Create > Shared > Core and returns the first
-// matching theme JSON path. Falls back to the Core-source path for error
-// messages even if no file exists there.
-func ResolveThemePathAll(dataDir, name string) string {
-	for _, src := range SourceOrder {
-		dir := SourceDir(src, datadir.DirThemes, dataDir)
-		if dir == "" {
-			continue
-		}
-		path := filepath.Join(dir, name+".json")
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
-	return filepath.Join(dataDir, datadir.DirThemes, name+".json")
-}
-
-// listAll is the shared multi-source listing helper.
+// listAll lists items across all sources, attributing each to its source.
+// Duplicates are preserved (not deduped).
 func listAll(dataDir, kind string, lister func(string) []string) []Item {
-	seen := map[string]bool{}
 	var items []Item
 	for _, src := range SourceOrder {
 		dir := SourceDir(src, kind, dataDir)
@@ -118,46 +155,153 @@ func listAll(dataDir, kind string, lister func(string) []string) []Item {
 			continue
 		}
 		for _, name := range lister(dir) {
-			if seen[name] {
-				continue
-			}
-			seen[name] = true
 			items = append(items, Item{Name: name, Source: src})
 		}
 	}
 	return items
 }
 
-// ResolveGamePathAll walks Create > Shared > Core and returns the first
-// matching path. Falls back to the Core-source path for error messages
-// even if no file exists there.
-func ResolveGamePathAll(dataDir, name string) string {
+// ResolveGamePathInSource resolves a game name within a single source.
+// Returns the computed path even if the file does not exist (the caller
+// surfaces the not-found error when it tries to load).
+func ResolveGamePathInSource(src Source, dataDir, name string) string {
+	dir := SourceDir(src, datadir.DirGames, dataDir)
+	if dir == "" {
+		return filepath.Join(dataDir, datadir.DirGames, name+".js")
+	}
+	return ResolveGamePath(dir, name)
+}
+
+// ResolveScriptPathInSource resolves a plugin or shader within one source.
+func ResolveScriptPathInSource(kind string, src Source, dataDir, name string) string {
+	dir := SourceDir(src, kind, dataDir)
+	if dir == "" {
+		return filepath.Join(dataDir, kind, name+".js")
+	}
+	return filepath.Join(dir, name+".js")
+}
+
+// ResolveThemePathInSource resolves a theme within a single source.
+func ResolveThemePathInSource(src Source, dataDir, name string) string {
+	dir := SourceDir(src, datadir.DirThemes, dataDir)
+	if dir == "" {
+		return filepath.Join(dataDir, datadir.DirThemes, name+".json")
+	}
+	return filepath.Join(dir, name+".json")
+}
+
+// ResolveTheme resolves a theme name (qualified or bare) to its canonical
+// qualified id "<src>:<name>" and absolute file path. Bare names that
+// exist in multiple sources return AmbiguousAssetError; bare names that
+// don't exist anywhere fall back to the Core source so the caller can
+// surface a clean not-found error against a real path.
+func ResolveTheme(dataDir, name string) (id, path string, err error) {
+	if src, base, ok := ParseQualifiedName(name); ok {
+		return QualifiedName(src, base), ResolveThemePathInSource(src, dataDir, base), nil
+	}
+	matches := scanSources(name, datadir.DirThemes, ".json", dataDir)
+	if len(matches) > 1 {
+		return "", "", &AmbiguousAssetError{Kind: "theme", Name: name, Candidates: matches}
+	}
+	if len(matches) == 1 {
+		return QualifiedName(matches[0], name), ResolveThemePathInSource(matches[0], dataDir, name), nil
+	}
+	return QualifiedName(SourceCore, name),
+		filepath.Join(dataDir, datadir.DirThemes, name+".json"), nil
+}
+
+// ResolveGame resolves a game name (qualified or bare) to its canonical
+// qualified id and absolute file path. See ResolveTheme for semantics.
+func ResolveGame(dataDir, name string) (id, path string, err error) {
+	if src, base, ok := ParseQualifiedName(name); ok {
+		return QualifiedName(src, base), ResolveGamePathInSource(src, dataDir, base), nil
+	}
+	var matches []Source
 	for _, src := range SourceOrder {
 		dir := SourceDir(src, datadir.DirGames, dataDir)
 		if dir == "" {
 			continue
 		}
-		path := ResolveGamePath(dir, name)
-		if _, err := os.Stat(path); err == nil {
-			return path
+		p := ResolveGamePath(dir, name)
+		if _, err := os.Stat(p); err == nil {
+			matches = append(matches, src)
 		}
 	}
-	return filepath.Join(dataDir, datadir.DirGames, name+".js")
+	if len(matches) > 1 {
+		return "", "", &AmbiguousAssetError{Kind: "game", Name: name, Candidates: matches}
+	}
+	if len(matches) == 1 {
+		return QualifiedName(matches[0], name),
+			ResolveGamePathInSource(matches[0], dataDir, name), nil
+	}
+	return QualifiedName(SourceCore, name),
+		filepath.Join(dataDir, datadir.DirGames, name+".js"), nil
 }
 
-// ResolveScriptPathAll walks Create > Shared > Core for a plugin or
-// shader file (kind == "Plugins"/"Shaders"). Falls back to the
-// Core-source path for error messages even if no file exists.
-func ResolveScriptPathAll(kind, dataDir, name string) string {
+// ResolveScript resolves a plugin or shader name (kind == "Plugins" or
+// "Shaders") to its qualified id and absolute path. Same semantics as
+// ResolveGame.
+func ResolveScript(kind, dataDir, name string) (id, path string, err error) {
+	if src, base, ok := ParseQualifiedName(name); ok {
+		return QualifiedName(src, base), ResolveScriptPathInSource(kind, src, dataDir, base), nil
+	}
+	matches := scanSources(name, kind, ".js", dataDir)
+	if len(matches) > 1 {
+		return "", "", &AmbiguousAssetError{
+			Kind: strings.ToLower(strings.TrimSuffix(kind, "s")),
+			Name: name, Candidates: matches}
+	}
+	if len(matches) == 1 {
+		return QualifiedName(matches[0], name),
+			ResolveScriptPathInSource(kind, matches[0], dataDir, name), nil
+	}
+	return QualifiedName(SourceCore, name),
+		filepath.Join(dataDir, kind, name+".js"), nil
+}
+
+// SourceForPath identifies which source root contains the given absolute
+// file path. Used by lifecycle code that already has a path (from URL
+// download or direct load) and needs to derive the qualified id.
+// Falls back to SourceCore when no source root is a prefix of path.
+func SourceForPath(path, kind, dataDir string) Source {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+	abs = filepath.Clean(abs)
 	for _, src := range SourceOrder {
 		dir := SourceDir(src, kind, dataDir)
 		if dir == "" {
 			continue
 		}
-		path := filepath.Join(dir, name+".js")
-		if _, err := os.Stat(path); err == nil {
-			return path
+		dirAbs, err := filepath.Abs(dir)
+		if err != nil {
+			dirAbs = dir
+		}
+		dirAbs = filepath.Clean(dirAbs)
+		rel, err := filepath.Rel(dirAbs, abs)
+		if err != nil {
+			continue
+		}
+		if !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
+			return src
 		}
 	}
-	return filepath.Join(dataDir, kind, name+".js")
+	return SourceCore
+}
+
+// scanSources returns the sources where <dir>/<name><ext> exists.
+func scanSources(name, kind, ext, dataDir string) []Source {
+	var matches []Source
+	for _, src := range SourceOrder {
+		dir := SourceDir(src, kind, dataDir)
+		if dir == "" {
+			continue
+		}
+		path := filepath.Join(dir, name+ext)
+		if _, err := os.Stat(path); err == nil {
+			matches = append(matches, src)
+		}
+	}
+	return matches
 }

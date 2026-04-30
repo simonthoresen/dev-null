@@ -14,11 +14,16 @@ import (
 )
 
 // validNameRe matches names that are safe for use in file paths:
-// alphanumeric, hyphens, underscores, and dots (no path separators or ..).
-var validNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+// alphanumeric, hyphens, underscores, and dots, optionally prefixed
+// by a source qualifier like "create:" or "core:" or "shared:".
+// The qualifier is rejected for path use without sanitisation — callers
+// that build filesystem paths must run names through SanitizeForPath.
+var validNameRe = regexp.MustCompile(
+	`^([a-zA-Z][a-zA-Z0-9]*:)?[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 // ValidateName checks that a name is safe for use in file paths.
 // Rejects empty strings, path traversal (.. or separators), and non-alphanumeric starts.
+// Accepts an optional "<source>:" qualifier prefix.
 func ValidateName(name string) error {
 	if name == "" {
 		return fmt.Errorf("name must not be empty")
@@ -27,9 +32,16 @@ func ValidateName(name string) error {
 		return fmt.Errorf("name must not contain '..'")
 	}
 	if !validNameRe.MatchString(name) {
-		return fmt.Errorf("name %q contains invalid characters (allowed: a-z, 0-9, '-', '_', '.')", name)
+		return fmt.Errorf("name %q contains invalid characters (allowed: a-z, 0-9, '-', '_', '.', optional 'source:' prefix)", name)
 	}
 	return nil
+}
+
+// SanitizeForPath converts a (possibly qualified) name into a form safe
+// to embed in a filesystem path on all platforms by replacing the ':'
+// qualifier separator with '__'. Idempotent for non-qualified names.
+func SanitizeForPath(name string) string {
+	return strings.ReplaceAll(name, ":", "__")
 }
 
 // LoadGameState reads the saved state for a game from dist/state/<gameName>.json.
@@ -38,7 +50,7 @@ func LoadGameState(dataDir, gameName string) (any, error) {
 	if err := ValidateName(gameName); err != nil {
 		return nil, fmt.Errorf("invalid game name: %w", err)
 	}
-	path := filepath.Join(dataDir, "state", gameName+".json")
+	path := filepath.Join(dataDir, "state", SanitizeForPath(gameName)+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -76,7 +88,7 @@ type SuspendInfo struct {
 }
 
 func suspendDir(dataDir, gameName string) string {
-	return filepath.Join(dataDir, "state", "saves", gameName)
+	return filepath.Join(dataDir, "state", "saves", SanitizeForPath(gameName))
 }
 
 func suspendPath(dataDir, gameName, saveName string) string {
@@ -133,12 +145,15 @@ func DeleteSuspend(dataDir, gameName, saveName string) error {
 }
 
 // ListSuspends returns all suspend saves, optionally filtered by game name.
-// If gameName is empty, returns saves for all games.
+// If gameName is empty, returns saves for all games. The qualified game id
+// stored inside each save file is what populates SuspendInfo.GameName;
+// on-disk directory names are sanitised so a single qualifier may use
+// either form.
 func ListSuspends(dataDir string, gameName string) []SuspendInfo {
 	savesRoot := filepath.Join(dataDir, "state", "saves")
 	var gameDirs []string
 	if gameName != "" {
-		gameDirs = []string{gameName}
+		gameDirs = []string{SanitizeForPath(gameName)}
 	} else {
 		entries, err := os.ReadDir(savesRoot)
 		if err != nil {
@@ -163,10 +178,16 @@ func ListSuspends(dataDir string, gameName string) []SuspendInfo {
 				continue
 			}
 			sn := strings.TrimSuffix(e.Name(), ".json")
-			save, err := LoadSuspend(dataDir, gn, sn)
+			// Read directly: gn here is already the on-disk (sanitized) form.
+			data, err := os.ReadFile(filepath.Join(dir, e.Name()))
 			if err != nil {
 				continue
 			}
+			var save SuspendSave
+			if err := json.Unmarshal(data, &save); err != nil {
+				continue
+			}
+			_ = sn
 			results = append(results, SuspendInfo{
 				GameName:  save.GameName,
 				SaveName:  save.SaveName,
@@ -208,7 +229,7 @@ func SaveGameState(dataDir, gameName string, s any) error {
 	if err != nil {
 		return fmt.Errorf("marshal game state: %w", err)
 	}
-	path := filepath.Join(dir, gameName+".json")
+	path := filepath.Join(dir, SanitizeForPath(gameName)+".json")
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write game state: %w", err)
 	}

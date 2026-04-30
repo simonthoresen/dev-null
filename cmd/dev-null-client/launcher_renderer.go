@@ -18,6 +18,7 @@ import (
 	"dev-null/internal/client"
 	"dev-null/internal/datadir"
 	"dev-null/internal/display"
+	"dev-null/internal/domain"
 	"dev-null/internal/network"
 	"dev-null/internal/render"
 	"dev-null/internal/theme"
@@ -100,11 +101,14 @@ type launcherRenderer struct {
 	launcherTheme  *theme.Theme
 	launcherWindow *widget.Window
 	serverList     *widget.ListBox
-	statusLabel    *widget.Label
-	connectBtn     *widget.Button
 	createBtn      *widget.Button
-	refreshBtn     *widget.Button
-	tunnelBtn      *widget.Button
+	addBtn         *widget.Button
+	overlay        widget.OverlayState
+
+	// Child indices into launcherWindow.Children for focus management.
+	serverListChild int
+	createBtnChild  int
+	initialFocusSet bool
 
 	background      *launcherScene
 	backgroundStart time.Time
@@ -145,84 +149,81 @@ func (r *launcherRenderer) setupLauncherUI() {
 		Items: []string{"Scanning for servers..."},
 		Tags:  []string{""},
 	}
-	r.connectBtn = &widget.Button{
-		Label: "Connect",
-		Disabled: func() bool {
-			i := r.serverList.Cursor
-			return i < 0 || i >= len(r.servers) || !r.servers[i].Available
-		},
-		OnPress: r.connectSelected,
-	}
 	r.createBtn = &widget.Button{
 		Label:   "Create server",
+		Align:   "center",
 		OnPress: r.createLocalAndConnect,
 	}
-	r.refreshBtn = &widget.Button{
-		Label:   "Refresh",
-		OnPress: func() { r.refreshServers(true) },
-	}
-	r.tunnelBtn = &widget.Button{
-		Label:   "Open tunnel",
-		OnPress: r.openTunnelOnDemand,
+	r.addBtn = &widget.Button{
+		Label:   "Add server",
+		Align:   "center",
+		OnPress: r.openAddServerDialog,
 	}
 
-	buttonRow := &widget.Container{
+	// Centre the buttons horizontally with weighted spacers.
+	createBtnRow := &widget.Container{
 		Horizontal: true,
 		Children: []widget.ContainerChild{
-			{Control: r.connectBtn, Fixed: len(r.connectBtn.Label) + 6},
-			{Control: &widget.Label{Text: " "}, Fixed: 1},
+			{Control: &widget.Label{Text: ""}, Weight: 1},
 			{Control: r.createBtn, Fixed: len(r.createBtn.Label) + 6},
-			{Control: &widget.Label{Text: " "}, Fixed: 1},
-			{Control: r.tunnelBtn, Fixed: len(r.tunnelBtn.Label) + 6},
-			{Control: &widget.Label{Text: " "}, Fixed: 1},
-			{Control: r.refreshBtn, Fixed: len(r.refreshBtn.Label) + 6},
+			{Control: &widget.Label{Text: ""}, Fixed: 2},
+			{Control: r.addBtn, Fixed: len(r.addBtn.Label) + 6},
+			{Control: &widget.Label{Text: ""}, Weight: 1},
 		},
 	}
 
-	r.statusLabel = &widget.Label{Align: "left"}
-	r.launcherWindow = &widget.Window{
-		Title: "DevNull",
-		Children: []widget.GridChild{
-			{
-				Control: &widget.Label{Text: "Launcher", Align: "left"},
-				Constraint: widget.GridConstraint{
-					Col: 0, Row: 0, WeightX: 1, Fill: widget.FillHorizontal, MinH: 1,
-				},
-			},
-			{
-				Control: r.serverList, TabIndex: 0,
-				Constraint: widget.GridConstraint{
-					Col: 0, Row: 1, WeightX: 1, WeightY: 1, Fill: widget.FillBoth, MinH: 7,
-				},
-			},
-			{
-				Control: &widget.HDivider{Connected: true},
-				Constraint: widget.GridConstraint{
-					Col: 0, Row: 2, Fill: widget.FillHorizontal, MinH: 1,
-				},
-			},
-			{
-				Control: buttonRow, TabIndex: 1,
-				Constraint: widget.GridConstraint{
-					Col: 0, Row: 3, WeightX: 1, Fill: widget.FillHorizontal, MinH: 1,
-				},
-			},
-			{
-				Control: &widget.Label{
-					Text:  "Enter: connect   F5: refresh   Esc: quit   Tunnel opens on demand",
-					Align: "left",
-				},
-				Constraint: widget.GridConstraint{
-					Col: 0, Row: 4, WeightX: 1, Fill: widget.FillHorizontal, MinH: 1,
-				},
-			},
-			{
-				Control: r.statusLabel,
-				Constraint: widget.GridConstraint{
-					Col: 0, Row: 5, WeightX: 1, Fill: widget.FillHorizontal, MinH: 1,
-				},
+	const padX = 2
+
+	// Grid layout — 3 columns (left-pad | content | right-pad), rows:
+	// top-pad | heading | server list | gap | create button | bottom-pad.
+	children := []widget.GridChild{
+		// Padding spacers — 1-cell vertical pad and padX-cell horizontal pad.
+		{
+			Control:    &widget.Label{Text: ""},
+			Constraint: widget.GridConstraint{Col: 0, Row: 0, MinW: padX, MinH: 1},
+		},
+		{
+			Control:    &widget.Label{Text: ""},
+			Constraint: widget.GridConstraint{Col: 2, Row: 5, MinW: padX, MinH: 1},
+		},
+		{
+			Control: &widget.Label{Text: "Servers:", Align: "left"},
+			Constraint: widget.GridConstraint{
+				Col: 1, Row: 1, WeightX: 1, Fill: widget.FillHorizontal, MinH: 1,
 			},
 		},
+		{
+			Control: r.serverList, TabIndex: 0,
+			Constraint: widget.GridConstraint{
+				Col: 1, Row: 2, WeightX: 1, WeightY: 1, Fill: widget.FillBoth, MinH: 7,
+			},
+		},
+		{
+			Control: &widget.Label{Text: ""},
+			Constraint: widget.GridConstraint{
+				Col: 1, Row: 3, MinH: 1, Fill: widget.FillHorizontal,
+			},
+		},
+		{
+			Control: createBtnRow, TabIndex: 1,
+			Constraint: widget.GridConstraint{
+				Col: 1, Row: 4, WeightX: 1, Fill: widget.FillHorizontal, MinH: 1,
+			},
+		},
+	}
+	r.launcherWindow = &widget.Window{
+		Title:    "DevNull",
+		Children: children,
+	}
+	// Track child indices so we can switch initial focus based on whether
+	// localhost is reachable (see applyRefreshResult).
+	for i, c := range children {
+		switch c.Control {
+		case r.serverList:
+			r.serverListChild = i
+		case createBtnRow:
+			r.createBtnChild = i
+		}
 	}
 	r.launcherWindow.FocusFirst()
 }
@@ -261,6 +262,17 @@ func (r *launcherRenderer) HandleInput(w *display.Window) {
 
 	msgs := append(display.PollKeyMessages(), display.PollMouseMessages()...)
 	for _, msg := range msgs {
+		// Modal dialog (e.g. Add server) takes priority — it intercepts
+		// keys and clicks until dismissed.
+		if r.overlay.HasDialog() {
+			if mc, ok := msg.(tea.MouseClickMsg); ok {
+				r.overlay.HandleDialogClick(mc.X, mc.Y, r.cols, r.rows)
+				continue
+			}
+			r.overlay.HandleDialogMsg(msg)
+			continue
+		}
+
 		switch m := msg.(type) {
 		case tea.MouseClickMsg:
 			r.launcherWindow.HandleClick(m.X, m.Y)
@@ -312,8 +324,20 @@ func (r *launcherRenderer) Draw(w *display.Window, screen *ebiten.Image) {
 	dialogX := max(0, (r.cols-dialogW)/2)
 	dialogY := max(0, (r.rows-dialogH)/2)
 
-	r.statusLabel.Text = r.clipStatus(r.status)
 	r.launcherWindow.RenderToBuf(buf, dialogX, dialogY, dialogW, dialogH, r.launcherTheme.LayerAt(0))
+
+	// Modal dialog overlay (e.g. "Add server"), rendered on top with shadow.
+	if r.overlay.HasDialog() {
+		dlgLayer := r.launcherTheme.LayerAt(r.overlay.DialogLayer())
+		if r.overlay.DialogIsWarning() {
+			dlgLayer = r.launcherTheme.WarningLayer()
+		}
+		if sub, col, row := r.overlay.RenderDialogBuf(r.cols, r.rows, dlgLayer); sub != nil {
+			buf.Blit(col, row, sub)
+			render.BlitShadow(buf, col, row, sub.Width, sub.Height, r.launcherTheme.ShadowFg, r.launcherTheme.ShadowBg)
+		}
+	}
+
 	display.DrawImageBuffer(screen, buf, w.FontFace, nil)
 }
 
@@ -641,6 +665,20 @@ func (r *launcherRenderer) applyRefreshResult() {
 	r.serverList.Items = items
 	r.serverList.Tags = tags
 	r.serverList.SetCursor(cursor)
+
+	// On the first refresh, set focus based on whether localhost is up:
+	// list (cursor on "This machine") if up, otherwise the create button.
+	if !r.initialFocusSet && len(r.servers) > 0 {
+		r.initialFocusSet = true
+		target := r.serverListChild
+		if !r.servers[0].Available {
+			target = r.createBtnChild
+		}
+		r.launcherWindow.FocusIdx = target
+		if fdr, ok := r.launcherWindow.Children[target].Control.(widget.FocusDirReceiver); ok {
+			fdr.OnFocusDir(+1)
+		}
+	}
 }
 
 func collectLauncherServers(localPort int, lan []launcherServer) []launcherServer {
@@ -782,6 +820,71 @@ func probeServer(host string, port int, timeout time.Duration) bool {
 	}
 	_ = conn.Close()
 	return true
+}
+
+// openAddServerDialog pushes a modal "Add server" input dialog onto the
+// launcher's overlay state. On submit, the entered "host:port" is parsed,
+// appended to servers.txt, and the server list is force-refreshed.
+func (r *launcherRenderer) openAddServerDialog() {
+	r.overlay.PushDialog(domain.DialogRequest{
+		Title:       "Add Server",
+		Body:        "Enter the server address as ip:port or name:port.",
+		InputPrompt: "Server",
+		Buttons:     []string{"Add", "Cancel"},
+		OnInputClose: func(btn, value string) {
+			if btn != "Add" {
+				return
+			}
+			value = strings.TrimSpace(value)
+			if value == "" {
+				r.status = "Add server: empty entry."
+				return
+			}
+			host, port, ok := parseKnownEndpoint(value)
+			if !ok {
+				r.status = fmt.Sprintf("Add server: invalid entry %q (use host:port).", value)
+				return
+			}
+			path := datadir.InitFilePath("servers.txt")
+			if err := appendKnownServer(path, host, port); err != nil {
+				r.status = fmt.Sprintf("Add server failed: %v", err)
+				return
+			}
+			r.status = fmt.Sprintf("Added %s:%d to known servers.", host, port)
+			r.refreshServers(true)
+		},
+	})
+}
+
+// appendKnownServer appends a "host:port" line to the known-servers file,
+// creating the file (and its parent directory) if needed. Existing entries
+// are preserved untouched.
+func appendKnownServer(path, host string, port int) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+	// Make sure we start on a fresh line: probe the file size and prepend
+	// a newline if the file was non-empty and didn't end in one. Cheap
+	// and avoids stitching two entries together.
+	if info, err := f.Stat(); err == nil && info.Size() > 0 {
+		if _, err := f.Seek(-1, 2); err == nil {
+			var last [1]byte
+			if n, _ := f.Read(last[:]); n == 1 && last[0] != '\n' {
+				if _, err := f.WriteString("\n"); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if _, err := fmt.Fprintf(f, "%s:%d\n", host, port); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
 }
 
 func (r *launcherRenderer) clipStatus(s string) string {

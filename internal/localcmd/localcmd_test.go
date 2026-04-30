@@ -43,6 +43,28 @@ func writeShader(t *testing.T, dataDir, name string) {
 
 var testClock = &domain.MockClock{T: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 
+// TestMain isolates HOME / USERPROFILE so the real ~/DevNull/Create and
+// ~/DevNull/Shared trees can't leak into source-aware asset listings.
+func TestMain(m *testing.M) {
+	tmp, err := os.MkdirTemp("", "localcmd-test-home-")
+	if err == nil {
+		os.Setenv("HOME", tmp)
+		os.Setenv("USERPROFILE", tmp)
+		defer os.RemoveAll(tmp)
+	}
+	os.Exit(m.Run())
+}
+
+// isolateHome points HOME / USERPROFILE at a fresh temp dir so the
+// user's real ~/DevNull/Create and ~/DevNull/Shared trees can't leak
+// into source-aware asset listings during tests.
+func isolateHome(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+}
+
 // ─── HandleThemeList / HandleThemeLoad ──────────────────────────────────────
 
 func TestHandleThemeList_NoThemes(t *testing.T) {
@@ -77,8 +99,8 @@ func TestHandleThemeLoad_Success(t *testing.T) {
 	if theme == nil {
 		t.Fatalf("expected theme to be returned; output: %s", read())
 	}
-	if name != "dark" {
-		t.Errorf("expected name='dark', got %q", name)
+	if name != "core:dark" {
+		t.Errorf("expected name='core:dark', got %q", name)
 	}
 }
 
@@ -128,7 +150,7 @@ func TestHandlePluginLoad_Success(t *testing.T) {
 	if !changed {
 		t.Errorf("expected changed=true; output: %s", read())
 	}
-	if len(plugins) != 1 || len(names) != 1 || names[0] != "echo" {
+	if len(plugins) != 1 || len(names) != 1 || names[0] != "core:echo" {
 		t.Errorf("expected echo loaded; plugins=%d names=%v", len(plugins), names)
 	}
 }
@@ -215,7 +237,7 @@ func TestHandleShaderLoad_Success(t *testing.T) {
 	if !changed {
 		t.Errorf("expected changed=true; output: %s", read())
 	}
-	if len(shaders) != 1 || names[0] != "noop" {
+	if len(shaders) != 1 || names[0] != "core:noop" {
 		t.Errorf("expected noop loaded; got %v", names)
 	}
 }
@@ -282,7 +304,7 @@ func TestHandleShaderUp(t *testing.T) {
 	if !changed {
 		t.Errorf("expected changed=true; output: %s", read())
 	}
-	if names[0] != "b" || names[1] != "a" {
+	if names[0] != "core:b" || names[1] != "core:a" {
 		t.Errorf("expected [b, a] after up, got %v", names)
 	}
 	_ = shaders
@@ -299,7 +321,7 @@ func TestHandleShaderDown(t *testing.T) {
 	if !changed {
 		t.Error("expected changed=true")
 	}
-	if names[0] != "b" || names[1] != "a" {
+	if names[0] != "core:b" || names[1] != "core:a" {
 		t.Errorf("expected [b, a] after down, got %v", names)
 	}
 	_ = shaders

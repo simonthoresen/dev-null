@@ -387,7 +387,11 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 	m.playingStatusBar.RightText = ""
 
 	// Capture viewport bounds for enhanced client OSC (wraps the render function).
-	if m.IsEnhancedClient && m.playingGameView.RenderFn != nil {
+	// The wrapper is installed unconditionally for enhanced clients in PhasePlaying
+	// because canvas-only games leave RenderFn nil (canvas compose lives in the
+	// !renderLocal branch above) and we still need to fill placeholder cells so
+	// the client's local renderer has somewhere to composite into.
+	if m.IsEnhancedClient {
 		inner := m.playingGameView.RenderFn
 		m.playingGameView.RenderFn = func(gbuf *render.ImageBuffer, x, y, w, h int) {
 			m.viewportX, m.viewportY, m.viewportW, m.viewportH = x, y, w, h
@@ -395,7 +399,7 @@ func (m *Model) renderPlaying(buf *render.ImageBuffer, menus []domain.MenuDef, g
 				// Local mode (Render locally toggle): fill viewport with placeholder
 				// cells. The client renders locally and composites these placeholders.
 				gbuf.Fill(x, y, w, h, render.CanvasCell, nil, nil, render.AttrNone)
-			} else {
+			} else if inner != nil {
 				inner(gbuf, x, y, w, h)
 			}
 		}

@@ -170,7 +170,7 @@ func FormatGameList(dataDir string, available []Item, activeGame string, teamCou
 	var lines []string
 	for _, item := range available {
 		name := item.Name
-		path := ResolveGamePathAll(dataDir, name)
+		path := ResolveGamePathInSource(item.Source, dataDir, name)
 		tr := ProbeGameTeamRange(path)
 
 		// Compatibility check.

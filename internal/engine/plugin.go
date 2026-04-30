@@ -121,9 +121,9 @@ func (p *jsPlugin) Unload() {
 	p.vm.Interrupt("unloaded")
 }
 
-// ResolvePluginPath resolves a plugin name or URL to a local file path.
-// URLs are downloaded into SharedDir/Plugins/. Names are looked up in
-// Create > Shared > Core priority order.
+// ResolvePluginPath resolves a plugin name or URL to its qualified id
+// "<source>:<name>" and a local file path. URLs are downloaded into
+// SharedDir/Plugins/ and the qualified id reflects that source.
 func ResolvePluginPath(nameOrURL, dataDir string) (name, path string, err error) {
 	if network.IsURL(nameOrURL) {
 		dest := SourceDir(SourceShared, "Plugins", dataDir)
@@ -131,7 +131,12 @@ func ResolvePluginPath(nameOrURL, dataDir string) (name, path string, err error)
 		if dlErr != nil {
 			return "", "", fmt.Errorf("download plugin: %w", dlErr)
 		}
-		return strings.TrimSuffix(filepath.Base(local), ".js"), local, nil
+		base := strings.TrimSuffix(filepath.Base(local), ".js")
+		return QualifiedName(SourceShared, base), local, nil
 	}
-	return nameOrURL, ResolveScriptPathAll("Plugins", dataDir, nameOrURL), nil
+	id, path, err := ResolveScript("Plugins", dataDir, nameOrURL)
+	if err != nil {
+		return "", "", err
+	}
+	return id, path, nil
 }

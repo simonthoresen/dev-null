@@ -96,6 +96,14 @@ func (a *Server) loadGame(path string) error {
 	if err := state.ValidateName(name); err != nil {
 		return fmt.Errorf("invalid game name %q: %w", name, err)
 	}
+	// Build the canonical qualified id "<source>:<name>" by inspecting
+	// which source root contains the loaded path. URL downloads land
+	// under Shared, direct loads under whichever root supplied the path.
+	src := engine.SourceForPath(path, "Games", a.dataDir)
+	gameID := engine.QualifiedName(src, name)
+	if err := state.ValidateName(gameID); err != nil {
+		return fmt.Errorf("invalid game id %q: %w", gameID, err)
+	}
 
 	// Create a buffered channel for JS→server chat; drained by a goroutine below.
 	gameChatCh := make(chan domain.Message, 64)
@@ -127,7 +135,7 @@ func (a *Server) loadGame(path string) error {
 	a.state.GameTeams = teams
 	a.state.GameDisconnected = make(map[string]string)
 	a.state.ActiveGame = rt
-	a.state.GameName = name
+	a.state.GameName = gameID
 	a.state.GamePhase = domain.PhaseStarting
 	a.state.StartingReady = make(map[string]bool)
 	a.state.StartingStart = a.clock.Now()
@@ -410,7 +418,10 @@ func (a *Server) resumeGame(gameName, saveName string) error {
 		a.unloadGame()
 	}
 
-	path := engine.ResolveGamePathAll(a.dataDir, gameName)
+	_, path, err := engine.ResolveGame(a.dataDir, gameName)
+	if err != nil {
+		return fmt.Errorf("resolve game for resume: %w", err)
+	}
 
 	gameChatCh := make(chan domain.Message, 64)
 	rt, err := engine.LoadGame(path, a.serverLog, gameChatCh, a.clock, a.dataDir)

@@ -563,16 +563,17 @@ func scriptExt(dir, name string) string {
 }
 
 func (m *Model) showGameRemoveConfirm(name string) {
-	gamesDir := filepath.Join(m.api.DataDir(), "Games")
+	src, base := splitQualified(name, engine.SourceCore)
+	gamesDir := engine.SourceDir(src, "Games", m.api.DataDir())
 	var displayPath string
-	if _, err := os.Stat(filepath.Join(gamesDir, name)); err == nil {
-		displayPath = name + "/"
+	if _, err := os.Stat(filepath.Join(gamesDir, base)); err == nil {
+		displayPath = base + "/"
 	} else {
-		displayPath = name + ".js"
+		displayPath = base + ".js"
 	}
 	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   "Delete Game",
-		Body:    fmt.Sprintf("Delete game from the Games folder?\n\n  %s\n\nThis cannot be undone.", displayPath),
+		Body:    fmt.Sprintf("Delete game from the %s/Games folder?\n\n  %s\n\nThis cannot be undone.", src.Label(), displayPath),
 		Buttons: []string{"Delete", "Cancel"},
 		Warning: true,
 		OnClose: func(btn string) {
@@ -583,10 +584,10 @@ func (m *Model) showGameRemoveConfirm(name string) {
 				if strings.EqualFold(active, name) {
 					m.submitInput("/game-unload")
 				}
-				if _, err := os.Stat(filepath.Join(gamesDir, name)); err == nil {
-					os.RemoveAll(filepath.Join(gamesDir, name))
+				if _, err := os.Stat(filepath.Join(gamesDir, base)); err == nil {
+					os.RemoveAll(filepath.Join(gamesDir, base))
 				} else {
-					os.Remove(filepath.Join(gamesDir, name+".js"))
+					os.Remove(filepath.Join(gamesDir, base+".js"))
 				}
 			}
 		},
@@ -594,26 +595,29 @@ func (m *Model) showGameRemoveConfirm(name string) {
 }
 
 func (m *Model) showThemeRemoveConfirm(name string) {
+	src, base := splitQualified(name, engine.SourceCore)
+	dir := engine.SourceDir(src, "Themes", m.api.DataDir())
 	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   "Delete Theme File",
-		Body:    fmt.Sprintf("Delete '%s.json' from the Themes folder?\nThis cannot be undone.", name),
+		Body:    fmt.Sprintf("Delete '%s.json' from the %s/Themes folder?\nThis cannot be undone.", base, src.Label()),
 		Buttons: []string{"Delete", "Cancel"},
 		Warning: true,
 		OnClose: func(btn string) {
 			if btn == "Delete" {
-				os.Remove(filepath.Join(m.api.DataDir(), "Themes", name+".json"))
+				os.Remove(filepath.Join(dir, base+".json"))
 			}
 		},
 	})
 }
 
 func (m *Model) showScriptRemoveConfirm(subDir, name string) {
-	dir := filepath.Join(m.api.DataDir(), subDir)
-	ext := scriptExt(dir, name)
+	src, base := splitQualified(name, engine.SourceCore)
+	dir := engine.SourceDir(src, subDir, m.api.DataDir())
+	ext := scriptExt(dir, base)
 	noun := strings.TrimSuffix(subDir, "s")
 	m.overlay.PushDialog(domain.DialogRequest{
 		Title:   "Delete " + strings.ToUpper(noun[:1]) + noun[1:] + " File",
-		Body:    fmt.Sprintf("Delete '%s%s' from the %s folder?\nThis cannot be undone.", name, ext, subDir),
+		Body:    fmt.Sprintf("Delete '%s%s' from the %s/%s folder?\nThis cannot be undone.", base, ext, src.Label(), subDir),
 		Buttons: []string{"Delete", "Cancel"},
 		Warning: true,
 		OnClose: func(btn string) {
@@ -624,10 +628,19 @@ func (m *Model) showScriptRemoveConfirm(subDir, name string) {
 				} else if subDir == "Shaders" {
 					m.submitInput("/shader-unload " + name)
 				}
-				os.Remove(filepath.Join(dir, name+ext))
+				os.Remove(filepath.Join(dir, base+ext))
 			}
 		},
 	})
+}
+
+// splitQualified parses an asset id into its source and bare name.
+// Bare ids without a "<src>:" prefix fall back to the supplied default.
+func splitQualified(id string, fallback engine.Source) (engine.Source, string) {
+	if src, base, ok := engine.ParseQualifiedName(id); ok {
+		return src, base
+	}
+	return fallback, id
 }
 
 func (m *Model) showSynthRemoveConfirm(name string) {

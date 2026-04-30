@@ -208,7 +208,7 @@ var scenarios = []renderScenario{
 				ID: "alice", Name: "alice", IsAdmin: true,
 				TermWidth: termW, TermHeight: termH,
 			}
-			st.GameName = "cube"
+			st.GameName = "core:cube"
 			st.Teams = []domain.Team{
 				{Name: "Red"},
 				{Name: "Blue"},

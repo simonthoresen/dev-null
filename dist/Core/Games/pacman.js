@@ -288,6 +288,21 @@ function newPlayer(state, id, name) {
     };
 }
 
+// teamColorFor returns the framework-assigned team color for the given
+// player, or null when the player isn't on a team. The framework rebuilds
+// state.teams on every team-membership change, so this is a per-render
+// scan rather than something cached on the player record.
+function teamColorFor(state, pid) {
+    var teams = state.teams || [];
+    for (var i = 0; i < teams.length; i++) {
+        var ps = teams[i].players || [];
+        for (var j = 0; j < ps.length; j++) {
+            if (ps[j].id === pid) return teams[i].color || null;
+        }
+    }
+    return null;
+}
+
 function movePac(state, ctx, p) {
     var nx = wrapX(p.x + DX[p.nextDir]), ny = p.y + DY[p.nextDir];
     if (canPass(state, nx, ny, false)) {
@@ -610,11 +625,18 @@ var Game = {
 
     renderCanvas: function(state, me, canvas) {
         var w = canvas.width, h = canvas.height;
+        // Pre-begin phases (lobby/starting) may invoke render hooks before
+        // begin() has populated maze/pls/ghosts; bail out cleanly.
+        if (!state.maze || !state.pls || !state.ghosts) {
+            canvas.setFillStyle("#000000");
+            canvas.fillRect(0, 0, w, h);
+            return;
+        }
         var pacFrac   = Math.min(state.pacMoveTimer   / SPD_PAC,   1.0);
         var ghostFrac = Math.min(state.ghostMoveTimer / SPD_GHOST, 1.0);
         var t         = state.animTimer;
 
-        var CELL  = Math.max(4, Math.floor(Math.min(w / MW, h / MH)));
+        var CELL  = Math.max(8, Math.floor(Math.min(w / MW, h / MH)) * 2);
         var halfC = CELL * 0.5;
         var viewW = Math.min(MW, Math.floor(w / CELL));
         var viewH = Math.min(MH, Math.floor(h / CELL));
@@ -717,110 +739,77 @@ var Game = {
             var r  = CELL * 0.44;
             var mouthAngle = p.dead ? 0 : Math.abs(Math.sin(t * MOUTH_FREQ)) * MOUTH_MAX;
             var blinkOn = (p.invulnTimer > 0) && (Math.floor(t * 8) % 2 === 0);
-            drawPacman(canvas, sx, sy, r, p.color, p.dir, mouthAngle, p.dead, blinkOn);
+            var col = teamColorFor(state, pid) || p.color;
+            drawPacman(canvas, sx, sy, r, col, p.dir, mouthAngle, p.dead, blinkOn);
         }
     },
 
+    // Minimap: interior view of MM_W x MM_H tiles around the local player,
+    // wrapped in a simple ASCII border. Drawn into the top-right of the
+    // ASCII overlay (offset 1 row down, 1 col left from the corner). Cells
+    // the minimap doesn't touch stay transparent so the canvas shows through.
     renderAscii: function(state, me, cells) {
-        var width = cells.width, height = cells.height;
-        var ATTR_BOLD = cells.ATTR_BOLD;
+        if (!state.maze || !state.pls || !state.ghosts) return;
+        var MM_W = 10, MM_H = 5;
+        var ox = cells.width - (MM_W + 2) - 1;
+        var oy = 1;
+        if (ox < 0) ox = 0;
         var pid = me ? me.id : "";
-        var cw = (width >= 60) ? 2 : 1;
-        var viewCols = Math.floor(width / cw);
-        var viewRows = height;
-
         var meP = state.pls[pid];
-        var cx = meP && !meP.dead ? meP.x : Math.floor(MW / 2);
-        var cy = meP && !meP.dead ? meP.y : Math.floor(MH / 2);
+        var cx = (meP && !meP.dead) ? meP.x : Math.floor(MW / 2);
+        var cy = (meP && !meP.dead) ? meP.y : Math.floor(MH / 2);
+        var startX = cx - Math.floor(MM_W / 2);
+        var startY = cy - Math.floor(MM_H / 2);
 
-        var startX = cx - Math.floor(viewCols / 2);
-        var startY = cy - Math.floor(viewRows / 2);
-        if (viewCols >= MW) startX = -Math.floor((viewCols - MW) / 2);
-        else {
-            if (startX < 0) startX = 0;
-            if (startX + viewCols > MW) startX = MW - viewCols;
+        // Border (top, bottom, sides). Total footprint: (MM_W+2) x (MM_H+2).
+        var borderFg = "#888888";
+        for (var bx = 0; bx < MM_W + 2; bx++) {
+            cells.setChar(ox + bx, oy + 0,         "─", borderFg, "#000000");
+            cells.setChar(ox + bx, oy + MM_H + 1,  "─", borderFg, "#000000");
         }
-        if (viewRows >= MH) startY = -Math.floor((viewRows - MH) / 2);
-        else {
-            if (startY < 0) startY = 0;
-            if (startY + viewRows > MH) startY = MH - viewRows;
+        for (var by = 0; by < MM_H + 2; by++) {
+            cells.setChar(ox + 0,         oy + by, "│", borderFg, "#000000");
+            cells.setChar(ox + MM_W + 1,  oy + by, "│", borderFg, "#000000");
         }
+        cells.setChar(ox + 0,         oy + 0,        "┌", borderFg, "#000000");
+        cells.setChar(ox + MM_W + 1,  oy + 0,        "┐", borderFg, "#000000");
+        cells.setChar(ox + 0,         oy + MM_H + 1, "└", borderFg, "#000000");
+        cells.setChar(ox + MM_W + 1,  oy + MM_H + 1, "┘", borderFg, "#000000");
 
-        var ents = {};
-        for (var g = 0; g < state.ghosts.length; g++) {
-            var gh = state.ghosts[g];
-            if (gh.eaten && !gh.returning) continue;
-            var k = gh.x + "," + gh.y;
-            if (gh.returning) {
-                ents[k] = (cw === 2)
-                    ? {ch: E_EYES, fg: CEYES, bg: null, emoji: true}
-                    : {ch: ".", fg: CEYES, bg: null};
-            } else {
-                ents[k] = (cw === 2)
-                    ? {ch: E_GHOST, fg: GCOL[g], bg: null, emoji: true}
-                    : {ch: "M", fg: GCOL[g], bg: null};
-            }
-        }
-        for (var i = 0; i < state.plOrder.length; i++) {
-            var p = state.pls[state.plOrder[i]];
-            if (!p) continue;
-            var k = p.x + "," + p.y;
-            var set = E_SETS[p.ci % E_SETS.length];
-            if (cw === 2) {
-                var emoji;
-                if (p.dead) emoji = set[E_DEAD];
-                else if (p.invulnTimer > 0) emoji = set[E_INVULN];
-                else if (p.powerT > 0) emoji = set[E_POWERED];
-                else emoji = set[E_NORMAL];
-                ents[k] = {ch: emoji, fg: null, bg: null, emoji: true};
-            } else {
-                if (p.dead) ents[k] = {ch: "X", fg: "#555555", bg: null};
-                else ents[k] = {ch: "@", fg: PCOL[p.ci % PCOL.length], bg: null, bold: (state.plOrder[i] === pid)};
-            }
-        }
-
-        for (var row = 0; row < viewRows; row++) {
-            var my = startY + row;
-            if (my < 0 || my >= MH) continue;
-            for (var col = 0; col < viewCols; col++) {
-                var mx = startX + col;
-                var screenCol = col * cw;
-                if (mx < 0 || mx >= MW) continue;
-                var k = mx + "," + my;
-                var e = ents[k];
-                if (e) {
-                    if (e.emoji) {
-                        cells.writeString(screenCol, row, e.ch, e.fg, e.bg || null);
-                    } else if (e.bold) {
-                        cells.setChar(screenCol, row, e.ch, e.fg, e.bg || null, ATTR_BOLD);
-                        if (cw === 2) cells.setChar(screenCol + 1, row, " ", e.fg, e.bg || null);
-                    } else {
-                        cells.setChar(screenCol, row, e.ch, e.fg, e.bg || null);
-                        if (cw === 2) cells.setChar(screenCol + 1, row, " ", e.fg, e.bg || null);
-                    }
+        // Bottom layer: maze terrain.
+        for (var ry = 0; ry < MM_H; ry++) {
+            for (var rx = 0; rx < MM_W; rx++) {
+                var mx = startX + rx;
+                var my = startY + ry;
+                var sx = ox + rx + 1, sy = oy + ry + 1;
+                if (mx < 0 || mx >= MW || my < 0 || my >= MH) {
+                    cells.setChar(sx, sy, " ", null, "#000000");
                     continue;
                 }
                 var c = state.maze[my * MW + mx];
-                if (cw === 2) {
-                    if (c === WALL) {
-                        cells.setChar(screenCol, row, "█", CWALL, null);
-                        cells.setChar(screenCol + 1, row, "█", CWALL, null);
-                    } else if (c === DOT) {
-                        cells.setChar(screenCol, row, "⠐", CDOT, null);
-                        cells.setChar(screenCol + 1, row, "⠂", CDOT, null);
-                    } else if (c === POWER) {
-                        cells.writeString(screenCol, row, E_CHERRY, null, null);
-                    } else if (c === DOOR) {
-                        cells.setChar(screenCol, row, "─", CDOOR, null);
-                        cells.setChar(screenCol + 1, row, "─", CDOOR, null);
-                    }
-                } else {
-                    if (c === WALL) cells.setChar(screenCol, row, BOX[state.wallMask[my * MW + mx]], CWALL, null);
-                    else if (c === DOT) cells.setChar(screenCol, row, "•", CDOT, null);
-                    else if (c === POWER) cells.setChar(screenCol, row, "●", CPOW, null);
-                    else if (c === DOOR) cells.setChar(screenCol, row, "─", CDOOR, null);
-                }
+                if (c === WALL)        cells.setChar(sx, sy, "#", CWALL,     "#000000");
+                else if (c === DOT)    cells.setChar(sx, sy, "·", "#FFFFFF", "#000000");
+                else if (c === POWER)  cells.setChar(sx, sy, "*", "#FF0000", "#000000");
+                else if (c === DOOR)   cells.setChar(sx, sy, "-", CDOOR,     "#000000");
+                else                   cells.setChar(sx, sy, " ", null,      "#000000");
             }
+        }
+
+        // Top layer: ghosts then players (players win overlap so the local
+        // player is always visible on top of any colliding ghost).
+        for (var gi = 0; gi < state.ghosts.length; gi++) {
+            var g = state.ghosts[gi];
+            if (g.eaten && !g.returning) continue;
+            var gx = g.x - startX, gy = g.y - startY;
+            if (gx < 0 || gx >= MM_W || gy < 0 || gy >= MM_H) continue;
+            cells.setChar(ox + gx + 1, oy + gy + 1, "X", GCOL[gi % GCOL.length], "#000000");
+        }
+        for (var ppid in state.pls) {
+            var pp = state.pls[ppid];
+            if (!pp || pp.dead) continue;
+            var px = pp.x - startX, py = pp.y - startY;
+            if (px < 0 || px >= MM_W || py < 0 || py >= MM_H) continue;
+            cells.setChar(ox + px + 1, oy + py + 1, "@", PCOL[pp.ci % PCOL.length], "#000000");
         }
     },
 

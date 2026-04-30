@@ -992,9 +992,19 @@ func (a *Server) registerBuiltins() {
 		Complete: func(before []string) []string {
 			if len(before) == 0 {
 				items := engine.ListAllGames(a.dataDir)
+				// Suggest bare names where unique, qualified ids when
+				// the bare name appears in more than one source.
+				counts := make(map[string]int, len(items))
+				for _, it := range items {
+					counts[strings.ToLower(it.Name)]++
+				}
 				names := make([]string, len(items))
-				for i, item := range items {
-					names[i] = item.Name
+				for i, it := range items {
+					if counts[strings.ToLower(it.Name)] > 1 {
+						names[i] = engine.QualifiedName(it.Source, it.Name)
+					} else {
+						names[i] = it.Name
+					}
 				}
 				return names
 			}
@@ -1009,7 +1019,12 @@ func (a *Server) registerBuiltins() {
 			if network.IsURL(args[0]) {
 				path = args[0]
 			} else {
-				path = engine.ResolveGamePathAll(a.dataDir, args[0])
+				_, p, err := engine.ResolveGame(a.dataDir, args[0])
+				if err != nil {
+					ctx.Reply(fmt.Sprintf("Failed to load game: %v", err))
+					return
+				}
+				path = p
 			}
 			if err := a.loadGame(path); err != nil {
 				ctx.Reply(fmt.Sprintf("Failed to load game: %v", err))
